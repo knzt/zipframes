@@ -24,6 +24,8 @@ Os termos abaixo são usados igualmente no código, nos eventos, na API e nesta 
 | Falha transitória | Erro que pode desaparecer em nova tentativa, como storage indisponível | `TransientProcessingError` |
 | Falha permanente | Erro que se repetiria em qualquer tentativa, como arquivo inválido | `PermanentProcessingError` |
 | Notificação | Mensagem enviada ao usuário sobre uma falha | `Notification` |
+| Expiração | Fim do prazo em que o pacote fica disponível, seguido do apagamento do arquivo | `VideoStatus.EXPIRED` |
+| Eliminação | Apagamento definitivo de um arquivo do storage, por expiração ou a pedido do titular | `purge` |
 
 ## Subdomínios
 
@@ -97,10 +99,11 @@ Evento de domínio: `UserRegistered`.
 | `contentType` | string | Tipo declarado pelo cliente |
 | `sizeBytes` | número | Tamanho declarado e depois conferido no storage |
 | `sourceKey` | `StorageKey` | `uploads/{ownerId}/{videoId}` |
-| `resultKey` | `StorageKey` opcional | `outputs/{ownerId}/{videoId}.zip`, presente quando concluído |
+| `resultKey` | `StorageKey` opcional | `outputs/{ownerId}/{videoId}.zip`, presente enquanto o pacote existe |
 | `frameCount` | número opcional | Quantidade de frames gerados |
 | `status` | `VideoStatus` | Etapa atual |
 | `failureReason` | string opcional | Motivo legível da falha |
+| `expiresAt` | data opcional | Momento em que o pacote deixa de ficar disponível, definido na conclusão |
 | `createdAt`, `updatedAt` | datas | Auditoria |
 | `version` | número | Controle de concorrência otimista |
 
@@ -115,7 +118,11 @@ stateDiagram-v2
   QUEUED --> FAILED: processamento falhou
   PROCESSING --> DONE: processamento concluído
   PROCESSING --> FAILED: processamento falhou
-  DONE --> [*]
+  DONE --> EXPIRED: prazo de 24h vencido
+  DONE --> DELETED: exclusão a pedido do dono
+  FAILED --> DELETED: exclusão a pedido do dono
+  EXPIRED --> [*]
+  DELETED --> [*]
   FAILED --> [*]
 ```
 
@@ -124,12 +131,17 @@ Regras:
 - **Tamanho máximo configurável** (por exemplo, 500 MB), verificado na solicitação e novamente na confirmação, com o tamanho real do objeto no storage.
 - **Confirmação** só é aceita quando o vídeo está em `AWAITING_UPLOAD` e o objeto existe no storage.
 - **Transições inválidas são rejeitadas pela entidade.** Por exemplo, um vídeo `DONE` nunca volta para `PROCESSING`.
-- **`DONE` e `FAILED` são estados finais.** Eventos que chegarem depois deles são ignorados, o que torna o agregado tolerante a mensagens duplicadas ou fora de ordem.
+- **`DONE` e `FAILED` encerram o processamento.** Eventos de processamento que chegarem depois deles são ignorados, o que torna o agregado tolerante a mensagens duplicadas ou fora de ordem. As únicas transições posteriores são a expiração e a exclusão a pedido, que não vêm de eventos do worker.
 - **`QUEUED` pode ir direto para `DONE` ou `FAILED`**, porque o evento de início pode chegar atrasado ou depois do resultado.
-- **`DONE` exige `resultKey` e `frameCount` maior que zero, e `FAILED` exige `failureReason`.**
+- **`DONE` exige `resultKey`, `frameCount` maior que zero e `expiresAt`, e `FAILED` exige `failureReason`.**
+- **`EXPIRED` e `DELETED` exigem `resultKey` nulo**, porque o arquivo já não existe.
 - **Somente o dono** vê, confirma e baixa o vídeo. Para outros usuários, o vídeo simplesmente não existe (resposta 404, e não 403).
 - **URLs pré-assinadas têm validade curta:** 15 minutos para upload e 5 minutos para download.
-Eventos de domínio: `VideoQueued`, `VideoProcessingStarted`, `VideoCompleted`, `VideoFailed`. Apenas `VideoQueued` gera evento de integração (`video.uploaded`), já que os demais são reações a eventos que vieram do Processamento.
+- **O pacote fica disponível por 24 horas** contadas da conclusão. Depois disso o arquivo é apagado e o vídeo passa a `EXPIRED`.
+- **Download de um vídeo `EXPIRED` ou `DELETED`** responde 410 Gone, com a orientação de enviar o vídeo novamente.
+- **O vídeo original nunca é guardado depois do processamento.** Ele é apagado assim que o resultado final é conhecido, com sucesso ou com falha. Para tentar de novo, o usuário envia o arquivo outra vez.
+- **O dono pode excluir um vídeo a qualquer momento.** A exclusão apaga os arquivos que ainda existirem e leva o vídeo a `DELETED`, preservando apenas os metadados mínimos do histórico.
+Eventos de domínio: `VideoQueued`, `VideoProcessingStarted`, `VideoCompleted`, `VideoFailed`, `VideoExpired`, `VideoDeleted`. Apenas `VideoQueued` gera evento de integração (`video.uploaded`), já que os demais são reações a eventos vindos do Processamento ou efeitos internos de retenção.
 
 ### Processamento
 
@@ -148,6 +160,8 @@ Regras:
   - *transitórias* (storage ou broker indisponível, falta de espaço temporário) são reprocessadas com backoff até o limite de tentativas. Na última, o worker publica `video.failed` e a mensagem segue para a DLQ.
 - **O processamento tem tempo máximo configurável.** Estourar o prazo conta como falha transitória.
 - **Arquivos temporários são sempre removidos** ao fim da tentativa, com sucesso ou falha.
+- **O vídeo original é apagado do storage ao final do trabalho**, logo após publicar `video.processed` ou `video.failed`. Entre tentativas de uma falha transitória ele permanece, porque ainda será lido.
+- **A eliminação do original faz parte do trabalho, não é opcional.** Se o apagamento falhar, o worker registra o erro e uma rotina de limpeza remove os originais que sobraram.
 ### Notificação
 
 **Entidade `Contact`** (projeção local de `user.registered`): `userId`, `name`, `email`, `updatedAt`.
@@ -158,6 +172,8 @@ Regras:
 - **No máximo uma notificação por vídeo e tipo.** Reentregas de `video.failed` não geram e-mails duplicados.
 - **Contato ausente não perde a notificação:** se `video.failed` chegar antes de `user.registered`, a notificação fica `PENDING` e é enviada quando o contato for projetado.
 - **Falha no envio do e-mail** é transitória e segue a mesma política de retry das mensagens.
+- **O e-mail não repete dado pessoal desnecessário.** Ele traz o nome do arquivo enviado e o motivo da falha, sem anexos e sem link para o conteúdo.
+- **A exclusão da conta apaga o contato e o histórico de notificações** do usuário, ao consumir `user.deleted`.
 ## Eventos de integração
 
 Todos os eventos são publicados no exchange `zipframes.events` com o mesmo envelope:
@@ -180,9 +196,41 @@ Todos os eventos são publicados no exchange `zipframes.events` com o mesmo enve
 | `video.processing.started` | processor-worker | video-service | `videoId`, `attempt` |
 | `video.processed` | processor-worker | video-service | `videoId`, `resultKey`, `frameCount`, `durationMs` |
 | `video.failed` | processor-worker | video-service, notification-service | `videoId`, `ownerId`, `errorCode`, `reason`, `attempts` |
+| `user.deleted` | auth-service | video-service, notification-service | `userId` |
 
 Regras dos contratos:
 - **Mudanças compatíveis** (novo campo opcional) mantêm a versão. **Mudanças incompatíveis** criam uma nova versão, publicada em paralelo até todos os consumidores migrarem.
 - **Consumidores ignoram campos desconhecidos.**
 - **A entrega é "pelo menos uma vez"** e todo consumidor é idempotente pelo `eventId`.
-- **Retenção:** remoção automática dos zips após um período de 5 (cinco) dias.
+- **Os eventos não carregam conteúdo pessoal além do necessário.** Trafegam identificadores e chaves de storage, nunca o arquivo, e `user.registered` leva nome e e-mail apenas porque o contexto de Notificação precisa deles.
+
+## Retenção e proteção de dados
+
+Um vídeo pode conter rosto, voz e outros dados pessoais de quem aparece nele, e o mesmo vale para os frames extraídos. Por isso o sistema guarda cada arquivo apenas enquanto ele é necessário para a finalidade que justificou o envio, seguindo os princípios de necessidade e de eliminação após o fim do tratamento (LGPD, art. 6º, III, e art. 15 e 16).
+
+### Política
+
+| Dado | Onde fica | Por quanto tempo | Por quê |
+|---|---|---|---|
+| Vídeo original | Object storage | Do upload até o fim do processamento | A finalidade termina quando os frames são extraídos. Para tentar de novo, o usuário reenvia o arquivo |
+| Pacote de frames (zip) | Object storage | 24 horas após a conclusão | É o resultado entregue. A janela cobre quem não baixa na hora, sem virar um arquivo permanente |
+| Frames soltos e arquivos temporários | Disco do worker | Durante a tentativa | Removidos ao fim do trabalho, com sucesso ou falha |
+| Metadados do vídeo | `video-db` | Enquanto a conta existir | Sustentam a listagem e o histórico sem guardar conteúdo pessoal |
+| Contato | `notification-db` | Enquanto a conta existir | Necessário para notificar falhas |
+| Histórico de notificações | `notification-db` | Enquanto a conta existir | Comprova o aviso enviado ao usuário |
+
+O prazo de 24 horas é configurável, e o mesmo valor alimenta o `expiresAt` do agregado e a rotina de expiração.
+
+### Como a eliminação acontece
+
+- **Do original:** o próprio worker apaga o arquivo ao terminar, logo após publicar o resultado. Uma rotina de limpeza varre os originais que sobraram por falha no apagamento.
+- **Do pacote:** uma rotina periódica no video-service busca os vídeos `DONE` com `expiresAt` vencido, apaga o objeto, limpa a `resultKey` e muda o status para `EXPIRED`.
+- **A pedido do titular:** o dono exclui um vídeo e os arquivos que ainda existirem são apagados na hora, com o vídeo indo para `DELETED`.
+- **Na exclusão da conta:** o auth-service publica `user.deleted`, e cada contexto apaga o que é seu. O contexto de Gestão de Vídeos remove os objetos e os metadados dos vídeos daquele dono, e o de Notificação apaga o contato e o histórico.
+
+### Minimização no dia a dia
+
+- **Logs registram identificadores**, como `videoId`, `ownerId` e `correlationId`, nunca e-mail, nome do arquivo original ou conteúdo.
+- **Mensagens carregam chaves de storage**, nunca o arquivo.
+- **O acesso aos arquivos é sempre por URL pré-assinada de curta duração**, restrita a um único objeto, e nunca por um endereço público e estável.
+- **Cada vídeo é visível apenas para o dono**, e para os demais ele não existe.
