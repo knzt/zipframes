@@ -12,7 +12,8 @@ Os schemas são criados por migrations do Prisma. O SQL desta página é a refer
 | Todos os horários em `timestamptz`, gravados em UTC | Evita ambiguidade entre fusos e horário de verão |
 | Status como `enum` do PostgreSQL | Restringe os valores no banco e é mapeado diretamente pelo Prisma |
 | `created_at` e `updated_at` em toda tabela mutável | Auditoria mínima |
-| Sem exclusão física de vídeos e notificações | O histórico é parte da funcionalidade |
+| Sem exclusão física dos metadados de vídeos e notificações | O histórico é parte da funcionalidade. Os arquivos, esses sim, são apagados no prazo definido |
+| Marcas de eliminação (`*_purged_at`) em vez de simplesmente limpar campos | Permite comprovar quando cada arquivo foi apagado, sem guardar o conteúdo |
 | Tabelas `outbox` e `processed_events` em todo serviço com eventos | Publicação confiável e consumo idempotente ([ADR-0008](adr/0008-outbox-e-idempotencia.md)) |
 
 As tabelas de infraestrutura têm a mesma estrutura em todos os serviços:
@@ -129,6 +130,9 @@ erDiagram
     video_status status
     varchar error_code
     text failure_reason
+    timestamptz expires_at
+    timestamptz source_purged_at
+    timestamptz result_purged_at
     timestamptz created_at
     timestamptz updated_at
     integer version
@@ -166,9 +170,12 @@ erDiagram
 | `source_key` | `varchar(512)` | not null, unique | `uploads/{owner_id}/{id}` |
 | `result_key` | `varchar(512)` | | `outputs/{owner_id}/{id}.zip`, preenchido ao concluir |
 | `frame_count` | `integer` | | Quantidade de frames extraídos |
-| `status` | `video_status` | not null, default `AWAITING_UPLOAD` | Enum do banco |
+| `status` | `video_status` | not null, default `AWAITING_UPLOAD` | Enum do banco, agora com `EXPIRED` e `DELETED` |
 | `error_code` | `varchar(50)` | | Código da falha, usado em métricas |
 | `failure_reason` | `text` | | Motivo legível, exibido ao usuário |
+| `expires_at` | `timestamptz` | | Momento em que o pacote deixa de ficar disponível, preenchido na conclusão |
+| `source_purged_at` | `timestamptz` | | Quando o vídeo original foi apagado do storage |
+| `result_purged_at` | `timestamptz` | | Quando o pacote foi apagado, por expiração ou a pedido |
 | `created_at` | `timestamptz` | not null, default `now()` | |
 | `updated_at` | `timestamptz` | not null, default `now()` | |
 | `version` | `integer` | not null, default 0 | Controle de concorrência otimista |
@@ -176,9 +183,12 @@ erDiagram
 As invariantes do agregado também são garantidas no banco, para que nenhum caminho de escrita as contorne:
 
 ```sql
-CONSTRAINT ck_videos_done   CHECK (status <> 'DONE'   OR (result_key IS NOT NULL AND frame_count > 0)),
-CONSTRAINT ck_videos_failed CHECK (status <> 'FAILED' OR failure_reason IS NOT NULL)
+CONSTRAINT ck_videos_done     CHECK (status <> 'DONE' OR (result_key IS NOT NULL AND frame_count > 0 AND expires_at IS NOT NULL)),
+CONSTRAINT ck_videos_failed   CHECK (status <> 'FAILED' OR failure_reason IS NOT NULL),
+CONSTRAINT ck_videos_sem_arquivo CHECK (status NOT IN ('EXPIRED', 'DELETED') OR result_key IS NULL)
 ```
+
+A última restrição garante no banco o que a regra de retenção exige: um vídeo expirado ou excluído não pode manter a chave de um arquivo que já não existe.
 
 Índices:
 
@@ -187,6 +197,7 @@ CONSTRAINT ck_videos_failed CHECK (status <> 'FAILED' OR failure_reason IS NOT N
 | `idx_videos_owner` | `(owner_id, created_at DESC)` | Listagem paginada do usuário, a consulta mais frequente |
 | `uq_videos_source_key` | `(source_key)` | Garante um upload por vídeo |
 | `idx_videos_em_andamento` | `(status, created_at)` parcial para `QUEUED` e `PROCESSING` | Monitoramento e detecção de vídeos presos |
+| `idx_videos_a_expirar` | `(expires_at)` parcial para `DONE` | Rotina de expiração, que busca só o que já venceu |
 
 ### `processed_events`
 
@@ -207,7 +218,9 @@ CREATE TYPE video_status AS ENUM (
   'QUEUED',
   'PROCESSING',
   'DONE',
-  'FAILED'
+  'FAILED',
+  'EXPIRED',
+  'DELETED'
 );
 
 CREATE TABLE videos (
@@ -222,17 +235,24 @@ CREATE TABLE videos (
   status             video_status NOT NULL DEFAULT 'AWAITING_UPLOAD',
   error_code         varchar(50),
   failure_reason     text,
+  expires_at         timestamptz,
+  source_purged_at   timestamptz,
+  result_purged_at   timestamptz,
   created_at         timestamptz  NOT NULL DEFAULT now(),
   updated_at         timestamptz  NOT NULL DEFAULT now(),
   version            integer      NOT NULL DEFAULT 0,
-  CONSTRAINT ck_videos_done   CHECK (status <> 'DONE'   OR (result_key IS NOT NULL AND frame_count > 0)),
-  CONSTRAINT ck_videos_failed CHECK (status <> 'FAILED' OR failure_reason IS NOT NULL)
+  CONSTRAINT ck_videos_done        CHECK (status <> 'DONE' OR (result_key IS NOT NULL AND frame_count > 0 AND expires_at IS NOT NULL)),
+  CONSTRAINT ck_videos_failed      CHECK (status <> 'FAILED' OR failure_reason IS NOT NULL),
+  CONSTRAINT ck_videos_sem_arquivo CHECK (status NOT IN ('EXPIRED', 'DELETED') OR result_key IS NULL)
 );
 
 CREATE INDEX idx_videos_owner ON videos (owner_id, created_at DESC);
 
 CREATE INDEX idx_videos_em_andamento ON videos (status, created_at)
   WHERE status IN ('QUEUED', 'PROCESSING');
+
+CREATE INDEX idx_videos_a_expirar ON videos (expires_at)
+  WHERE status = 'DONE';
 
 CREATE TABLE outbox (
   id             uuid         PRIMARY KEY,
@@ -366,11 +386,51 @@ CREATE TABLE processed_events (
 );
 ```
 
+## Retenção e eliminação
+
+Os arquivos ficam no storage apenas enquanto são necessários (ver a seção de retenção em `docs/domain/dominio.md`). O banco guarda somente metadados e as marcas de quando cada arquivo foi eliminado.
+
+| Dado | Prazo | Efeito no banco |
+|---|---|---|
+| Vídeo original | Apagado ao fim do processamento | `source_purged_at` preenchido |
+| Pacote de frames | 24 horas após a conclusão | `result_key` nulo, `result_purged_at` preenchido, `status` em `EXPIRED` |
+| Exclusão a pedido do dono | Imediata | Arquivos apagados, `status` em `DELETED` |
+| Exclusão da conta | Ao consumir `user.deleted` | Vídeos e contato do usuário removidos |
+| Linhas de `outbox` publicadas | 7 dias | Removidas pela rotina de limpeza |
+| Linhas de `processed_events` | Prazo máximo de reentrega | Removidas pela rotina de limpeza |
+
+A rotina de expiração busca o que venceu usando o índice parcial `idx_videos_a_expirar`:
+
+```sql
+SELECT id, owner_id, result_key
+  FROM videos
+ WHERE status = 'DONE'
+   AND expires_at <= now()
+ ORDER BY expires_at
+ LIMIT 100
+   FOR UPDATE SKIP LOCKED;
+```
+
+Depois de apagar cada objeto no storage, a transição é registrada:
+
+```sql
+UPDATE videos
+   SET status = 'EXPIRED',
+       result_key = NULL,
+       result_purged_at = now(),
+       updated_at = now(),
+       version = version + 1
+ WHERE id = $1
+   AND status = 'DONE';
+```
+
+O `SKIP LOCKED` permite que mais de uma réplica rode a rotina sem processar a mesma linha, e a condição de status na atualização garante que a expiração não sobrescreva uma exclusão feita pelo dono no meio do caminho.
+
 ## Dados fora do PostgreSQL
 
 | Onde | O que | Observação |
 |---|---|---|
-| SeaweedFS | Vídeos originais e pacotes de frames | Chaves determinísticas, descritas em [Arquitetura](03-arquitetura.md) |
+| SeaweedFS | Vídeos originais e pacotes de frames | Chaves determinísticas. O original é apagado ao fim do processamento e o pacote expira em 24 horas |
 | Redis | Primeira página da listagem por usuário | Cache-aside com TTL curto, nunca fonte da verdade |
 | RabbitMQ | Eventos em trânsito e mensagens na DLQ | Filas duráveis com mensagens persistentes |
 
