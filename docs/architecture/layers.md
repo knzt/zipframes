@@ -15,13 +15,13 @@ O `main/` (composition root) é a única exceção: ele conhece todas as camadas
 
 ## Camadas por pasta
 
-| Pasta | Camada | Pode importar | Nunca pode importar |
-|---|---|---|---|
-| `src/domain/` | Entities | Biblioteca padrão, `@types/*` | Qualquer outra camada, bibliotecas de infraestrutura |
-| `src/application/` | Use Cases | `domain/`, `packages/*` | `adapters/`, `frameworks/`, `main/`, Prisma, amqplib, ioredis, `@aws-sdk`, Nodemailer, Fastify |
-| `src/adapters/` | Interface Adapters | `application/`, `domain/`, bibliotecas de integração | `frameworks/`, `main/` |
-| `src/frameworks/` | Frameworks & Drivers | `adapters/`, bibliotecas | `main/` |
-| `src/main/` | Composition root | Todas as camadas | — |
+| Pasta              | Camada               | Pode importar                                        | Nunca pode importar                                                                            |
+| ------------------ | -------------------- | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `src/domain/`      | Entities             | Biblioteca padrão, `@types/*`                        | Qualquer outra camada, bibliotecas de infraestrutura                                           |
+| `src/application/` | Use Cases            | `domain/`, `packages/*`                              | `adapters/`, `frameworks/`, `main/`, Prisma, amqplib, ioredis, `@aws-sdk`, Nodemailer, Fastify |
+| `src/adapters/`    | Interface Adapters   | `application/`, `domain/`, bibliotecas de integração | `frameworks/`, `main/`                                                                         |
+| `src/frameworks/`  | Frameworks & Drivers | `adapters/`, bibliotecas                             | `main/`                                                                                        |
+| `src/main/`        | Composition root     | Todas as camadas                                     | —                                                                                              |
 
 ## Regras de microsserviços
 
