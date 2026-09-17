@@ -14,7 +14,8 @@
     "typecheck": "turbo typecheck",
     "format": "prettier --write \"**/*.{ts,tsx,js,json,md,yaml,yml}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,json,md,yaml,yml}\"",
-    "prepare": "husky"
+    "prepare": "husky",
+    "check:layers": "sh validate-layers.sh"
   },
   "devDependencies": {
     "@commitlint/cli": "^19.8.1",
@@ -26,7 +27,8 @@
     "lint-staged": "^16.1.0",
     "prettier": "^3.5.3",
     "turbo": "^2.5.4",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "dependency-cruiser": "^16.10.2"
   },
   "engines": {
     "node": ">=22.0.0",
