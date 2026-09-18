@@ -168,14 +168,15 @@ Regras:
 
 A projeção é mantida por *event-carried state transfer*: o contexto de Identidade publica os eventos de cadastro, alteração e exclusão, e o de Notificação mantém sua própria cópia. Não existe consulta ao auth-service nem acesso ao banco dele. A gravação é um upsert por `userId`, e o `updatedAt` descarta eventos que chegarem fora de ordem.
 
-**Agregado `Notification`**: `id`, `userId`, `videoId`, `type` (`VIDEO_FAILED`), `channel` (`EMAIL`), `status` (`PENDING`, `SENT`, `FAILED`), `target`, `createdAt`, `sentAt`, e a coleção de tentativas (`NotificationAttempt`: número da tentativa, destino, resultado, erro e data).
+**Agregado `Notification`**: `id`, `userId`, `videoId`, `type` (`VIDEO_FAILED`), `channel` (`EMAIL`), `status` (`PENDING`, `SENT`, `FAILED`), `target`, `createdAt`, `sentAt`, e a coleção de tentativas que falharam (`NotificationAttempt`: número da tentativa, destino, erro e data).
 
 O `target` registra o endereço usado no envio, que é copiado do contato no momento em que a mensagem sai. O contato guarda o estado atual, e a notificação guarda o fato histórico.
 
 Regras:
 - **No máximo uma notificação por vídeo e tipo.** Reentregas de `video.failed` não geram e-mails duplicados.
 - **Contato ausente não perde a notificação:** se `video.failed` chegar antes de `user.registered`, a notificação fica `PENDING` e é enviada quando o contato for projetado.
-- **Cada tentativa de envio é registrada**, com destino, resultado e erro. A notificação não guarda apenas a última falha: o histórico completo fica nas tentativas.
+- **Cada tentativa que falha é registrada**, com destino, erro e data. O envio bem-sucedido não vira tentativa: ele fica na própria notificação, como `SENT`, com destino e data de envio.
+- **No máximo três tentativas.** Ao esgotá-las, a notificação fica `FAILED` e para de ser reenfileirada. O limite é configurável.
 - **Falha no envio do e-mail** é transitória e segue a mesma política de retry das mensagens.
 - **O e-mail não repete dado pessoal desnecessário.** Ele traz o nome do arquivo enviado e o motivo da falha, sem anexos e sem link para o conteúdo.
 - **A exclusão da conta apaga o contato e o histórico de notificações** do usuário, ao consumir `user.deleted`.
