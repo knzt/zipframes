@@ -18,15 +18,16 @@ O `main/` (composition root) é a única exceção: ele conhece todas as camadas
 | Pasta              | Camada               | Pode importar                                        | Nunca pode importar                                                                            |
 | ------------------ | -------------------- | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
 | `src/domain/`      | Entities             | Biblioteca padrão, `@types/*`                        | Qualquer outra camada, bibliotecas de infraestrutura                                           |
-| `src/application/` | Use Cases            | `domain/`, `packages/*`                              | `adapters/`, `frameworks/`, `main/`, Prisma, amqplib, ioredis, `@aws-sdk`, Nodemailer, Fastify |
+| `src/application/` | Use Cases            | `domain/`, pacotes `@zipframes/*`                    | `adapters/`, `frameworks/`, `main/`, Prisma, amqplib, ioredis, `@aws-sdk`, Nodemailer, Fastify |
 | `src/adapters/`    | Interface Adapters   | `application/`, `domain/`, bibliotecas de integração | `frameworks/`, `main/`                                                                         |
 | `src/frameworks/`  | Frameworks & Drivers | `adapters/`, bibliotecas                             | `main/`                                                                                        |
 | `src/main/`        | Composition root     | Todas as camadas                                     | —                                                                                              |
 
 ## Regras de microsserviços
 
-- **Serviços não importam outros serviços.** Todo código compartilhado vai para `packages/`.
-- **Packages não importam serviços.** Dependências em `packages/` apontam apenas para outros `packages/` ou para `node_modules`.
+- **Serviços não importam outros serviços.** O código compartilhado vem dos pacotes npm `@zipframes/*`, publicados a partir de um repositório próprio e declarados por versão em cada serviço.
+- **O domínio pode importar `@zipframes/value-objects` e `@zipframes/core`**, porque eles carregam apenas forma (o que é válido em qualquer sistema) e nenhuma dependência de infraestrutura. Qualquer outro pacote npm continua proibido no domínio.
+- **Política fica no serviço.** O pacote diz se um e-mail tem formato válido; o serviço diz se aquele e-mail pode se cadastrar. Regras como política de senha, extensões de vídeo aceitas e status do vídeo pertencem ao domínio de quem as define.
 
 ## Regras adicionais
 
@@ -45,7 +46,7 @@ pnpm check:layers
 2. Opções comuns:
    - Mover o código para a camada correta.
    - Extrair uma interface (port) em `application/ports/` e injetar a implementação pelo `main/`.
-   - Mover código reutilizável para `packages/` se for técnico, sem regra de negócio.
+   - Publicar o código em um pacote `@zipframes/*` se ele for técnico ou universal, sem regra de negócio de nenhum contexto.
 3. Nunca suprima a regra sem deixar um comentário explicando por quê.
 
 ## Como o dependency-cruiser é configurado
