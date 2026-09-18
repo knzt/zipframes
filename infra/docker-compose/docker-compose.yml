@@ -1,0 +1,167 @@
+name: zipframes
+
+services:
+  # ─── Bancos de dados: uma instância por serviço ──────────────
+  auth-db:
+    image: postgres:16-alpine
+    container_name: zipframes-auth-db
+    environment:
+      POSTGRES_USER: ${AUTH_DB_USER:-zipframes}
+      POSTGRES_PASSWORD: ${AUTH_DB_PASSWORD:-zipframes}
+      POSTGRES_DB: ${AUTH_DB_NAME:-auth_db}
+    ports:
+      - '${AUTH_DB_PORT:-5432}:5432'
+    volumes:
+      - auth-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${AUTH_DB_USER:-zipframes} -d ${AUTH_DB_NAME:-auth_db}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [zipframes]
+
+  video-db:
+    image: postgres:16-alpine
+    container_name: zipframes-video-db
+    environment:
+      POSTGRES_USER: ${VIDEO_DB_USER:-zipframes}
+      POSTGRES_PASSWORD: ${VIDEO_DB_PASSWORD:-zipframes}
+      POSTGRES_DB: ${VIDEO_DB_NAME:-video_db}
+    ports:
+      - '${VIDEO_DB_PORT:-5433}:5432'
+    volumes:
+      - video-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${VIDEO_DB_USER:-zipframes} -d ${VIDEO_DB_NAME:-video_db}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [zipframes]
+
+  notification-db:
+    image: postgres:16-alpine
+    container_name: zipframes-notification-db
+    environment:
+      POSTGRES_USER: ${NOTIFICATION_DB_USER:-zipframes}
+      POSTGRES_PASSWORD: ${NOTIFICATION_DB_PASSWORD:-zipframes}
+      POSTGRES_DB: ${NOTIFICATION_DB_NAME:-notification_db}
+    ports:
+      - '${NOTIFICATION_DB_PORT:-5434}:5432'
+    volumes:
+      - notification-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'pg_isready -U ${NOTIFICATION_DB_USER:-zipframes} -d ${NOTIFICATION_DB_NAME:-notification_db}',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [zipframes]
+
+  # ─── Mensageria ─────────────────────────────────────────────
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    container_name: zipframes-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-zipframes}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-zipframes}
+    ports:
+      - '${RABBITMQ_PORT:-5672}:5672'
+      - '${RABBITMQ_MANAGEMENT_PORT:-15672}:15672'
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    networks: [zipframes]
+
+  # ─── Cache ──────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: zipframes-redis
+    command: redis-server --save 60 1 --loglevel warning
+    ports:
+      - '${REDIS_PORT:-6379}:6379'
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [zipframes]
+
+  # ─── Object storage compatível com S3 ───────────────────────
+  storage:
+    image: chrislusf/seaweedfs:3.80
+    container_name: zipframes-storage
+    command: >
+      server
+      -dir=/data
+      -master.volumeSizeLimitMB=1024
+      -volume.max=10
+      -filer
+      -s3
+      -s3.config=/etc/seaweedfs/s3.json
+    ports:
+      - '${STORAGE_S3_PORT:-8333}:8333'
+      - '${STORAGE_MASTER_PORT:-9333}:9333'
+      - '${STORAGE_FILER_PORT:-8888}:8888'
+    volumes:
+      - storage-data:/data
+      - ./seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q -O - http://localhost:9333/cluster/healthz || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    networks: [zipframes]
+
+  # Cria o bucket "videos" na primeira subida e encerra.
+  storage-init:
+    image: amazon/aws-cli:2.27.30
+    container_name: zipframes-storage-init
+    depends_on:
+      storage:
+        condition: service_healthy
+    environment:
+      AWS_ACCESS_KEY_ID: ${STORAGE_ACCESS_KEY:-zipframes}
+      AWS_SECRET_ACCESS_KEY: ${STORAGE_SECRET_KEY:-zipframes-local-secret}
+      AWS_DEFAULT_REGION: ${STORAGE_REGION:-us-east-1}
+    entrypoint: ['/bin/sh', '-c']
+    command: >
+      "aws --endpoint-url http://storage:8333 s3api create-bucket --bucket ${STORAGE_BUCKET:-videos}
+      || echo 'bucket ja existe'"
+    networks: [zipframes]
+    restart: 'no'
+
+  # ─── Captura de e-mails no ambiente local ──────────────────────────────
+  mailpit:
+    image: axllent/mailpit:v1.24
+    container_name: zipframes-mailpit
+    environment:
+      MP_MAX_MESSAGES: 500
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+    ports:
+      - '${MAILPIT_SMTP_PORT:-1025}:1025'
+      - '${MAILPIT_WEB_PORT:-8025}:8025'
+    networks: [zipframes]
+
+volumes:
+  auth-db-data:
+  video-db-data:
+  notification-db-data:
+  rabbitmq-data:
+  redis-data:
+  storage-data:
+
+networks:
+  zipframes:
+    name: zipframes

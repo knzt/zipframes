@@ -1,0 +1,14 @@
+{
+  "identities": [
+    {
+      "name": "zipframes",
+      "credentials": [
+        {
+          "accessKey": "zipframes",
+          "secretKey": "zipframes-local-secret"
+        }
+      ],
+      "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+    }
+  ]
+}
