@@ -36,7 +36,7 @@ erDiagram
   USERS {
     uuid id PK
     varchar name
-    citext email UK
+    varchar email UK
     varchar password_hash
     timestamptz created_at
     timestamptz updated_at
@@ -62,12 +62,12 @@ erDiagram
 | --------------- | -------------- | ------------------------- | ------------------------------------------------------------------------------------ |
 | `id`            | `uuid`         | PK                        | Vai no `sub` do JWT e identifica o dono dos vídeos                                   |
 | `name`          | `varchar(120)` | not null                  |                                                                                      |
-| `email`         | `citext`       | not null, unique          | `citext` torna a comparação insensível a maiúsculas sem precisar de índice funcional |
+| `email`         | `varchar(255)` | not null, unique          | O value object `Email` valida o formato e normaliza para minúsculas antes de persistir. O banco garante apenas a unicidade do valor recebido |
 | `password_hash` | `char(60)`     | not null                  | Hash bcrypt, que tem tamanho fixo                                                    |
 | `created_at`    | `timestamptz`  | not null, default `now()` |                                                                                      |
 | `updated_at`    | `timestamptz`  | not null, default `now()` |                                                                                      |
 
-O índice único de `email` atende tanto à regra de unicidade quanto à busca do login.
+O índice único de `email` atende tanto à regra de unicidade quanto à busca do login, que consulta o valor já normalizado pelo value object.
 
 ### `outbox`
 
@@ -93,15 +93,13 @@ CREATE INDEX idx_outbox_pendentes ON outbox (occurred_at) WHERE published_at IS 
 ### DDL
 
 ```sql
-CREATE EXTENSION IF NOT EXISTS citext;
-
 CREATE TABLE users (
-  id            uuid        PRIMARY KEY,
+  id            uuid         PRIMARY KEY,
   name          varchar(120) NOT NULL,
-  email         citext      NOT NULL UNIQUE,
-  password_hash char(60)    NOT NULL,
-  created_at    timestamptz NOT NULL DEFAULT now(),
-  updated_at    timestamptz NOT NULL DEFAULT now()
+  email         varchar(255) NOT NULL UNIQUE,
+  password_hash char(60)     NOT NULL,
+  created_at    timestamptz  NOT NULL DEFAULT now(),
+  updated_at    timestamptz  NOT NULL DEFAULT now()
 );
 
 CREATE TABLE outbox (
