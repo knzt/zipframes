@@ -14,7 +14,11 @@
     "format": "prettier --write \"**/*.{ts,tsx,js,json,md,yaml,yml}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,json,md,yaml,yml}\"",
     "prepare": "husky",
-    "check:layers": "sh validate-layers.sh"
+    "check:layers": "sh validate-layers.sh",
+    "infra:up": "docker compose -f infra/docker-compose/docker-compose.yml up -d",
+    "infra:down": "docker compose -f infra/docker-compose/docker-compose.yml down",
+    "infra:logs": "docker compose -f infra/docker-compose/docker-compose.yml logs -f",
+    "infra:reset": "docker compose -f infra/docker-compose/docker-compose.yml down -v && docker compose -f infra/docker-compose/docker-compose.yml up -d"
   },
   "devDependencies": {
     "@commitlint/cli": "^19.8.1",
