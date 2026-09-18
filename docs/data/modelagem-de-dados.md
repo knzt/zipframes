@@ -14,14 +14,20 @@ Os schemas são criados por migrations do Prisma. O SQL desta página é a refer
 | `created_at` e `updated_at` em toda tabela mutável | Auditoria mínima |
 | Sem exclusão física dos metadados de vídeos e notificações | O histórico é parte da funcionalidade. Os arquivos, esses sim, são apagados no prazo definido |
 | Marcas de eliminação (`*_purged_at`) em vez de simplesmente limpar campos | Permite comprovar quando cada arquivo foi apagado, sem guardar o conteúdo |
-| Tabelas `outbox` e `processed_events` em todo serviço com eventos | Publicação confiável e consumo idempotente ([ADR-0008](adr/0008-outbox-e-idempotencia.md)) |
+| Tabela `outbox` em todo serviço que publica eventos | Publicação confiável: o evento é gravado na mesma transação da mudança do agregado |
+| Idempotência garantida por chaves de negócio, sem tabela de deduplicação | As restrições que já existem (upsert por chave primária, unicidade e o próprio status do agregado) tornam a reentrega inofensiva |
 
-As tabelas de infraestrutura têm a mesma estrutura em todos os serviços:
+A tabela **`outbox`** tem a mesma estrutura em todos os serviços que publicam eventos: o evento é gravado na mesma transação da mudança do agregado e publicado depois pelo relay. Ela cresce sem parar e é limpa por rotina periódica, que remove as linhas publicadas há mais de sete dias.
 
-- **`outbox`**: eventos gravados na mesma transação da mudança do agregado, publicados depois pelo relay.
-- **`processed_events`**: identificadores de eventos já tratados. A chave primária é composta por `consumer` e `event_id`, porque um mesmo serviço pode ter mais de um consumidor e cada um precisa tratar o evento uma vez.
+Não existe tabela de deduplicação de eventos. A entrega é "pelo menos uma vez", e cada consumidor é idempotente por uma chave que o próprio domínio já impõe:
 
-Ambas crescem sem parar e são limpas por rotina periódica: `outbox` remove linhas publicadas há mais de sete dias, e `processed_events` remove registros mais antigos que o prazo máximo de reentrega.
+| Consumidor | O que impede o efeito duplicado |
+|---|---|
+| Atualização de status no video-service | A máquina de estados do agregado: um evento já aplicado não produz transição válida |
+| Projeção de contatos | `INSERT ... ON CONFLICT (user_id) DO UPDATE`, com `updated_at` descartando eventos antigos |
+| Notificação de falha | A restrição única `(video_id, type)` |
+
+A decisão é deliberada: uma tabela genérica de eventos processados seria uma segunda trava para portas que o domínio já fecha. Se algum consumidor futuro tiver um efeito sem chave natural, a tabela volta para aquele serviço.
 
 ## auth-db
 
@@ -149,12 +155,6 @@ erDiagram
     timestamptz published_at
     smallint attempts
   }
-  PROCESSED_EVENTS {
-    varchar consumer PK
-    uuid event_id PK
-    varchar event_type
-    timestamptz processed_at
-  }
   VIDEOS ||..o{ OUTBOX : "aggregate_id (sem FK)"
 ```
 
@@ -198,17 +198,6 @@ A última restrição garante no banco o que a regra de retenção exige: um ví
 | `uq_videos_source_key` | `(source_key)` | Garante um upload por vídeo |
 | `idx_videos_em_andamento` | `(status, created_at)` parcial para `QUEUED` e `PROCESSING` | Monitoramento e detecção de vídeos presos |
 | `idx_videos_a_expirar` | `(expires_at)` parcial para `DONE` | Rotina de expiração, que busca só o que já venceu |
-
-### `processed_events`
-
-| Coluna | Tipo | Restrições |
-|---|---|---|
-| `consumer` | `varchar(100)` | PK composta |
-| `event_id` | `uuid` | PK composta |
-| `event_type` | `varchar(100)` | not null |
-| `processed_at` | `timestamptz` | not null, default `now()` |
-
-A linha é gravada na mesma transação do efeito do evento. Se o mesmo `event_id` chegar de novo, a inserção falha na chave primária e o consumidor apenas confirma a mensagem.
 
 ### DDL
 
@@ -268,14 +257,6 @@ CREATE TABLE outbox (
 );
 
 CREATE INDEX idx_outbox_pendentes ON outbox (occurred_at) WHERE published_at IS NULL;
-
-CREATE TABLE processed_events (
-  consumer     varchar(100) NOT NULL,
-  event_id     uuid         NOT NULL,
-  event_type   varchar(100) NOT NULL,
-  processed_at timestamptz  NOT NULL DEFAULT now(),
-  PRIMARY KEY (consumer, event_id)
-);
 ```
 
 ## notification-db
@@ -295,18 +276,21 @@ erDiagram
     notification_type type
     notification_channel channel
     notification_status status
-    text error
-    smallint attempts
+    varchar target
     timestamptz created_at
     timestamptz sent_at
   }
-  PROCESSED_EVENTS {
-    varchar consumer PK
-    uuid event_id PK
-    varchar event_type
-    timestamptz processed_at
+  NOTIFICATION_ATTEMPTS {
+    uuid id PK
+    uuid notification_id FK
+    smallint attempt
+    varchar target
+    attempt_result result
+    text error
+    timestamptz attempted_at
   }
   CONTACTS ||..o{ NOTIFICATIONS : "user_id (sem FK)"
+  NOTIFICATIONS ||--o{ NOTIFICATION_ATTEMPTS : "tentativas de envio"
 ```
 
 Não há chave estrangeira de `notifications` para `contacts` de propósito: uma falha de processamento pode chegar antes do evento de cadastro do usuário. Nesse caso a notificação nasce `PENDING` e é enviada quando o contato aparece.
@@ -332,10 +316,27 @@ A projeção é gravada com `INSERT ... ON CONFLICT (user_id) DO UPDATE`, o que 
 | `type` | `notification_type` | not null | `VIDEO_FAILED` |
 | `channel` | `notification_channel` | not null, default `EMAIL` | Abre espaço para outros canais |
 | `status` | `notification_status` | not null, default `PENDING` | `PENDING`, `SENT` ou `FAILED` |
-| `error` | `text` | | Último erro de envio |
-| `attempts` | `smallint` | not null, default 0 | |
+| `target` | `varchar(255)` | | Endereço usado no envio, copiado do contato no momento em que a mensagem sai |
 | `created_at` | `timestamptz` | not null, default `now()` | |
 | `sent_at` | `timestamptz` | | Preenchido no envio |
+
+O `target` guarda um fato histórico: para onde a mensagem foi de verdade. `contacts.email` guarda o estado atual. Se o usuário trocar de e-mail depois, o histórico continua mostrando o endereço usado na época, e é por isso que os dois campos coexistem.
+
+### `notification_attempts`
+
+Cada tentativa de envio vira uma linha, com o erro que a fez falhar. O histórico completo fica aqui, em vez de a notificação guardar apenas a última falha.
+
+| Coluna | Tipo | Restrições | Observação |
+|---|---|---|---|
+| `id` | `uuid` | PK | |
+| `notification_id` | `uuid` | not null, FK para `notifications` com `ON DELETE CASCADE` | Mesma base, então a FK é permitida |
+| `attempt` | `smallint` | not null | 1 na primeira tentativa |
+| `target` | `varchar(255)` | not null | Endereço tentado |
+| `result` | `attempt_result` | not null | `SENT` ou `FAILED` |
+| `error` | `text` | | Motivo da falha, vazio em caso de sucesso |
+| `attempted_at` | `timestamptz` | not null, default `now()` | |
+
+A quantidade de tentativas é derivada daqui (`count(*)`), e a notificação não precisa mais dos campos `attempts` e `error`.
 
 Índices:
 
@@ -344,6 +345,7 @@ A projeção é gravada com `INSERT ... ON CONFLICT (user_id) DO UPDATE`, o que 
 | `uq_notifications_video_tipo` | `(video_id, type)` único | Garante uma notificação por vídeo e tipo, mesmo com reentrega |
 | `idx_notifications_pendentes` | `(created_at)` parcial para `PENDING` | Rotina que envia o que ficou aguardando contato |
 | `idx_notifications_user` | `(user_id, created_at DESC)` | Histórico do usuário |
+| `uq_attempts_notificacao` | `(notification_id, attempt)` único | Impede registrar a mesma tentativa duas vezes |
 
 ### DDL
 
@@ -351,6 +353,7 @@ A projeção é gravada com `INSERT ... ON CONFLICT (user_id) DO UPDATE`, o que 
 CREATE TYPE notification_type    AS ENUM ('VIDEO_FAILED');
 CREATE TYPE notification_channel AS ENUM ('EMAIL');
 CREATE TYPE notification_status  AS ENUM ('PENDING', 'SENT', 'FAILED');
+CREATE TYPE attempt_result       AS ENUM ('SENT', 'FAILED');
 
 CREATE TABLE contacts (
   user_id    uuid         PRIMARY KEY,
@@ -366,24 +369,27 @@ CREATE TABLE notifications (
   type       notification_type    NOT NULL,
   channel    notification_channel NOT NULL DEFAULT 'EMAIL',
   status     notification_status  NOT NULL DEFAULT 'PENDING',
-  error      text,
-  attempts   smallint             NOT NULL DEFAULT 0,
+  target     varchar(255),
   created_at timestamptz          NOT NULL DEFAULT now(),
   sent_at    timestamptz,
   CONSTRAINT uq_notifications_video_tipo UNIQUE (video_id, type),
-  CONSTRAINT ck_notifications_sent CHECK (status <> 'SENT' OR sent_at IS NOT NULL)
+  CONSTRAINT ck_notifications_sent CHECK (status <> 'SENT' OR (sent_at IS NOT NULL AND target IS NOT NULL))
+);
+
+CREATE TABLE notification_attempts (
+  id              uuid           PRIMARY KEY,
+  notification_id uuid           NOT NULL REFERENCES notifications (id) ON DELETE CASCADE,
+  attempt         smallint       NOT NULL CHECK (attempt > 0),
+  target          varchar(255)   NOT NULL,
+  result          attempt_result NOT NULL,
+  error           text,
+  attempted_at    timestamptz    NOT NULL DEFAULT now(),
+  CONSTRAINT uq_attempts_notificacao UNIQUE (notification_id, attempt),
+  CONSTRAINT ck_attempts_erro CHECK (result <> 'FAILED' OR error IS NOT NULL)
 );
 
 CREATE INDEX idx_notifications_pendentes ON notifications (created_at) WHERE status = 'PENDING';
 CREATE INDEX idx_notifications_user ON notifications (user_id, created_at DESC);
-
-CREATE TABLE processed_events (
-  consumer     varchar(100) NOT NULL,
-  event_id     uuid         NOT NULL,
-  event_type   varchar(100) NOT NULL,
-  processed_at timestamptz  NOT NULL DEFAULT now(),
-  PRIMARY KEY (consumer, event_id)
-);
 ```
 
 ## Retenção e eliminação
@@ -397,7 +403,6 @@ Os arquivos ficam no storage apenas enquanto são necessários (ver a seção de
 | Exclusão a pedido do dono | Imediata | Arquivos apagados, `status` em `DELETED` |
 | Exclusão da conta | Ao consumir `user.deleted` | Vídeos e contato do usuário removidos |
 | Linhas de `outbox` publicadas | 7 dias | Removidas pela rotina de limpeza |
-| Linhas de `processed_events` | Prazo máximo de reentrega | Removidas pela rotina de limpeza |
 
 A rotina de expiração busca o que venceu usando o índice parcial `idx_videos_a_expirar`:
 
