@@ -10,13 +10,13 @@ O fluxo funciona e comprova a ideia de negócio, mas foi construído sem nenhuma
 
 ## Como funciona hoje
 
-| Rota                      | Comportamento                                                                              |
-| ------------------------- | ------------------------------------------------------------------------------------------ |
-| `GET /`                   | Devolve uma página HTML embutida no código Go                                              |
-| `POST /upload`            | Salva o vídeo em `uploads/`, roda o `ffmpeg`, gera o zip em `outputs/` e só então responde |
-| `GET /download/:filename` | Serve o zip a partir do nome informado na URL                                              |
-| `GET /api/status`         | Lista todos os zips existentes na pasta `outputs/`                                         |
-| `/uploads` e `/outputs`   | Servidos como arquivos estáticos públicos                                                  |
+| Rota | Comportamento |
+|---|---|
+| `GET /` | Devolve uma página HTML embutida no código Go |
+| `POST /upload` | Salva o vídeo em `uploads/`, roda o `ffmpeg`, gera o zip em `outputs/` e só então responde |
+| `GET /download/:filename` | Serve o zip a partir do nome informado na URL |
+| `GET /api/status` | Lista todos os zips existentes na pasta `outputs/` |
+| `/uploads` e `/outputs` | Servidos como arquivos estáticos públicos |
 
 ```mermaid
 sequenceDiagram
@@ -73,18 +73,18 @@ sequenceDiagram
 
 ## Requisitos da nova versão frente ao projeto base
 
-| Requisito                                 | Projeto base                                          | Nova arquitetura                                                                                         |
-| ----------------------------------------- | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| Processar mais de um vídeo ao mesmo tempo | Concorrência descontrolada, com corrida entre uploads | Worker sem estado, com prefetch controlado e escala horizontal pelo tamanho da fila (KEDA)               |
-| Não perder requisições em picos           | Picos saturam a CPU e derrubam requisições            | Upload direto no storage, confirmação rápida, outbox e fila durável com retry e DLQ                      |
-| Proteção por usuário e senha              | Inexistente                                           | auth-service com senha em hash e JWT RS256 validado por cada serviço                                     |
-| Listagem de status por usuário            | Varredura de pasta, sem status nem dono               | Tabela de vídeos com máquina de estados, filtrada pelo dono, com cache                                   |
-| Notificação em caso de erro               | Inexistente                                           | notification-service consumindo `video.failed` e enviando e-mail                                         |
-| Persistência dos dados                    | Somente disco local efêmero                           | PostgreSQL por serviço e object storage compatível com S3                                                |
-| Arquitetura escalável                     | Instância única com estado local                      | Microsserviços sem estado no Kubernetes                                                                  |
-| Retenção e eliminação                     | Nenhuma: originais com falha e zips ficam para sempre | Original apagado ao fim do processamento e pacote expirado em 24 horas, com exclusão a pedido do titular |
-| Testes                                    | Inexistentes                                          | Unitários, integração com Testcontainers, contrato e e2e                                                 |
-| CI/CD                                     | Inexistente                                           | GitHub Actions por serviço e GitOps com Argo CD                                                          |
+| Requisito | Projeto base | Nova arquitetura |
+|---|---|---|
+| Processar mais de um vídeo ao mesmo tempo | Concorrência descontrolada, com corrida entre uploads | Worker sem estado, com prefetch controlado e escala horizontal pelo tamanho da fila (KEDA) |
+| Não perder requisições em picos | Picos saturam a CPU e derrubam requisições | Upload direto no storage, confirmação rápida, outbox e fila durável com retry e DLQ |
+| Proteção por usuário e senha | Inexistente | auth-service com senha em hash e JWT RS256 validado por cada serviço |
+| Listagem de status por usuário | Varredura de pasta, sem status nem dono | Tabela de vídeos com máquina de estados, filtrada pelo dono, com cache |
+| Notificação em caso de erro | Inexistente | notification-service consumindo `video.failed` e enviando e-mail |
+| Persistência dos dados | Somente disco local efêmero | PostgreSQL por serviço e object storage compatível com S3 |
+| Arquitetura escalável | Instância única com estado local | Microsserviços sem estado no Kubernetes |
+| Retenção e eliminação | Nenhuma: originais com falha e zips ficam para sempre | Original apagado ao fim do processamento e pacote expirado em 24 horas, com exclusão a pedido do titular |
+| Testes | Inexistentes | Unitários, integração com Testcontainers, contrato e e2e |
+| CI/CD | Inexistente | GitHub Actions por serviço e GitOps com Argo CD |
 
 ## O que mantemos
 
