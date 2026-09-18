@@ -285,12 +285,11 @@ erDiagram
     uuid notification_id FK
     smallint attempt
     varchar target
-    attempt_result result
     text error
     timestamptz attempted_at
   }
   CONTACTS ||..o{ NOTIFICATIONS : "user_id (sem FK)"
-  NOTIFICATIONS ||--o{ NOTIFICATION_ATTEMPTS : "tentativas de envio"
+  NOTIFICATIONS ||--o{ NOTIFICATION_ATTEMPTS : "tentativas que falharam"
 ```
 
 Não há chave estrangeira de `notifications` para `contacts` de propósito: uma falha de processamento pode chegar antes do evento de cadastro do usuário. Nesse caso a notificação nasce `PENDING` e é enviada quando o contato aparece.
@@ -324,19 +323,24 @@ O `target` guarda um fato histórico: para onde a mensagem foi de verdade. `cont
 
 ### `notification_attempts`
 
-Cada tentativa de envio vira uma linha, com o erro que a fez falhar. O histórico completo fica aqui, em vez de a notificação guardar apenas a última falha.
+**Só as tentativas que falharam viram linha aqui.** A tabela existe para controlar o limite de tentativas e para registrar por que cada uma falhou. O envio bem-sucedido não precisa de linha própria: ele já está em `notifications`, com `status` em `SENT`, `sent_at` e `target`.
 
 | Coluna | Tipo | Restrições | Observação |
 |---|---|---|---|
 | `id` | `uuid` | PK | |
 | `notification_id` | `uuid` | not null, FK para `notifications` com `ON DELETE CASCADE` | Mesma base, então a FK é permitida |
-| `attempt` | `smallint` | not null | 1 na primeira tentativa |
+| `attempt` | `smallint` | not null, `> 0` | 1 na primeira falha |
 | `target` | `varchar(255)` | not null | Endereço tentado |
-| `result` | `attempt_result` | not null | `SENT` ou `FAILED` |
-| `error` | `text` | | Motivo da falha, vazio em caso de sucesso |
+| `error` | `text` | not null | Motivo da falha |
 | `attempted_at` | `timestamptz` | not null, default `now()` | |
 
-A quantidade de tentativas é derivada daqui (`count(*)`), e a notificação não precisa mais dos campos `attempts` e `error`.
+A regra de negócio é direta: **no máximo três tentativas**. Antes de tentar de novo, o serviço conta as linhas da notificação. Se já houver três, ele desiste e marca a notificação como `FAILED`, em vez de reenfileirar a mensagem.
+
+```sql
+SELECT count(*) FROM notification_attempts WHERE notification_id = $1;
+```
+
+O limite fica na configuração do serviço, não em uma restrição do banco, para poder mudar sem migration.
 
 Índices:
 
@@ -353,7 +357,6 @@ A quantidade de tentativas é derivada daqui (`count(*)`), e a notificação nã
 CREATE TYPE notification_type    AS ENUM ('VIDEO_FAILED');
 CREATE TYPE notification_channel AS ENUM ('EMAIL');
 CREATE TYPE notification_status  AS ENUM ('PENDING', 'SENT', 'FAILED');
-CREATE TYPE attempt_result       AS ENUM ('SENT', 'FAILED');
 
 CREATE TABLE contacts (
   user_id    uuid         PRIMARY KEY,
@@ -376,16 +379,15 @@ CREATE TABLE notifications (
   CONSTRAINT ck_notifications_sent CHECK (status <> 'SENT' OR (sent_at IS NOT NULL AND target IS NOT NULL))
 );
 
+-- Guarda apenas as tentativas que falharam.
 CREATE TABLE notification_attempts (
-  id              uuid           PRIMARY KEY,
-  notification_id uuid           NOT NULL REFERENCES notifications (id) ON DELETE CASCADE,
-  attempt         smallint       NOT NULL CHECK (attempt > 0),
-  target          varchar(255)   NOT NULL,
-  result          attempt_result NOT NULL,
-  error           text,
-  attempted_at    timestamptz    NOT NULL DEFAULT now(),
-  CONSTRAINT uq_attempts_notificacao UNIQUE (notification_id, attempt),
-  CONSTRAINT ck_attempts_erro CHECK (result <> 'FAILED' OR error IS NOT NULL)
+  id              uuid         PRIMARY KEY,
+  notification_id uuid         NOT NULL REFERENCES notifications (id) ON DELETE CASCADE,
+  attempt         smallint     NOT NULL CHECK (attempt > 0),
+  target          varchar(255) NOT NULL,
+  error           text         NOT NULL,
+  attempted_at    timestamptz  NOT NULL DEFAULT now(),
+  CONSTRAINT uq_attempts_notificacao UNIQUE (notification_id, attempt)
 );
 
 CREATE INDEX idx_notifications_pendentes ON notifications (created_at) WHERE status = 'PENDING';
