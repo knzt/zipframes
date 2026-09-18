@@ -10,13 +10,13 @@ O fluxo funciona e comprova a ideia de negócio, mas foi construído sem nenhuma
 
 ## Como funciona hoje
 
-| Rota | Comportamento |
-|---|---|
-| `GET /` | Devolve uma página HTML embutida no código Go |
-| `POST /upload` | Salva o vídeo em `uploads/`, roda o `ffmpeg`, gera o zip em `outputs/` e só então responde |
-| `GET /download/:filename` | Serve o zip a partir do nome informado na URL |
-| `GET /api/status` | Lista todos os zips existentes na pasta `outputs/` |
-| `/uploads` e `/outputs` | Servidos como arquivos estáticos públicos |
+| Rota                      | Comportamento                                                                              |
+| ------------------------- | ------------------------------------------------------------------------------------------ |
+| `GET /`                   | Devolve uma página HTML embutida no código Go                                              |
+| `POST /upload`            | Salva o vídeo em `uploads/`, roda o `ffmpeg`, gera o zip em `outputs/` e só então responde |
+| `GET /download/:filename` | Serve o zip a partir do nome informado na URL                                              |
+| `GET /api/status`         | Lista todos os zips existentes na pasta `outputs/`                                         |
+| `/uploads` e `/outputs`   | Servidos como arquivos estáticos públicos                                                  |
 
 ```mermaid
 sequenceDiagram
@@ -48,6 +48,7 @@ sequenceDiagram
 - **Erros ignorados.** O retorno de `os.MkdirAll` é descartado, e o `Close` do `zip.Writer` é chamado em `defer` sem verificação. Como é esse `Close` que grava o diretório central do zip, uma falha nele gera um arquivo corrompido reportado como sucesso.
 - **Sem timeout no `ffmpeg`.** O comando é executado sem contexto nem prazo, então um arquivo problemático pode travar a requisição indefinidamente.
 - **Vídeos com falha nunca são removidos.** O arquivo original só é apagado em caso de sucesso, e o disco cresce sem limite.
+- **Nenhuma política de retenção.** Os zips ficam guardados para sempre, sem prazo, sem expiração e sem qualquer caminho para o usuário excluir o que enviou.
 - **Mensagem inconsistente.** A validação aceita sete extensões (`mp4`, `avi`, `mov`, `mkv`, `wmv`, `flv`, `webm`), mas o erro informa apenas quatro.
 
 ### Segurança
@@ -58,6 +59,7 @@ sequenceDiagram
 - **Nome de arquivo vindo da URL.** O download monta o caminho com o parâmetro recebido, sem validação própria, e repete esse valor no cabeçalho `Content-Disposition`.
 - **Vazamento de detalhes internos.** A saída completa do `ffmpeg` (caminhos, versão, parâmetros) é devolvida ao cliente, e a página a insere com `innerHTML`. Como essa saída contém o nome do arquivo enviado, o nome é interpretado como HTML.
 - **Validação só por extensão.** Não há verificação do conteúdo nem limite de tamanho do upload.
+- **Tratamento de dados pessoais sem qualquer cuidado.** Vídeos e frames podem conter rosto e voz de pessoas. No protótipo eles ficam guardados por tempo indeterminado, acessíveis publicamente e sem forma de eliminação, o que contraria os princípios de necessidade e de eliminação após o fim do tratamento (LGPD, art. 6º, III, e art. 15 e 16).
 - **CORS aberto** (`Access-Control-Allow-Origin: *`) e Gin em modo debug.
 
 ### Qualidade e operação
@@ -71,17 +73,18 @@ sequenceDiagram
 
 ## Requisitos da nova versão frente ao projeto base
 
-| Requisito | Projeto base | Nova arquitetura |
-|---|---|---|
-| Processar mais de um vídeo ao mesmo tempo | Concorrência descontrolada, com corrida entre uploads | Worker sem estado, com prefetch controlado e escala horizontal pelo tamanho da fila (KEDA) |
-| Não perder requisições em picos | Picos saturam a CPU e derrubam requisições | Upload direto no storage, confirmação rápida, outbox e fila durável com retry e DLQ |
-| Proteção por usuário e senha | Inexistente | auth-service com senha em hash e JWT RS256 validado por cada serviço |
-| Listagem de status por usuário | Varredura de pasta, sem status nem dono | Tabela de vídeos com máquina de estados, filtrada pelo dono, com cache |
-| Notificação em caso de erro | Inexistente | notification-service consumindo `video.failed` e enviando e-mail |
-| Persistência dos dados | Somente disco local efêmero | PostgreSQL por serviço e object storage compatível com S3 |
-| Arquitetura escalável | Instância única com estado local | Microsserviços sem estado no Kubernetes |
-| Testes | Inexistentes | Unitários, integração com Testcontainers, contrato e e2e |
-| CI/CD | Inexistente | GitHub Actions por serviço e GitOps com Argo CD |
+| Requisito                                 | Projeto base                                          | Nova arquitetura                                                                                         |
+| ----------------------------------------- | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Processar mais de um vídeo ao mesmo tempo | Concorrência descontrolada, com corrida entre uploads | Worker sem estado, com prefetch controlado e escala horizontal pelo tamanho da fila (KEDA)               |
+| Não perder requisições em picos           | Picos saturam a CPU e derrubam requisições            | Upload direto no storage, confirmação rápida, outbox e fila durável com retry e DLQ                      |
+| Proteção por usuário e senha              | Inexistente                                           | auth-service com senha em hash e JWT RS256 validado por cada serviço                                     |
+| Listagem de status por usuário            | Varredura de pasta, sem status nem dono               | Tabela de vídeos com máquina de estados, filtrada pelo dono, com cache                                   |
+| Notificação em caso de erro               | Inexistente                                           | notification-service consumindo `video.failed` e enviando e-mail                                         |
+| Persistência dos dados                    | Somente disco local efêmero                           | PostgreSQL por serviço e object storage compatível com S3                                                |
+| Arquitetura escalável                     | Instância única com estado local                      | Microsserviços sem estado no Kubernetes                                                                  |
+| Retenção e eliminação                     | Nenhuma: originais com falha e zips ficam para sempre | Original apagado ao fim do processamento e pacote expirado em 24 horas, com exclusão a pedido do titular |
+| Testes                                    | Inexistentes                                          | Unitários, integração com Testcontainers, contrato e e2e                                                 |
+| CI/CD                                     | Inexistente                                           | GitHub Actions por serviço e GitOps com Argo CD                                                          |
 
 ## O que mantemos
 
