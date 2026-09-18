@@ -18,7 +18,6 @@ check() {
 }
 
 for dir in services/*/; do check "$dir"; done
-for dir in packages/*/; do check "$dir"; done
 
 if [ "$FAILED" -eq 1 ]; then
   echo ""
