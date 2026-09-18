@@ -37,7 +37,7 @@ O código compartilhado não vive aqui: ele é publicado como pacotes npm (`@zip
 | `@zipframes/communication` | Publisher, consumer, retry e DLQ |
 | `@zipframes/logger` | Logs estruturados com correlation ID |
 | `@zipframes/telemetry` | Métricas Prometheus e tracing OpenTelemetry |
-| `@zipframes/authorizer` | Validação de JWT via JWKS |
+| `@zipframes/authenticator` | Validação de JWT via JWKS |
 | `@zipframes/test-toolkit` | Base de testes de integração com Testcontainers |
 
 Os pacotes trazem **forma**, nunca **política**: validam o que é universal (um CPF é válido em qualquer sistema) e deixam para o serviço as regras que pertencem ao seu contexto, como a política de senha ou as extensões de vídeo aceitas.
