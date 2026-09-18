@@ -22,8 +22,10 @@ export default {
       to: {
         dependencyTypes: ['npm'],
         pathNot: [
-          // apenas type-only packages são permitidos no domínio
+          // no domínio só entram tipos e os pacotes de domínio publicados
+          // (value objects genéricos e utilitários sem infraestrutura)
           '^@types/',
+          '^@zipframes/(value-objects|core)$',
         ],
       },
     },
@@ -88,22 +90,13 @@ export default {
       name: 'serviços-não-importam-outros-serviços',
       comment:
         'Serviços em services/ não podem importar código de outros serviços. ' +
-        'Código compartilhado pertence a packages/.',
+        'Código compartilhado vem dos pacotes @zipframes/*, publicados em repositório próprio.',
       severity: 'error',
       from: { path: '^services/([^/]+)/' },
       to: {
         path: '^services/',
         pathNot: '^services/$1/',
       },
-    },
-    {
-      name: 'packages-não-importam-services',
-      comment:
-        'Pacotes compartilhados em packages/ não podem depender de serviços. ' +
-        'Dependências devem apontar para packages/ ou npm.',
-      severity: 'error',
-      from: { path: '^packages/' },
-      to: { path: '^services/' },
     },
     {
       name: 'sem-ciclos',
