@@ -31,12 +31,13 @@ O código compartilhado não vive aqui: ele é publicado como pacotes npm (`@zip
 
 | Pacote | Conteúdo |
 |---|---|
-| `@zipframes/schemas` | Contratos de eventos e de API, usados por mais de um serviço ou por consumidores externos |
+| `@zipframes/schemas` | Contratos de eventos e de API, usados por mais de um serviço ou por consumidores externos, organizados em `src/services` |
 | `@zipframes/value-objects` | Value objects genéricos (e-mail, CPF, CNPJ, telefone, CEP, endereço) e o value object base para criar os próprios |
 | `@zipframes/core` | `Result`, branded types e erros base |
-| `@zipframes/messaging` | Publisher, consumer, retry e DLQ |
-| `@zipframes/observability` | Logger, métricas e tracing |
-| `@zipframes/http-auth` | Validação de JWT via JWKS |
+| `@zipframes/communication` | Publisher, consumer, retry e DLQ |
+| `@zipframes/logger` | Logs estruturados, métricas e tracing |
+| `@zipframes/authorizer` | Validação de JWT via JWKS |
+| `@zipframes/test-toolkit` | Base de testes de integração com Testcontainers |
 
 Os pacotes trazem **forma**, nunca **política**: validam o que é universal (um CPF é válido em qualquer sistema) e deixam para o serviço as regras que pertencem ao seu contexto, como a política de senha ou as extensões de vídeo aceitas.
 
