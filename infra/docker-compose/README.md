@@ -1,6 +1,6 @@
 # Infraestrutura local
 
-Sobe tudo de que os serviços do ZipFrames precisam para rodar na máquina: bancos, broker, cache, object storage e captura de e-mails. Nenhum serviço da aplicação é iniciado aqui, e nenhuma tabela é criada: os schemas nascem das migrations do Prisma de cada serviço.
+Sobe tudo de que os serviços do ZipFrames precisam para rodar na máquina: bancos, broker, cache, object storage e captura de e-mails.
 
 ## Subir
 
@@ -13,21 +13,21 @@ Na raiz do monorepo, os atalhos equivalentes são `pnpm infra:up`, `pnpm infra:d
 
 ## Serviços e portas
 
-| Serviço | Porta | Acesso |
-|---|---|---|
-| auth-db | 5432 | `postgres://zipframes:zipframes@localhost:5432/auth_db` |
-| video-db | 5433 | `postgres://zipframes:zipframes@localhost:5433/video_db` |
-| notification-db | 5434 | `postgres://zipframes:zipframes@localhost:5434/notification_db` |
-| RabbitMQ (AMQP) | 5672 | `amqp://zipframes:zipframes@localhost:5672` |
-| RabbitMQ (painel) | 15672 | http://localhost:15672 |
-| Redis | 6379 | `redis://localhost:6379` |
-| SeaweedFS (S3) | 8333 | `http://localhost:8333`, bucket `videos` |
-| SeaweedFS (master) | 9333 | http://localhost:9333 |
-| SeaweedFS (filer) | 8888 | http://localhost:8888 |
-| Mailpit (SMTP) | 1025 | `smtp://localhost:1025` |
-| Mailpit (web) | 8025 | http://localhost:8025 |
+| Serviço            | Porta | Acesso                                                          |
+| ------------------ | ----- | --------------------------------------------------------------- |
+| auth-db            | 5432  | `postgres://zipframes:zipframes@localhost:5432/auth_db`         |
+| video-db           | 5433  | `postgres://zipframes:zipframes@localhost:5433/video_db`        |
+| notification-db    | 5434  | `postgres://zipframes:zipframes@localhost:5434/notification_db` |
+| RabbitMQ (AMQP)    | 5672  | `amqp://zipframes:zipframes@localhost:5672`                     |
+| RabbitMQ (painel)  | 15672 | http://localhost:15672                                          |
+| Redis              | 6379  | `redis://localhost:6379`                                        |
+| SeaweedFS (S3)     | 8333  | `http://localhost:8333`, bucket `videos`                        |
+| SeaweedFS (master) | 9333  | http://localhost:9333                                           |
+| SeaweedFS (filer)  | 8888  | http://localhost:8888                                           |
+| Mailpit (SMTP)     | 1025  | `smtp://localhost:1025`                                         |
+| Mailpit (web)      | 8025  | http://localhost:8025                                           |
 
-As três instâncias de PostgreSQL existem para manter o isolamento real entre serviços ([ADR-0006](../../docs/adr/0006-banco-por-servico.md)).
+As três instâncias de PostgreSQL existem para manter o isolamento real entre serviços
 
 ## Verificar
 

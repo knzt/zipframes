@@ -1,7 +1,7 @@
 name: zipframes
 
 services:
-  # ─── Bancos de dados: uma instância por serviço (ADR-0006) ──────────────
+  # ─── Bancos de dados: uma instância por serviço ──────────────
   auth-db:
     image: postgres:16-alpine
     container_name: zipframes-auth-db
@@ -61,7 +61,7 @@ services:
       retries: 10
     networks: [zipframes]
 
-  # ─── Mensageria (ADR-0007) ─────────────────────────────────────────────
+  # ─── Mensageria ─────────────────────────────────────────────
   rabbitmq:
     image: rabbitmq:4-management-alpine
     container_name: zipframes-rabbitmq
@@ -81,7 +81,7 @@ services:
       start_period: 30s
     networks: [zipframes]
 
-  # ─── Cache (ADR-0006) ──────────────────────────────────────────────────
+  # ─── Cache ──────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
     container_name: zipframes-redis
@@ -97,7 +97,7 @@ services:
       retries: 10
     networks: [zipframes]
 
-  # ─── Object storage compatível com S3 (ADR-0010) ───────────────────────
+  # ─── Object storage compatível com S3 ───────────────────────
   storage:
     image: chrislusf/seaweedfs:3.80
     container_name: zipframes-storage
