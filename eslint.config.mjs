@@ -28,7 +28,7 @@ export default [
             {
               regex: String.raw`^\.\.\/\.\.\/services/`,
               message:
-                'Serviços não podem importar outros serviços. Use packages/ para código compartilhado.',
+                'Serviços não podem importar outros serviços. Use os pacotes @zipframes/* para código compartilhado.',
             },
           ],
         },
