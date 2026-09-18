@@ -35,7 +35,8 @@ O código compartilhado não vive aqui: ele é publicado como pacotes npm (`@zip
 | `@zipframes/value-objects` | Value objects genéricos (e-mail, CPF, CNPJ, telefone, CEP, endereço) e o value object base para criar os próprios |
 | `@zipframes/core` | `Result`, branded types e erros base |
 | `@zipframes/communication` | Publisher, consumer, retry e DLQ |
-| `@zipframes/logger` | Logs estruturados, métricas e tracing |
+| `@zipframes/logger` | Logs estruturados com correlation ID |
+| `@zipframes/telemetry` | Métricas Prometheus e tracing OpenTelemetry |
 | `@zipframes/authorizer` | Validação de JWT via JWKS |
 | `@zipframes/test-toolkit` | Base de testes de integração com Testcontainers |
 
