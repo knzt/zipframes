@@ -4,8 +4,7 @@
   "version": "0.0.0",
   "description": "ZipFrames — sistema de processamento de vídeos da FIAP X",
   "workspaces": [
-    "services/*",
-    "packages/*"
+    "services/*"
   ],
   "scripts": {
     "build": "turbo build",
