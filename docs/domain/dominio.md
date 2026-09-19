@@ -64,7 +64,7 @@ flowchart LR
 ```
 
 - **Open Host Service (OHS):** o contexto de Identidade expõe as chaves públicas (JWKS) em um endpoint padronizado. Os outros contextos validam tokens sem conhecer o modelo de usuário.
-- **Published Language (PL):** os contextos conversam por eventos de integração versionados, definidos em `packages/contracts` e documentados em AsyncAPI. Nenhum contexto acessa o banco de outro.
+- **Published Language (PL):** os contextos conversam por eventos de integração versionados, implementados em `@zipframes/schemas` e documentados em [AsyncAPI](../asyncapi/events.yaml). Nenhum contexto acessa o banco de outro.
 - **Conformista:** Processamento e Notificação consomem os eventos como publicados, sem camada de tradução própria, porque os contratos já foram desenhados para eles.
 - **Sem dependência de dados de usuário na Gestão de Vídeos:** o dono do vídeo é identificado apenas pelo `sub` do token, sem consulta ao contexto de Identidade.
 ## Modelo por contexto
@@ -182,6 +182,8 @@ Regras:
 - **A exclusão da conta apaga o contato e o histórico de notificações** do usuário, ao consumir `user.deleted`.
 - **Mudanças de nome ou e-mail chegam por `user.updated`.** Sem esse evento, a projeção envelheceria e as notificações seguiriam para um endereço antigo.
 ## Eventos de integração
+
+O contrato completo, com o schema de cada payload, está em [`docs/asyncapi/events.yaml`](../asyncapi/events.yaml). Esta seção é o resumo em prosa.
 
 Todos os eventos são publicados no exchange `zipframes.events` com o mesmo envelope:
 
