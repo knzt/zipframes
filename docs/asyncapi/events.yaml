@@ -1,0 +1,405 @@
+asyncapi: 3.0.0
+id: 'urn:zipframes:events'
+info:
+  title: ZipFrames — Eventos de integração
+  version: '1.0.0'
+  description: |
+    Published Language entre os bounded contexts do ZipFrames: Identidade,
+    Gestão de Vídeos, Processamento e Notificação (ver
+    `docs/domain/dominio.md`). Nenhum contexto acessa o banco de outro; tudo
+    o que atravessa a fronteira passa por um destes eventos.
+
+    Todos são publicados no exchange `zipframes.events`, do tipo topic, com
+    a routing key igual ao nome do evento (ex. `video.uploaded`). A entrega
+    é "pelo menos uma vez", e cada consumidor é idempotente por uma chave
+    que o próprio domínio já impõe — a máquina de estados do vídeo, o
+    upsert do contato por `userId`, a unicidade de notificação por vídeo e
+    tipo — sem tabela de deduplicação (ver ADR-0008 e
+    `docs/architecture/layers.md`).
+  license:
+    name: MIT
+  externalDocs:
+    description: Domínio e regras dos contratos
+    url: https://github.com/knzt/zipframes/blob/main/docs/domain/dominio.md
+
+defaultContentType: application/json
+
+servers:
+  rabbitmq:
+    host: rabbitmq:5672
+    protocol: amqp
+    description: |
+      Broker interno do cluster. Fora dele, nada publica nem consome
+      diretamente — ver `infra/docker-compose/docker-compose.yml` para o
+      ambiente local.
+
+channels:
+  userRegistered:
+    address: user.registered
+    description: Publicado quando um cadastro é concluído.
+    servers: [{ $ref: '#/servers/rabbitmq' }]
+    messages:
+      userRegistered:
+        $ref: '#/components/messages/userRegistered'
+
+  userUpdated:
+    address: user.updated
+    description: Publicado quando nome ou e-mail do usuário mudam.
+    servers: [{ $ref: '#/servers/rabbitmq' }]
+    messages:
+      userUpdated:
+        $ref: '#/components/messages/userUpdated'
+
+  userDeleted:
+    address: user.deleted
+    description: |
+      Publicado quando a conta é excluída. Cada contexto apaga o que é
+      seu: Gestão de Vídeos remove os vídeos e arquivos do dono, Notificação
+      remove o contato e o histórico.
+    servers: [{ $ref: '#/servers/rabbitmq' }]
+    messages:
+      userDeleted:
+        $ref: '#/components/messages/userDeleted'
+
+  videoUploaded:
+    address: video.uploaded
+    description: |
+      Publicado quando o upload é confirmado e o vídeo entra na fila.
+      Único evento de integração gerado a partir de `VideoQueued`.
+    servers: [{ $ref: '#/servers/rabbitmq' }]
+    messages:
+      videoUploaded:
+        $ref: '#/components/messages/videoUploaded'
+
+  videoProcessingStarted:
+    address: video.processing.started
+    description: Publicado quando o worker começa a extrair os frames.
+    servers: [{ $ref: '#/servers/rabbitmq' }]
+    messages:
+      videoProcessingStarted:
+        $ref: '#/components/messages/videoProcessingStarted'
+
+  videoProcessed:
+    address: video.processed
+    description: Publicado quando o pacote de frames é gerado com sucesso.
+    servers: [{ $ref: '#/servers/rabbitmq' }]
+    messages:
+      videoProcessed:
+        $ref: '#/components/messages/videoProcessed'
+
+  videoFailed:
+    address: video.failed
+    description: |
+      Publicado quando o processamento falha de forma permanente, ou
+      esgota as tentativas de uma falha transitória.
+    servers: [{ $ref: '#/servers/rabbitmq' }]
+    messages:
+      videoFailed:
+        $ref: '#/components/messages/videoFailed'
+
+operations:
+  publishUserRegistered:
+    action: send
+    channel: { $ref: '#/channels/userRegistered' }
+    summary: auth-service publica ao concluir um cadastro
+  subscribeUserRegisteredForContacts:
+    action: receive
+    channel: { $ref: '#/channels/userRegistered' }
+    summary: notification-service projeta o contato
+
+  publishUserUpdated:
+    action: send
+    channel: { $ref: '#/channels/userUpdated' }
+    summary: auth-service publica quando nome ou e-mail mudam
+  subscribeUserUpdatedForContacts:
+    action: receive
+    channel: { $ref: '#/channels/userUpdated' }
+    summary: notification-service atualiza o contato projetado
+
+  publishUserDeleted:
+    action: send
+    channel: { $ref: '#/channels/userDeleted' }
+    summary: auth-service publica ao excluir a conta
+  subscribeUserDeletedForVideos:
+    action: receive
+    channel: { $ref: '#/channels/userDeleted' }
+    summary: video-service apaga os vídeos e arquivos do dono
+  subscribeUserDeletedForContacts:
+    action: receive
+    channel: { $ref: '#/channels/userDeleted' }
+    summary: notification-service apaga o contato e o histórico
+
+  publishVideoUploaded:
+    action: send
+    channel: { $ref: '#/channels/videoUploaded' }
+    summary: video-service publica ao confirmar o upload
+  subscribeVideoUploaded:
+    action: receive
+    channel: { $ref: '#/channels/videoUploaded' }
+    summary: processor-worker consome e inicia o processamento
+
+  publishVideoProcessingStarted:
+    action: send
+    channel: { $ref: '#/channels/videoProcessingStarted' }
+    summary: processor-worker publica ao começar a extração
+  subscribeVideoProcessingStarted:
+    action: receive
+    channel: { $ref: '#/channels/videoProcessingStarted' }
+    summary: video-service marca o vídeo como PROCESSING
+
+  publishVideoProcessed:
+    action: send
+    channel: { $ref: '#/channels/videoProcessed' }
+    summary: processor-worker publica ao concluir com sucesso
+  subscribeVideoProcessed:
+    action: receive
+    channel: { $ref: '#/channels/videoProcessed' }
+    summary: video-service marca o vídeo como DONE e invalida o cache da listagem
+
+  publishVideoFailed:
+    action: send
+    channel: { $ref: '#/channels/videoFailed' }
+    summary: processor-worker publica ao esgotar as tentativas
+  subscribeVideoFailedForVideos:
+    action: receive
+    channel: { $ref: '#/channels/videoFailed' }
+    summary: video-service marca o vídeo como FAILED com o motivo
+  subscribeVideoFailedForNotification:
+    action: receive
+    channel: { $ref: '#/channels/videoFailed' }
+    summary: notification-service envia o e-mail de falha
+
+components:
+  messages:
+    userRegistered:
+      name: user.registered
+      title: Usuário cadastrado
+      payload:
+        $ref: '#/components/schemas/UserRegisteredEnvelope'
+
+    userUpdated:
+      name: user.updated
+      title: Dados do usuário atualizados
+      payload:
+        $ref: '#/components/schemas/UserUpdatedEnvelope'
+
+    userDeleted:
+      name: user.deleted
+      title: Conta excluída
+      payload:
+        $ref: '#/components/schemas/UserDeletedEnvelope'
+
+    videoUploaded:
+      name: video.uploaded
+      title: Upload confirmado
+      payload:
+        $ref: '#/components/schemas/VideoUploadedEnvelope'
+
+    videoProcessingStarted:
+      name: video.processing.started
+      title: Processamento iniciado
+      payload:
+        $ref: '#/components/schemas/VideoProcessingStartedEnvelope'
+
+    videoProcessed:
+      name: video.processed
+      title: Processamento concluído
+      payload:
+        $ref: '#/components/schemas/VideoProcessedEnvelope'
+
+    videoFailed:
+      name: video.failed
+      title: Processamento falhou
+      payload:
+        $ref: '#/components/schemas/VideoFailedEnvelope'
+
+  schemas:
+    EventEnvelope:
+      type: object
+      description: Envelope comum a todo evento publicado em `zipframes.events`.
+      required: [eventId, eventType, version, occurredAt, payload]
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        eventType:
+          type: string
+        version:
+          type: integer
+          minimum: 1
+          default: 1
+          description: |
+            Mudança compatível (campo novo opcional) mantém a versão.
+            Mudança incompatível publica uma versão nova em paralelo até
+            todos os consumidores migrarem.
+        occurredAt:
+          type: string
+          format: date-time
+        correlationId:
+          type: string
+          format: uuid
+          description: Propagado desde a requisição HTTP que originou o fluxo.
+
+    UserRegisteredEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/EventEnvelope'
+        - type: object
+          required: [payload]
+          properties:
+            eventType:
+              const: user.registered
+            payload:
+              type: object
+              required: [userId, name, email]
+              additionalProperties: false
+              properties:
+                userId:
+                  type: string
+                  format: uuid
+                name:
+                  type: string
+                email:
+                  type: string
+                  format: email
+
+    UserUpdatedEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/EventEnvelope'
+        - type: object
+          required: [payload]
+          properties:
+            eventType:
+              const: user.updated
+            payload:
+              type: object
+              required: [userId, name, email]
+              additionalProperties: false
+              properties:
+                userId:
+                  type: string
+                  format: uuid
+                name:
+                  type: string
+                email:
+                  type: string
+                  format: email
+
+    UserDeletedEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/EventEnvelope'
+        - type: object
+          required: [payload]
+          properties:
+            eventType:
+              const: user.deleted
+            payload:
+              type: object
+              required: [userId]
+              additionalProperties: false
+              properties:
+                userId:
+                  type: string
+                  format: uuid
+
+    VideoUploadedEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/EventEnvelope'
+        - type: object
+          required: [payload]
+          properties:
+            eventType:
+              const: video.uploaded
+            payload:
+              type: object
+              required: [videoId, ownerId, sourceKey, originalFileName, sizeBytes]
+              additionalProperties: false
+              properties:
+                videoId:
+                  type: string
+                  format: uuid
+                ownerId:
+                  type: string
+                  format: uuid
+                sourceKey:
+                  type: string
+                  description: Chave no storage, no formato `uploads/{ownerId}/{videoId}`.
+                originalFileName:
+                  type: string
+                sizeBytes:
+                  type: integer
+                  format: int64
+
+    VideoProcessingStartedEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/EventEnvelope'
+        - type: object
+          required: [payload]
+          properties:
+            eventType:
+              const: video.processing.started
+            payload:
+              type: object
+              required: [videoId, attempt]
+              additionalProperties: false
+              properties:
+                videoId:
+                  type: string
+                  format: uuid
+                attempt:
+                  type: integer
+                  minimum: 1
+
+    VideoProcessedEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/EventEnvelope'
+        - type: object
+          required: [payload]
+          properties:
+            eventType:
+              const: video.processed
+            payload:
+              type: object
+              required: [videoId, resultKey, frameCount, durationMs]
+              additionalProperties: false
+              properties:
+                videoId:
+                  type: string
+                  format: uuid
+                resultKey:
+                  type: string
+                  description: Chave no storage, no formato `outputs/{ownerId}/{videoId}.zip`.
+                frameCount:
+                  type: integer
+                  minimum: 1
+                durationMs:
+                  type: integer
+                  minimum: 0
+
+    VideoFailedEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/EventEnvelope'
+        - type: object
+          required: [payload]
+          properties:
+            eventType:
+              const: video.failed
+            payload:
+              type: object
+              required: [videoId, ownerId, errorCode, reason, attempts]
+              additionalProperties: false
+              properties:
+                videoId:
+                  type: string
+                  format: uuid
+                ownerId:
+                  type: string
+                  format: uuid
+                errorCode:
+                  type: string
+                  example: UNSUPPORTED_FORMAT
+                reason:
+                  type: string
+                  description: Motivo legível, exibido ao usuário e usado no e-mail.
+                attempts:
+                  type: integer
+                  minimum: 1
