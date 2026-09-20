@@ -34,8 +34,12 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
 
+      # The @zipframes/* packages are published to GitHub Packages, which
+      # requires authentication even for public packages.
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
 
       - name: Format
         run: pnpm format

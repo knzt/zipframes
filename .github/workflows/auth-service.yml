@@ -1,0 +1,67 @@
+# Checks scoped to the auth-service.
+#
+# Triggered by path, so a change to another service (or to the docs) does
+# not run this suite — and so this one runs whenever the shared root
+# configuration it depends on changes.
+name: auth-service
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'services/auth-service/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'tsconfig.base.json'
+      - 'eslint.config.mjs'
+      - '.dependency-cruiser.mjs'
+      - '.github/workflows/auth-service.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'services/auth-service/**'
+
+concurrency:
+  group: auth-service-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Typecheck, layers, build and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      # The @zipframes/* packages live in a separate repository and are
+      # published to GitHub Packages, which requires authentication even
+      # for public packages. PACKAGES_TOKEN is a read:packages token.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
+
+      - name: Generate the Prisma client
+        run: pnpm --filter @zipframes/auth-service db:generate
+
+      - name: Typecheck
+        run: pnpm --filter @zipframes/auth-service typecheck
+
+      - name: Layer rules
+        run: pnpm check:layers
+
+      - name: Build
+        run: pnpm --filter @zipframes/auth-service build
+
+      - name: Test with coverage
+        run: pnpm --filter @zipframes/auth-service test:coverage
