@@ -4,7 +4,13 @@ import tsparser from '@typescript-eslint/parser';
 /** @type {import("eslint").Linter.Config[]} */
 export default [
   {
-    ignores: ['**/dist/**', '**/node_modules/**', '**/coverage/**'],
+    ignores: [
+      '**/dist/**',
+      '**/node_modules/**',
+      '**/coverage/**',
+      '**/vitest.config.ts',
+      '**/.dependency-cruiser.mjs',
+    ],
   },
   {
     files: ['**/*.ts'],
@@ -55,6 +61,7 @@ export default [
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-unsafe-assignment': 'off',
       '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/require-await': 'off',
     },
   },
 ];

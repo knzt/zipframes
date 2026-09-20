@@ -126,10 +126,6 @@ export default {
     tsConfig: {
       fileName: 'tsconfig.json',
     },
-    reporterOptions: {
-      text: {
-        highlightViolations: true,
-      },
-    },
+    reporterOptions: {},
   },
 };
