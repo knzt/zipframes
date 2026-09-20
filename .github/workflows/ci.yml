@@ -67,6 +67,11 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version-file: .nvmrc
+          # setup-node@v5 enables the package manager cache by default,
+          # which invokes pnpm to resolve the cache directory. This job
+          # never installs the workspace — it only runs two npx tools
+          # against the spec files — so pnpm is not set up here.
+          package-manager-cache: false
 
       # The contracts are the published language between services: a change
       # that breaks them breaks every consumer, so they are validated on
