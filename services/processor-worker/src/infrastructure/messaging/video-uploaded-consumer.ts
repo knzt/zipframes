@@ -1,21 +1,19 @@
-import type { ConsumeHandler, Publisher } from '@zipframes/communication';
+import type { ConsumeHandler } from '@zipframes/communication';
 import { decideRetry, type RetryOptions } from '@zipframes/communication';
 import { parseSchema } from '@zipframes/schemas';
-import { EVENT_EXCHANGE } from '@zipframes/schemas/shared';
 import { videoUploadedEventSchema } from '@zipframes/schemas/video-service';
 
-import type { ProcessUploadedVideo } from '../../application/process-uploaded-video.js';
+import type { EventPublisher } from '../../application/gateways/event-publisher.js';
+import type { ProcessUploadedVideo } from '../../application/use-cases/process-uploaded-video.js';
 import { isProcessingError } from '../../domain/errors.js';
 
-export interface UploadedHandlerDeps {
+export interface VideoUploadedConsumerDeps {
   readonly processUploadedVideo: ProcessUploadedVideo;
-  readonly publisher: Publisher;
+  readonly events: EventPublisher;
   readonly retry: RetryOptions;
-  readonly createId: () => string;
-  readonly now: () => Date;
 }
 
-export const createUploadedVideoHandler = (deps: UploadedHandlerDeps): ConsumeHandler => {
+export const createVideoUploadedConsumer = (deps: VideoUploadedConsumerDeps): ConsumeHandler => {
   return async (message, context) => {
     const parsed = parseSchema(videoUploadedEventSchema, message.envelope);
     if (!parsed.ok) {
@@ -43,23 +41,17 @@ export const createUploadedVideoHandler = (deps: UploadedHandlerDeps): ConsumeHa
       }
 
       if (decideRetry(context.attempt, deps.retry) === 'dlq') {
-        await deps.publisher.publish(
-          {
-            eventId: deps.createId(),
-            eventType: 'video.failed',
-            version: 1,
-            occurredAt: deps.now().toISOString(),
-            correlationId: event.correlationId,
-            payload: {
-              videoId: event.payload.videoId,
-              ownerId: event.payload.ownerId,
-              errorCode: isProcessingError(error) ? error.code : 'MAX_ATTEMPTS',
-              reason: error instanceof Error ? error.message : 'max attempts exhausted',
-              attempts: context.attempt,
-            },
+        await deps.events.publish({
+          eventType: 'video.failed',
+          correlationId: event.correlationId,
+          payload: {
+            videoId: event.payload.videoId,
+            ownerId: event.payload.ownerId,
+            errorCode: isProcessingError(error) ? error.code : 'MAX_ATTEMPTS',
+            reason: error instanceof Error ? error.message : 'max attempts exhausted',
+            attempts: context.attempt,
           },
-          { exchange: EVENT_EXCHANGE, routingKey: 'video.failed' },
-        );
+        });
         await context.deadLetter();
         return;
       }

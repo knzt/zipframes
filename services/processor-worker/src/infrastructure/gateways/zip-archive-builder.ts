@@ -2,7 +2,7 @@ import archiver from 'archiver';
 import { createWriteStream } from 'node:fs';
 import path from 'node:path';
 
-import type { ArchiveBuilder } from '../../application/ports/archive-builder.js';
+import type { ArchiveBuilder } from '../../application/gateways/archive-builder.js';
 import { ProcessingError } from '../../domain/errors.js';
 
 /** Zip with store method only — PNGs are already compressed. */

@@ -38,7 +38,7 @@ Neste serviço seguimos o vocabulário da Clean Architecture:
 
 “Adapter” (hexagonal) descreve a mesma ideia de implementação de porta; aqui preferimos **gateway** para deixar explícito o alinhamento com Uncle Bob.
 
-## Mapa de pastas (alvo)
+## Mapa de pastas
 
 ```
 services/processor-worker/src/
@@ -183,11 +183,11 @@ Exchange: `zipframes.events`. Fila do worker: `processor.video.uploaded`.
 
 ## Regras de dependência (verificação)
 
-Esperado no dependency-cruiser (quando o serviço for alinhado a este doc):
+Verificadas pelo dependency-cruiser (`.dependency-cruiser.mjs`):
 
 - `domain/` → não importa `application/`, `infrastructure/`, `main/`, nem libs de infra
-- `application/` → só `domain/` e pacotes `@zipframes/*` de domínio/contratos; **não** importa `infrastructure/`
-- `infrastructure/` → pode importar `application/` e `domain/` (implementa gateways e chama use cases)
+- `application/` → só `domain/`; **não** importa `infrastructure/` nem libs de broker/storage
+- `infrastructure/` → pode importar `application/` e `domain/` (implementa gateways e chama use cases); não importa `main/`
 - `main/` → monta o grafo
 
 Pacotes `@zipframes/communication`, `@zipframes/schemas`, `@zipframes/logger` entram pela borda (`infrastructure/` / `main/`), não pelo `domain/`.
@@ -198,7 +198,3 @@ Pacotes `@zipframes/communication`, `@zipframes/schemas`, `@zipframes/logger` en
 - HTTP / JWT / JWKS
 - Decisão de status do vídeo no agregado `Video` (isso é video-service)
 - Envio de e-mail (notification-service consome `video.failed`)
-
-## Relação com o código atual
-
-O PR inicial do worker usou `adapters/` + `frameworks/` no estilo do [layers.md](../layers.md) do monorepo. Este documento define o **alvo** com pastas `domain` / `application` / `infrastructure` / `main` e vocabulário **gateway**. A refatoração do código deve convergir para o mapa de pastas acima sem mudar o comportamento de domínio.

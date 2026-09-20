@@ -1,45 +1,31 @@
-import type { Publisher } from '@zipframes/communication';
-import { EVENT_EXCHANGE } from '@zipframes/schemas/shared';
-
-import type { ArchiveBuilder } from './ports/archive-builder.js';
-import type { FrameExtractor } from './ports/frame-extractor.js';
-import type { ObjectStorage } from './ports/object-storage.js';
-import type { WorkDirectory } from './ports/work-directory.js';
-import { isProcessingError, ProcessingError } from '../domain/errors.js';
-import { resultObjectKey, type ProcessingJob } from '../domain/processing-job.js';
+import type { ArchiveBuilder } from '../gateways/archive-builder.js';
+import type { EventPublisher } from '../gateways/event-publisher.js';
+import type { FrameExtractor } from '../gateways/frame-extractor.js';
+import type { ObjectStorage } from '../gateways/object-storage.js';
+import type { WorkDirectory } from '../gateways/work-directory.js';
+import { isProcessingError, ProcessingError } from '../../domain/errors.js';
+import { resultObjectKey } from '../../domain/frames-package.js';
+import type { ProcessingJob } from '../../domain/processing-job.js';
 
 export interface ProcessUploadedVideoDeps {
   readonly storage: ObjectStorage;
   readonly extractor: FrameExtractor;
   readonly archive: ArchiveBuilder;
   readonly workDirectory: WorkDirectory;
-  readonly publisher: Publisher;
+  readonly events: EventPublisher;
   readonly now: () => Date;
-  readonly createId: () => string;
   readonly processingTimeoutMs: number;
 }
 
 export type ProcessUploadedVideo = (job: ProcessingJob) => Promise<void>;
 
 const publish = async (
-  publisher: Publisher,
+  events: EventPublisher,
   eventType: string,
   correlationId: string,
   payload: Record<string, unknown>,
-  createId: () => string,
-  now: () => Date,
 ): Promise<void> => {
-  await publisher.publish(
-    {
-      eventId: createId(),
-      eventType,
-      version: 1,
-      occurredAt: now().toISOString(),
-      correlationId,
-      payload,
-    },
-    { exchange: EVENT_EXCHANGE, routingKey: eventType },
-  );
+  await events.publish({ eventType, correlationId, payload });
 };
 
 const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number): Promise<T> => {
@@ -74,14 +60,10 @@ export const createProcessUploadedVideo = (
     const startedAt = deps.now().getTime();
 
     try {
-      await publish(
-        deps.publisher,
-        'video.processing.started',
-        job.correlationId,
-        { videoId: job.videoId, attempt: job.attempt },
-        deps.createId,
-        deps.now,
-      );
+      await publish(deps.events, 'video.processing.started', job.correlationId, {
+        videoId: job.videoId,
+        attempt: job.attempt,
+      });
 
       await withTimeout(
         (async () => {
@@ -102,19 +84,12 @@ export const createProcessUploadedVideo = (
           await deps.storage.uploadFile(resultKey, zipPath, 'application/zip');
 
           const durationMs = Math.max(0, deps.now().getTime() - startedAt);
-          await publish(
-            deps.publisher,
-            'video.processed',
-            job.correlationId,
-            {
-              videoId: job.videoId,
-              resultKey,
-              frameCount: frames.length,
-              durationMs,
-            },
-            deps.createId,
-            deps.now,
-          );
+          await publish(deps.events, 'video.processed', job.correlationId, {
+            videoId: job.videoId,
+            resultKey,
+            frameCount: frames.length,
+            durationMs,
+          });
 
           try {
             await deps.storage.deleteObject(job.sourceKey);
@@ -135,20 +110,13 @@ export const createProcessUploadedVideo = (
           );
 
       if (processingError.kind === 'permanent') {
-        await publish(
-          deps.publisher,
-          'video.failed',
-          job.correlationId,
-          {
-            videoId: job.videoId,
-            ownerId: job.ownerId,
-            errorCode: processingError.code,
-            reason: processingError.message,
-            attempts: job.attempt,
-          },
-          deps.createId,
-          deps.now,
-        );
+        await publish(deps.events, 'video.failed', job.correlationId, {
+          videoId: job.videoId,
+          ownerId: job.ownerId,
+          errorCode: processingError.code,
+          reason: processingError.message,
+          attempts: job.attempt,
+        });
 
         try {
           await deps.storage.deleteObject(job.sourceKey);

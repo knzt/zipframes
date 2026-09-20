@@ -8,7 +8,7 @@ import type {
 import type { EventEnvelope } from '@zipframes/schemas/shared';
 import amqp, { type Channel, type ChannelModel, type ConsumeMessage } from 'amqplib';
 
-export interface RabbitMqBroker {
+export interface RabbitMqConnection {
   readonly publish: (envelope: EventEnvelope<unknown>, options: PublishOptions) => Promise<void>;
   readonly assertTopology: (topology: Topology) => Promise<void>;
   readonly consume: (queue: string, handler: ConsumeHandler) => Promise<void>;
@@ -44,7 +44,7 @@ const readAttempt = (message: ConsumeMessage): number => {
   return Number.isFinite(parsed) && parsed >= 1 ? parsed : 1;
 };
 
-export const createRabbitMqBroker = async (amqpUrl: string): Promise<RabbitMqBroker> => {
+export const createRabbitMqConnection = async (amqpUrl: string): Promise<RabbitMqConnection> => {
   const connection: ChannelModel = await amqp.connect(amqpUrl);
   const channel: Channel = await connection.createChannel();
   await channel.prefetch(1);

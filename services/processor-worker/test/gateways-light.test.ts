@@ -3,8 +3,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { createFsWorkDirectory } from '../src/adapters/processing/fs-work-directory.js';
-import { createZipArchiveBuilder } from '../src/adapters/processing/zip-archive-builder.js';
+import { createFsWorkDirectory } from '../src/infrastructure/gateways/fs-work-directory.js';
+import { createZipArchiveBuilder } from '../src/infrastructure/gateways/zip-archive-builder.js';
 
 describe('fs work directory', () => {
   it('creates and removes a temp directory', async () => {

@@ -2,14 +2,15 @@ import { createPublisher, createDefaultTopology } from '@zipframes/communication
 import { createLogger } from '@zipframes/logger';
 import { randomUUID } from 'node:crypto';
 
-import { createRabbitMqBroker } from '../adapters/messaging/rabbitmq-broker.js';
-import { createUploadedVideoHandler } from '../adapters/messaging/uploaded-video-handler.js';
-import { createFfmpegFrameExtractor } from '../adapters/processing/ffmpeg-frame-extractor.js';
-import { createFsWorkDirectory } from '../adapters/processing/fs-work-directory.js';
-import { createZipArchiveBuilder } from '../adapters/processing/zip-archive-builder.js';
-import { createS3ObjectStorage } from '../adapters/storage/s3-object-storage.js';
-import { createProcessUploadedVideo } from '../application/process-uploaded-video.js';
-import { loadConfig, UPLOADED_QUEUE } from '../frameworks/config.js';
+import { createAmqpEventPublisher } from '../infrastructure/gateways/amqp-event-publisher.js';
+import { createFfmpegFrameExtractor } from '../infrastructure/gateways/ffmpeg-frame-extractor.js';
+import { createFsWorkDirectory } from '../infrastructure/gateways/fs-work-directory.js';
+import { createS3ObjectStorage } from '../infrastructure/gateways/s3-object-storage.js';
+import { createZipArchiveBuilder } from '../infrastructure/gateways/zip-archive-builder.js';
+import { createRabbitMqConnection } from '../infrastructure/messaging/rabbitmq-connection.js';
+import { createVideoUploadedConsumer } from '../infrastructure/messaging/video-uploaded-consumer.js';
+import { createProcessUploadedVideo } from '../application/use-cases/process-uploaded-video.js';
+import { loadConfig, UPLOADED_QUEUE } from '../infrastructure/config.js';
 
 export const startWorker = async (): Promise<{ stop: () => Promise<void> }> => {
   const config = loadConfig();
@@ -19,13 +20,17 @@ export const startWorker = async (): Promise<{ stop: () => Promise<void> }> => {
     level: config.logLevel,
   });
 
-  const broker = await createRabbitMqBroker(config.amqpUrl);
+  const connection = await createRabbitMqConnection(config.amqpUrl);
   const topology = createDefaultTopology({
     consumerQueues: [{ name: UPLOADED_QUEUE, routingKeys: ['video.uploaded'] }],
   });
-  await broker.assertTopology(topology);
+  await connection.assertTopology(topology);
 
-  const publisher = createPublisher(broker);
+  const createId = (): string => randomUUID();
+  const now = (): Date => new Date();
+  const publisher = createPublisher(connection);
+  const events = createAmqpEventPublisher({ publisher, createId, now });
+
   const processUploadedVideo = createProcessUploadedVideo({
     storage: createS3ObjectStorage({
       endpoint: config.s3Endpoint,
@@ -38,30 +43,27 @@ export const startWorker = async (): Promise<{ stop: () => Promise<void> }> => {
     extractor: createFfmpegFrameExtractor(),
     archive: createZipArchiveBuilder(),
     workDirectory: createFsWorkDirectory(config.workDir),
-    publisher,
-    now: () => new Date(),
-    createId: () => randomUUID(),
+    events,
+    now,
     processingTimeoutMs: config.processingTimeoutMs,
   });
 
-  const handler = createUploadedVideoHandler({
+  const consumer = createVideoUploadedConsumer({
     processUploadedVideo,
-    publisher,
+    events,
     retry: {
       maxAttempts: config.maxAttempts,
       baseDelayMs: config.retryBaseDelayMs,
       maxDelayMs: config.retryMaxDelayMs,
     },
-    createId: () => randomUUID(),
-    now: () => new Date(),
   });
 
-  await broker.consume(UPLOADED_QUEUE, handler);
+  await connection.consume(UPLOADED_QUEUE, consumer);
   logger.info('processor-worker started', { queue: UPLOADED_QUEUE });
 
   return {
     stop: async () => {
-      await broker.close();
+      await connection.close();
       logger.info('processor-worker stopped');
     },
   };

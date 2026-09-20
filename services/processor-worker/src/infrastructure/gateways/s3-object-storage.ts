@@ -9,7 +9,7 @@ import { readFile } from 'node:fs/promises';
 import { pipeline } from 'node:stream/promises';
 import type { Readable } from 'node:stream';
 
-import type { ObjectStorage } from '../../application/ports/object-storage.js';
+import type { ObjectStorage } from '../../application/gateways/object-storage.js';
 import { ProcessingError } from '../../domain/errors.js';
 
 export interface S3ObjectStorageConfig {

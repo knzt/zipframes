@@ -2,9 +2,9 @@ import { spawn } from 'node:child_process';
 import { mkdir, readdir } from 'node:fs/promises';
 import path from 'node:path';
 
-import type { FrameExtractor } from '../../application/ports/frame-extractor.js';
+import type { FrameExtractor } from '../../application/gateways/frame-extractor.js';
 import { ProcessingError } from '../../domain/errors.js';
-import { FRAME_EXTENSION, FRAME_FPS, frameFileName } from '../../domain/processing-job.js';
+import { FRAME_EXTENSION, FRAME_FPS, frameFileName } from '../../domain/frame-extraction-policy.js';
 
 const runFfmpeg = (args: string[]): Promise<void> =>
   new Promise((resolve, reject) => {

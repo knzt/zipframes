@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { loadConfig } from '../src/frameworks/config.js';
-import { frameFileName, resultObjectKey } from '../src/domain/processing-job.js';
+import { frameFileName } from '../src/domain/frame-extraction-policy.js';
+import { resultObjectKey } from '../src/domain/frames-package.js';
+import { loadConfig } from '../src/infrastructure/config.js';
 
 describe('domain helpers', () => {
   it('builds deterministic frame names and result keys', () => {
