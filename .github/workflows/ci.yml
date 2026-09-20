@@ -1,0 +1,78 @@
+# Repository-wide checks for every pull request.
+#
+# Each service will bring its own workflow, filtered by path, as it is
+# built — that is what keeps a change to one service from running the whole
+# monorepo's test suite. This workflow covers what is shared: the root
+# configuration, the layer rules, and the contracts every service depends
+# on.
+name: ci
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Lint, typecheck, layers, build and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Format
+        run: pnpm format
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      # The Clean Architecture dependency rules from docs/architecture/layers.md.
+      # With no service written yet this passes trivially, but it is in place
+      # from the first line of service code, which is the point.
+      - name: Layer rules
+        run: pnpm check:layers
+
+      - name: Build
+        run: pnpm build
+
+      - name: Test
+        run: pnpm test
+
+  contracts:
+    name: OpenAPI and AsyncAPI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+
+      # The contracts are the published language between services: a change
+      # that breaks them breaks every consumer, so they are validated on
+      # every PR rather than only when someone remembers to.
+      - name: Validate the OpenAPI specs
+        run: npx --yes @redocly/cli@2 lint docs/openapi/*.yaml
+
+      - name: Validate the AsyncAPI spec
+        run: npx --yes @asyncapi/cli@4 validate docs/asyncapi/events.yaml
