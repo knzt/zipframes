@@ -3,9 +3,9 @@
 Contrato das APIs HTTP, um arquivo por serviço, na convenção já usada para os
 eventos (`@zipframes/schemas`): cada serviço é dono do seu próprio contrato.
 
-| Arquivo | Serviço |
-|---|---|
-| [`auth-service.yaml`](auth-service.yaml) | Cadastro, login e JWKS |
+| Arquivo                                    | Serviço                                     |
+| ------------------------------------------ | ------------------------------------------- |
+| [`auth-service.yaml`](auth-service.yaml)   | Cadastro, login e JWKS                      |
 | [`video-service.yaml`](video-service.yaml) | Vídeos: upload, status, download e exclusão |
 
 O resumo em prosa das rotas está em [`docs/domain/dominio.md`](../domain/dominio.md);

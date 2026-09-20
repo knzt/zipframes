@@ -96,21 +96,21 @@ No código, a dependência entre use cases e adapters de saída aponta no sentid
 
 ## Componentes
 
-| Camada | Componente | Responsabilidade |
-|---|---|---|
-| Entities | `Video` | Mantém o estado do vídeo e aplica as regras de transição |
-| Entities | Value objects | Validam e representam status, identificadores, nome de arquivo e chaves |
-| Use Cases | `RequestUpload` | Valida nome, tipo e tamanho, cria o vídeo e devolve a URL de upload |
-| Use Cases | `ConfirmUpload` | Confere o objeto, coloca o vídeo na fila e registra `video.uploaded` no outbox |
-| Use Cases | `ListUserVideos` e `GetVideo` | Consultam os vídeos do dono, usando o cache na listagem |
-| Use Cases | `GetDownloadUrl` | Verifica se o vídeo está `DONE` e devolve a URL do zip |
-| Use Cases | `ApplyProcessingEvent` | Aplica os eventos do worker de forma idempotente e invalida o cache |
-| Use Cases | Ports | Interfaces que os use cases exigem do mundo externo |
-| Interface Adapters | `JwtAuthGuard` | Extrai e valida o token e disponibiliza o `ownerId` |
-| Interface Adapters | `VideoController` | Converte HTTP em chamadas aos use cases e os resultados em respostas |
-| Interface Adapters | `ProcessingStatusConsumer` | Valida as mensagens contra os contratos e chama `ApplyProcessingEvent` |
-| Interface Adapters | `OutboxRelay` | Lê eventos pendentes do outbox, publica com confirmação e marca como publicados |
-| Interface Adapters | Repositórios, storage e cache | Implementam os ports com Prisma, S3 e Redis, com mappers entre o modelo de domínio e o de persistência |
-| Frameworks & Drivers | Servidor e clientes | Configuração do Fastify, do Prisma Client, da conexão AMQP e dos clientes S3 e Redis |
+| Camada               | Componente                    | Responsabilidade                                                                                       |
+| -------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Entities             | `Video`                       | Mantém o estado do vídeo e aplica as regras de transição                                               |
+| Entities             | Value objects                 | Validam e representam status, identificadores, nome de arquivo e chaves                                |
+| Use Cases            | `RequestUpload`               | Valida nome, tipo e tamanho, cria o vídeo e devolve a URL de upload                                    |
+| Use Cases            | `ConfirmUpload`               | Confere o objeto, coloca o vídeo na fila e registra `video.uploaded` no outbox                         |
+| Use Cases            | `ListUserVideos` e `GetVideo` | Consultam os vídeos do dono, usando o cache na listagem                                                |
+| Use Cases            | `GetDownloadUrl`              | Verifica se o vídeo está `DONE` e devolve a URL do zip                                                 |
+| Use Cases            | `ApplyProcessingEvent`        | Aplica os eventos do worker de forma idempotente e invalida o cache                                    |
+| Use Cases            | Ports                         | Interfaces que os use cases exigem do mundo externo                                                    |
+| Interface Adapters   | `JwtAuthGuard`                | Extrai e valida o token e disponibiliza o `ownerId`                                                    |
+| Interface Adapters   | `VideoController`             | Converte HTTP em chamadas aos use cases e os resultados em respostas                                   |
+| Interface Adapters   | `ProcessingStatusConsumer`    | Valida as mensagens contra os contratos e chama `ApplyProcessingEvent`                                 |
+| Interface Adapters   | `OutboxRelay`                 | Lê eventos pendentes do outbox, publica com confirmação e marca como publicados                        |
+| Interface Adapters   | Repositórios, storage e cache | Implementam os ports com Prisma, S3 e Redis, com mappers entre o modelo de domínio e o de persistência |
+| Frameworks & Drivers | Servidor e clientes           | Configuração do Fastify, do Prisma Client, da conexão AMQP e dos clientes S3 e Redis                   |
 
 O composition root (`main/`) não aparece no diagrama: ele lê a configuração, cria os clientes e os adapters e os injeta nos use cases e controllers na inicialização.

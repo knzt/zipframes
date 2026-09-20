@@ -29,14 +29,14 @@ Cada serviço tem `package.json`, `Dockerfile`, migrations e testes próprios. *
 
 O código compartilhado não vive aqui: ele é publicado como pacotes npm (`@zipframes/*`) a partir de um repositório próprio, e cada serviço declara a versão que usa. Assim um serviço só adota uma mudança quando escolhe subir de versão, em vez de ser afetado no mesmo instante.
 
-| Pacote | Conteúdo |
-|---|---|
-| `@zipframes/schemas` | Contratos de eventos e de API, usados por mais de um serviço ou por consumidores externos |
+| Pacote                     | Conteúdo                                                                                                          |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `@zipframes/schemas`       | Contratos de eventos e de API, usados por mais de um serviço ou por consumidores externos                         |
 | `@zipframes/value-objects` | Value objects genéricos (e-mail, CPF, CNPJ, telefone, CEP, endereço) e o value object base para criar os próprios |
-| `@zipframes/core` | `Result`, branded types e erros base |
-| `@zipframes/messaging` | Publisher, consumer, retry e DLQ |
-| `@zipframes/observability` | Logger, métricas e tracing |
-| `@zipframes/http-auth` | Validação de JWT via JWKS |
+| `@zipframes/core`          | `Result`, branded types e erros base                                                                              |
+| `@zipframes/messaging`     | Publisher, consumer, retry e DLQ                                                                                  |
+| `@zipframes/observability` | Logger, métricas e tracing                                                                                        |
+| `@zipframes/http-auth`     | Validação de JWT via JWKS                                                                                         |
 
 Os pacotes trazem **forma**, nunca **política**: validam o que é universal (um CPF é válido em qualquer sistema) e deixam para o serviço as regras que pertencem ao seu contexto, como a política de senha ou as extensões de vídeo aceitas.
 
@@ -68,20 +68,20 @@ pnpm build --filter=...
 
 ## Stack
 
-| Camada | Tecnologia |
-|---|---|
-| Linguagem | Node.js 22 + TypeScript 5 (strict) |
-| HTTP | Fastify |
-| Validação | Zod |
-| ORM / migrations | Prisma |
-| Mensageria | RabbitMQ + amqplib |
-| Object storage | SeaweedFS (API S3) |
-| Cache | Redis + ioredis |
-| E-mail | Nodemailer |
-| Banco de dados | PostgreSQL (uma instância por serviço) |
-| Testes | Vitest + Testcontainers |
-| Monorepo | pnpm workspaces + Turborepo |
-| Containers | Docker + Kubernetes (kind) |
-| Escala | KEDA (worker escala pelo tamanho da fila) |
-| CD | Argo CD (GitOps) |
-| Observabilidade | OpenTelemetry + Prometheus + Grafana + Jaeger |
+| Camada           | Tecnologia                                    |
+| ---------------- | --------------------------------------------- |
+| Linguagem        | Node.js 22 + TypeScript 5 (strict)            |
+| HTTP             | Fastify                                       |
+| Validação        | Zod                                           |
+| ORM / migrations | Prisma                                        |
+| Mensageria       | RabbitMQ + amqplib                            |
+| Object storage   | SeaweedFS (API S3)                            |
+| Cache            | Redis + ioredis                               |
+| E-mail           | Nodemailer                                    |
+| Banco de dados   | PostgreSQL (uma instância por serviço)        |
+| Testes           | Vitest + Testcontainers                       |
+| Monorepo         | pnpm workspaces + Turborepo                   |
+| Containers       | Docker + Kubernetes (kind)                    |
+| Escala           | KEDA (worker escala pelo tamanho da fila)     |
+| CD               | Argo CD (GitOps)                              |
+| Observabilidade  | OpenTelemetry + Prometheus + Grafana + Jaeger |

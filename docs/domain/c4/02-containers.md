@@ -57,18 +57,18 @@ A interface roda no navegador do usuário, então as chamadas à API e ao storag
 
 ## Containers
 
-| Container | Tecnologia | Responsabilidade | Escala |
-|---|---|---|---|
-| web-client | SPA estática | Interface do usuário | Réplicas fixas |
-| Ingress | NGINX Ingress Controller | Roteamento, TLS e exposição do storage para URLs pré-assinadas | Gerenciado pelo cluster |
-| auth-service | Node.js, TypeScript, Fastify, Prisma | Identidade e emissão de tokens | HPA por CPU |
-| video-service | Node.js, TypeScript, Fastify, Prisma | Gestão de vídeos | HPA por CPU |
-| processor-worker | Node.js, TypeScript, ffmpeg | Processamento | KEDA pelo tamanho da fila |
-| notification-service | Node.js, TypeScript, Nodemailer, Prisma | Notificações | Réplicas fixas |
-| RabbitMQ | RabbitMQ Cluster Operator | Transporte dos eventos | Cluster do operator |
-| auth-db, video-db, notification-db | PostgreSQL com CloudNativePG | Persistência de cada serviço | Instância por serviço |
-| Redis | Redis | Cache da listagem | Instância única |
-| SeaweedFS | SeaweedFS com gateway S3 | Armazenamento de arquivos | Instância única no ambiente local |
+| Container                          | Tecnologia                              | Responsabilidade                                               | Escala                            |
+| ---------------------------------- | --------------------------------------- | -------------------------------------------------------------- | --------------------------------- |
+| web-client                         | SPA estática                            | Interface do usuário                                           | Réplicas fixas                    |
+| Ingress                            | NGINX Ingress Controller                | Roteamento, TLS e exposição do storage para URLs pré-assinadas | Gerenciado pelo cluster           |
+| auth-service                       | Node.js, TypeScript, Fastify, Prisma    | Identidade e emissão de tokens                                 | HPA por CPU                       |
+| video-service                      | Node.js, TypeScript, Fastify, Prisma    | Gestão de vídeos                                               | HPA por CPU                       |
+| processor-worker                   | Node.js, TypeScript, ffmpeg             | Processamento                                                  | KEDA pelo tamanho da fila         |
+| notification-service               | Node.js, TypeScript, Nodemailer, Prisma | Notificações                                                   | Réplicas fixas                    |
+| RabbitMQ                           | RabbitMQ Cluster Operator               | Transporte dos eventos                                         | Cluster do operator               |
+| auth-db, video-db, notification-db | PostgreSQL com CloudNativePG            | Persistência de cada serviço                                   | Instância por serviço             |
+| Redis                              | Redis                                   | Cache da listagem                                              | Instância única                   |
+| SeaweedFS                          | SeaweedFS com gateway S3                | Armazenamento de arquivos                                      | Instância única no ambiente local |
 
 ## Infraestrutura de suporte
 
