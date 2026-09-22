@@ -6,18 +6,10 @@ RUN apt-get update \
 
 WORKDIR /app
 
-COPY package.json pnpm-lock.yaml .npmrc ./
-
-ARG NODE_AUTH_TOKEN
-ENV NODE_AUTH_TOKEN=$NODE_AUTH_TOKEN
-
-RUN corepack enable && pnpm install --frozen-lockfile
-
-COPY tsconfig.json tsconfig.build.json ./
-COPY src ./src
-
-RUN pnpm build \
-  && rm -f .npmrc
+COPY package.json ./
+COPY dist ./dist
+# Copies the production modules staged by `pnpm stage-runtime`.
+COPY .runtime/node_modules ./node_modules
 
 ENV NODE_ENV=production
 CMD ["node", "dist/main/index.js"]

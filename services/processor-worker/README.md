@@ -22,20 +22,37 @@ src/main/              # Composition root
 - health (`/livez`, `/readyz`) e métricas Prometheus
 - **sem banco próprio**
 
+## Testes
+
+```
+tests/unit   # contratos e regras; dependências substituídas
+tests/int    # filesystem, HTTP, ffmpeg, RabbitMQ e S3 reais (sem mock)
+```
+
+`pnpm test` roda os dois. Integração sobe RabbitMQ e SeaweedFS via Testcontainers (Docker) e usa o binário do `ffmpeg-static`.
+
 ## Rodar local
 
+Infraestrutura e o worker, na rede Docker:
+
 ```bash
+cp infra/docker-compose/.env.example infra/docker-compose/.env
+pnpm --dir services/processor-worker build
+pnpm --dir services/processor-worker stage-runtime
 pnpm infra:up
+```
+
+`GET http://localhost:8081/readyz` responde 200 quando o processo alcança o RabbitMQ e o bucket.
+
+Fora do container, com `ffmpeg` no PATH:
+
+```bash
 cp services/processor-worker/.env.example services/processor-worker/.env
 cd services/processor-worker
 pnpm install
 pnpm dev
 ```
 
-Requer `ffmpeg` no PATH e `NODE_AUTH_TOKEN` para instalar `@zipframes/*` do GitHub Packages. O lockfile deste serviço é `services/processor-worker/pnpm-lock.yaml` — `pnpm i` aqui não sobe para a raiz.
+O lockfile deste serviço é `services/processor-worker/pnpm-lock.yaml`. `pnpm install` precisa de `NODE_AUTH_TOKEN` para os pacotes `@zipframes/*`.
 
-Imagem Docker (contexto = esta pasta):
-
-```bash
-docker build -t zipframes-processor-worker --build-arg NODE_AUTH_TOKEN .
-```
+No cluster, o Argo CD aplica `infra/k8s/processor-worker`. O Secret de exemplo não entra nesse apply.
