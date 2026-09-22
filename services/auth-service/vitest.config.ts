@@ -16,6 +16,8 @@ export default defineConfig({
         'src/application/**',
         'src/adapters/crypto/**',
         'src/adapters/messaging/outbox-envelope.ts',
+        'src/adapters/http/**',
+        'src/main/config.ts',
       ],
       thresholds: {
         lines: 100,
