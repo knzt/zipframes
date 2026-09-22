@@ -1,0 +1,32 @@
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: processor-worker-rabbitmq
+  namespace: zipframes
+spec:
+  secretTargetRef:
+    - parameter: host
+      name: processor-worker
+      key: AMQP_URL
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: processor-worker
+  namespace: zipframes
+spec:
+  scaleTargetRef:
+    name: processor-worker
+  minReplicaCount: 1
+  maxReplicaCount: 5
+  pollingInterval: 15
+  cooldownPeriod: 60
+  triggers:
+    - type: rabbitmq
+      authenticationRef:
+        name: processor-worker-rabbitmq
+      metadata:
+        protocol: amqp
+        queueName: processor.video.uploaded
+        mode: QueueLength
+        value: '1'

@@ -185,6 +185,21 @@ Verificadas pelo dependency-cruiser (`.dependency-cruiser.mjs`):
 
 Pacotes `@zipframes/communication`, `@zipframes/schemas`, `@zipframes/logger`, `@zipframes/telemetry` entram pela borda (`infrastructure/` / `main/`), não pelo `domain/`.
 
+## Processo
+
+Um processo consome `processor.video.uploaded` com prefetch 1. `SIGINT` e `SIGTERM` cancelam o consume, esperam o job em andamento (até 30s) e fecham o canal. `/livez` responde se o processo está de pé. `/readyz` só responde 200 com o AMQP conectado e o bucket alcançável.
+
+A decisão de réplicas está no [diagrama de containers](../../domain/c4/02-containers.md): KEDA pelo tamanho da fila. No cluster, o Argo CD aplica [`infra/k8s/processor-worker`](../../../infra/k8s/processor-worker) pela Application [`infra/argocd/processor-worker.yaml`](../../../infra/argocd/processor-worker.yaml). O Secret fica de fora desse apply. Na máquina, o mesmo processo sobe pelo Docker Compose, na rede `zipframes`, com `/readyz` na porta 8081.
+
+## Testes
+
+| Pasta        | O que prova                                                                   |
+| ------------ | ----------------------------------------------------------------------------- |
+| `tests/unit` | Regras e contratos com dependências substituídas                              |
+| `tests/int`  | Filesystem, zip, HTTP, ffmpeg, RabbitMQ e S3 de verdade — sem mock de gateway |
+
+Cobertura mínima no `src/` executável: 80% (statements, branches, functions, lines).
+
 ## Fora de escopo deste serviço
 
 - Banco de dados e migrations
