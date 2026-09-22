@@ -6,6 +6,7 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3';
 import { createReadStream, createWriteStream } from 'node:fs';
+import { stat } from 'node:fs/promises';
 import { pipeline } from 'node:stream/promises';
 import type { Readable } from 'node:stream';
 
@@ -29,6 +30,9 @@ export const createS3ObjectStorage = (config: S3ObjectStorageConfig): ObjectStor
     endpoint: config.endpoint,
     region: config.region,
     forcePathStyle: config.forcePathStyle,
+    // SeaweedFS stores the SDK's default flexible checksum trailer in the object body.
+    requestChecksumCalculation: 'WHEN_REQUIRED',
+    responseChecksumValidation: 'WHEN_REQUIRED',
     credentials: {
       accessKeyId: config.accessKey,
       secretAccessKey: config.secretKey,
@@ -80,11 +84,13 @@ export const createS3ObjectStorage = (config: S3ObjectStorageConfig): ObjectStor
       }
       try {
         const body = createReadStream(sourcePath);
+        const info = await stat(sourcePath);
         await client.send(
           new PutObjectCommand({
             Bucket: config.bucket,
             Key: key,
             Body: body,
+            ContentLength: info.size,
             ContentType: contentType,
           }),
           signal ? { abortSignal: signal } : undefined,

@@ -39,14 +39,23 @@ interface ProcessingDeadline {
   readonly timedOut: () => boolean;
 }
 
+const originalVideoName = (originalFileName: string): string => {
+  const extension = /\.([a-z0-9]{1,8})$/i.exec(originalFileName)?.[1];
+  if (extension === undefined) {
+    return 'original.bin';
+  }
+  return `original.${extension.toLowerCase()}`;
+};
+
 const openJobWorkspace = async (
   workDirectory: WorkDirectory,
   videoId: string,
+  originalFileName: string,
 ): Promise<JobWorkspace> => {
   const rootDir = await workDirectory.createTempDir(videoId);
   return {
     rootDir,
-    originalVideoPath: `${rootDir}/original`,
+    originalVideoPath: `${rootDir}/${originalVideoName(originalFileName)}`,
     framesDirectory: `${rootDir}/frames`,
     framesPackagePath: `${rootDir}/frames.zip`,
   };
@@ -203,7 +212,7 @@ export const createProcessUploadedVideo = (
   };
 
   return async (job) => {
-    const workspace = await openJobWorkspace(deps.workDirectory, job.videoId);
+    const workspace = await openJobWorkspace(deps.workDirectory, job.videoId, job.originalFileName);
     const startedAt = deps.now().getTime();
     const deadline = startDeadline(deps.processingTimeoutMs);
 
