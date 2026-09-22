@@ -58,6 +58,12 @@ export const makeRegisterUser =
       return err({ code: 'INVALID_INPUT' as const, message: user.error.message });
     }
 
+    // @zipframes/schemas requires every published envelope to carry a real
+    // correlationId (it is how a trace is followed from the request that
+    // caused it through every service the event reaches). A caller with no
+    // incoming id — a test, a script, a request that arrived without one —
+    // still gets one minted here, rather than leaving it for the relay to
+    // notice missing at publish time.
     const event: OutboxEvent = {
       id: deps.ids.next(),
       aggregateType: 'User',
@@ -65,7 +71,7 @@ export const makeRegisterUser =
       eventType: 'user.registered',
       version: 1,
       payload: { ...userRegisteredFrom(user.value) },
-      correlationId: command.correlationId,
+      correlationId: command.correlationId ?? deps.ids.next(),
       occurredAt: now,
     };
 

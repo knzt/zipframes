@@ -78,10 +78,15 @@ describe('a successful registration', () => {
     expect(users.events[0]?.correlationId).toBe('corr-1');
   });
 
-  it('leaves the correlation id undefined when there is none', async () => {
+  it('mints a correlation id when the caller did not provide one', async () => {
+    // @zipframes/schemas requires every published envelope to carry one, so
+    // an absent id at the call site must not become an absent id on the
+    // event.
     await registerUser(validCommand);
 
-    expect(users.events[0]?.correlationId).toBeUndefined();
+    // Third id issued: the user gets the first, the event itself the
+    // second, and the minted correlation id the third.
+    expect(users.events[0]?.correlationId).toBe('0194f3a0-0000-7000-8000-000000000003');
   });
 });
 

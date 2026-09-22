@@ -26,7 +26,12 @@ export interface OutboxEvent {
   readonly eventType: string;
   readonly version: number;
   readonly payload: Record<string, unknown>;
-  readonly correlationId: string | undefined;
+  /**
+   * Always present: @zipframes/schemas requires every published envelope
+   * to carry one, so every use case that builds an OutboxEvent must mint
+   * one when the caller did not supply it.
+   */
+  readonly correlationId: string;
   readonly occurredAt: Date;
 }
 
