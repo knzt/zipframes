@@ -70,26 +70,26 @@ describe('processUploadedVideo', () => {
       processingTimeoutMs: 60_000,
     });
 
-    const outcome = await processUploadedVideo({
+    const processingResult = await processUploadedVideo({
       ...uploadedEnvelope.payload,
       attempt: 1,
       correlationId,
     });
 
-    expect(outcome).toBe('success');
+    expect(processingResult).toBe('frames_packaged');
     expect(downloadToFile).toHaveBeenCalledWith(
       uploadedEnvelope.payload.sourceKey,
-      '/tmp/job/source',
+      '/tmp/job/original',
       expect.any(AbortSignal),
     );
     expect(uploadFile).toHaveBeenCalledWith(
       `outputs/${ownerId}/${videoId}.zip`,
-      '/tmp/job/result.zip',
+      '/tmp/job/frames.zip',
       'application/zip',
       expect.any(AbortSignal),
     );
     expect(extract).toHaveBeenCalledWith(
-      '/tmp/job/source',
+      '/tmp/job/original',
       '/tmp/job/frames',
       expect.any(AbortSignal),
     );
@@ -100,7 +100,7 @@ describe('processUploadedVideo', () => {
     expect(types).toEqual(['video.processing.started', 'video.processed']);
   });
 
-  it('publishes video.failed on permanent errors and returns permanent_failure', async () => {
+  it('publishes video.failed on unprocessable media and returns media_rejected', async () => {
     const broker = createInMemoryBroker();
     const events = createAmqpEventPublisher({
       publisher: createPublisher(broker),
@@ -128,13 +128,13 @@ describe('processUploadedVideo', () => {
       processingTimeoutMs: 60_000,
     });
 
-    const outcome = await processUploadedVideo({
+    const processingResult = await processUploadedVideo({
       ...uploadedEnvelope.payload,
       attempt: 1,
       correlationId,
     });
 
-    expect(outcome).toBe('permanent_failure');
+    expect(processingResult).toBe('media_rejected');
     expect(broker.published.map((m) => m.envelope.eventType)).toEqual([
       'video.processing.started',
       'video.failed',
@@ -214,8 +214,8 @@ describe('processUploadedVideo', () => {
     expect(removeDir).toHaveBeenCalledWith('/tmp/job');
   });
 
-  it('invokes onDeleteOriginalFailed when cleanup delete fails', async () => {
-    const onDeleteOriginalFailed = vi.fn();
+  it('invokes onDiscardOriginalFailed when cleanup delete fails', async () => {
+    const onDiscardOriginalFailed = vi.fn();
     const processUploadedVideo = createProcessUploadedVideo({
       storage: {
         downloadToFile: async () => undefined,
@@ -234,7 +234,7 @@ describe('processUploadedVideo', () => {
       events: { publish: async () => undefined },
       now: () => new Date(),
       processingTimeoutMs: 60_000,
-      onDeleteOriginalFailed,
+      onDiscardOriginalFailed,
     });
 
     await processUploadedVideo({
@@ -243,7 +243,7 @@ describe('processUploadedVideo', () => {
       correlationId,
     });
 
-    expect(onDeleteOriginalFailed).toHaveBeenCalledOnce();
+    expect(onDiscardOriginalFailed).toHaveBeenCalledOnce();
   });
 });
 

@@ -7,18 +7,19 @@ export interface ProcessingStartedEvent {
   };
 }
 
-export interface ProcessedEvent {
+export interface VideoProcessedEvent {
   readonly eventType: 'video.processed';
   readonly correlationId: string;
   readonly payload: {
     readonly videoId: string;
+    /** AsyncAPI field name for the frames-package object key. */
     readonly resultKey: string;
     readonly frameCount: number;
     readonly durationMs: number;
   };
 }
 
-export interface FailedEvent {
+export interface VideoFailedEvent {
   readonly eventType: 'video.failed';
   readonly correlationId: string;
   readonly payload: {
@@ -30,8 +31,8 @@ export interface FailedEvent {
   };
 }
 
-export type ProcessingOutboundEvent = ProcessingStartedEvent | ProcessedEvent | FailedEvent;
+export type ProcessingPublication = ProcessingStartedEvent | VideoProcessedEvent | VideoFailedEvent;
 
 export interface EventPublisher {
-  readonly publish: (event: ProcessingOutboundEvent) => Promise<void>;
+  readonly publish: (event: ProcessingPublication) => Promise<void>;
 }

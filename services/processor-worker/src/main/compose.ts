@@ -54,8 +54,8 @@ export const startWorker = async (): Promise<{ stop: () => Promise<void> }> => {
     events,
     now,
     processingTimeoutMs: config.processingTimeoutMs,
-    onDeleteOriginalFailed: (job, error) => {
-      logger.error('failed to delete original object after processing', {
+    onDiscardOriginalFailed: (job, error) => {
+      logger.error('failed to discard original object after processing', {
         videoId: job.videoId,
         sourceKey: job.sourceKey,
         errorCode: error instanceof Error ? error.message : 'unknown',

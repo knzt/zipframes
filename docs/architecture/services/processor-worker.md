@@ -44,6 +44,7 @@ Neste serviço seguimos o vocabulário da Clean Architecture:
 services/processor-worker/src/
 ├── domain/
 │   ├── processing-job.ts
+│   ├── processing-result.ts
 │   ├── frame-extraction-policy.ts
 │   ├── frames-package.ts
 │   └── errors.ts
@@ -80,24 +81,25 @@ services/processor-worker/src/
 
 ### Entities (`domain/`)
 
-| Conceito                          | Responsabilidade                                                                   |
-| --------------------------------- | ---------------------------------------------------------------------------------- |
-| `ProcessingJob`                   | Unidade de trabalho: `videoId`, `ownerId`, `sourceKey`, tentativa, `correlationId` |
-| `FrameExtractionPolicy`           | 1 frame/s, PNG, nomes `frame_0001.png`…                                            |
-| `FramesPackage`                   | Chave determinística do zip; sem recompressão (store)                              |
-| `ProcessingError` / `FailureKind` | Permanente (falha imediata + `video.failed`) vs transitória (retry)                |
+| Conceito                          | Responsabilidade                                                                     |
+| --------------------------------- | ------------------------------------------------------------------------------------ |
+| `ProcessingJob`                   | Unidade de trabalho: `videoId`, `ownerId`, `sourceKey`, tentativa, `correlationId`   |
+| `ProcessingResult`                | `frames_packaged` ou `media_rejected` (falha transitória não é resultado: é lançada) |
+| `FrameExtractionPolicy`           | 1 frame/s, PNG, nomes `frame_0001.png`…                                              |
+| `FramesPackage`                   | Chave determinística do zip; sem recompressão (store)                                |
+| `ProcessingError` / `FailureKind` | Permanente (falha imediata + `video.failed`) vs transitória (retry)                  |
 
 ### Use Cases (`application/`)
 
-| Caso de uso            | Orquestra                                                                                                                                                                                              |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `ProcessUploadedVideo` | Publica `started` → download → extract → zip → upload → `processed` → apaga original; em falha **permanente** publica `failed` e retorna `permanent_failure`; em **transitória** lança para o consumer |
+| Caso de uso            | Orquestra                                                                                                                                                                                                                            |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ProcessUploadedVideo` | Publica `started` → baixa original → extrai frames → empacota zip → grava pacote → `processed` → descarta original; mídia **rejeitada** publica `failed` e retorna `media_rejected`; falha **transitória** é lançada para o consumer |
 
 Timeout: `AbortController` cancela download/ffmpeg; o diretório temporário é removido no `finally`.
 
 Ownership de falha:
 
-- **Use case** — falhas permanentes (`video.failed` + outcome).
+- **Use case** — mídia rejeitada (`video.failed` + `media_rejected`).
 - **Consumer** — só esgotamento de tentativas transitórias (`video.failed` + DLQ).
 
 ### Gateways (interfaces em `application/gateways/`)
@@ -105,8 +107,8 @@ Ownership de falha:
 | Gateway          | Operações                                                                      |
 | ---------------- | ------------------------------------------------------------------------------ |
 | `ObjectStorage`  | `downloadToFile`, `uploadFile`, `deleteObject`, `ping` (streams + AbortSignal) |
-| `FrameExtractor` | `extract(input, outputDir, signal?) → paths`                                   |
-| `ArchiveBuilder` | `createZip(files, outputPath)`                                                 |
+| `FrameExtractor` | `extract(originalVideoPath, framesDirectory, signal?) → framePaths`            |
+| `ArchiveBuilder` | `createZip(framePaths, framesPackagePath)`                                     |
 | `EventPublisher` | `publish(started \| processed \| failed)` tipado                               |
 | `WorkDirectory`  | `createTempDir`, `removeDir`                                                   |
 
@@ -148,13 +150,13 @@ Config: `MAX_ATTEMPTS`, `RETRY_BASE_DELAY_MS`, `RETRY_MAX_DELAY_MS`.
 
 ## Contratos de falha
 
-| Caso                         | Evento            | Settle                       |
-| ---------------------------- | ----------------- | ---------------------------- |
-| Sucesso                      | `video.processed` | ack                          |
-| Permanente (mídia inválida…) | `video.failed`    | ack                          |
-| Transitória, attempts < max  | —                 | retry (wait queue + backoff) |
-| Transitória, attempt = max   | `video.failed`    | dlq                          |
-| Envelope poison              | —                 | dlq                          |
+| Caso                        | Evento            | Settle                       |
+| --------------------------- | ----------------- | ---------------------------- |
+| Sucesso (`frames_packaged`) | `video.processed` | ack                          |
+| Mídia rejeitada             | `video.failed`    | ack                          |
+| Transitória, attempts < max | —                 | retry (wait queue + backoff) |
+| Transitória, attempt = max  | `video.failed`    | dlq                          |
+| Envelope poison             | —                 | dlq                          |
 
 ## Eventos
 
@@ -167,8 +169,8 @@ Config: `MAX_ATTEMPTS`, `RETRY_BASE_DELAY_MS`, `RETRY_MAX_DELAY_MS`.
 
 ## Observabilidade e operação
 
-- Logs estruturados: `videoId`, `ownerId`, `attempt`, `errorCode`, `kind`, `durationMs`, `outcome` (com `correlationId` via ALS).
-- Métricas Prometheus (`@zipframes/telemetry`): `messages_handled_total` / `message_duration_seconds` por outcome (`success`, `permanent_failure`, `transient_retry`, `exhausted`, `delete_original_failed`).
+- Logs estruturados: `videoId`, `ownerId`, `attempt`, `errorCode`, `kind`, `durationMs`, `processingResult` (com `correlationId` via ALS).
+- Métricas Prometheus (`@zipframes/telemetry`): `messages_handled_total` / `message_duration_seconds` com o label `outcome` do pacote (`success`, `permanent_failure`, `transient_retry`, `exhausted`, `delete_original_failed`). No código do worker o vocabulário de domínio é `frames_packaged`, `media_rejected`, `retry_scheduled`, `retries_exhausted`.
 - HTTP: `GET /livez` (liveness), `GET /readyz` (AMQP conectado + `HeadBucket` no storage), `GET /metrics` na porta de métricas.
 - Falha ao apagar o original após sucesso/permanente: log + métrica (cleanup secundário; não falha o job).
 

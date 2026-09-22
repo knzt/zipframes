@@ -84,11 +84,11 @@ describe('planAmqpSettle (adapter settle ≠ DLQ on retry)', () => {
 });
 
 describe('failure contract: video uploaded consumer', () => {
-  it('acks permanent failure after use case publishes video.failed', async () => {
+  it('acks after the use case rejects the media', async () => {
     const events: EventPublisher = { publish: vi.fn(async () => undefined) };
     const context = createContext(1);
     const consumer = createVideoUploadedConsumer({
-      processUploadedVideo: async () => 'permanent_failure',
+      processUploadedVideo: async () => 'media_rejected',
       events,
       retry: { maxAttempts: 5, baseDelayMs: 10, maxDelayMs: 100 },
       logger: silentLogger,
@@ -161,7 +161,7 @@ describe('failure contract: video uploaded consumer', () => {
     const events: EventPublisher = { publish: vi.fn(async () => undefined) };
     const context = createContext(1);
     const consumer = createVideoUploadedConsumer({
-      processUploadedVideo: async () => 'success',
+      processUploadedVideo: async () => 'frames_packaged',
       events,
       retry: { maxAttempts: 5, baseDelayMs: 10, maxDelayMs: 100 },
       logger: silentLogger,
@@ -187,7 +187,7 @@ describe('failure contract: video uploaded consumer', () => {
     const consumer = createVideoUploadedConsumer({
       processUploadedVideo: async () => {
         seen = getCorrelationId();
-        return 'success';
+        return 'frames_packaged';
       },
       events: { publish: async () => undefined },
       retry: { maxAttempts: 5, baseDelayMs: 10, maxDelayMs: 100 },

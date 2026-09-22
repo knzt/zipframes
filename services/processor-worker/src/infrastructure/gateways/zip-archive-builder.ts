@@ -7,24 +7,24 @@ import { ProcessingError } from '../../domain/errors.js';
 
 /** Zip with store method only — PNGs are already compressed. */
 export const createZipArchiveBuilder = (): ArchiveBuilder => ({
-  createZip: async (filePaths, outputPath) => {
+  createZip: async (framePaths, framesPackagePath) => {
     await new Promise<void>((resolve, reject) => {
-      const output = createWriteStream(outputPath);
+      const packageStream = createWriteStream(framesPackagePath);
       const archive = archiver('zip', { zlib: { level: 0 }, store: true });
 
-      output.on('close', () => {
+      packageStream.on('close', () => {
         resolve();
       });
-      output.on('error', (error) => {
+      packageStream.on('error', (error) => {
         reject(new ProcessingError('transient', 'ZIP_WRITE_FAILED', 'failed writing zip', error));
       });
       archive.on('error', (error) => {
         reject(new ProcessingError('transient', 'ZIP_BUILD_FAILED', 'failed building zip', error));
       });
 
-      archive.pipe(output);
-      for (const filePath of filePaths) {
-        archive.file(filePath, { name: path.basename(filePath) });
+      archive.pipe(packageStream);
+      for (const framePath of framePaths) {
+        archive.file(framePath, { name: path.basename(framePath) });
       }
       void archive.finalize();
     });

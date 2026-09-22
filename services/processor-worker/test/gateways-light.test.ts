@@ -21,7 +21,7 @@ describe('zip archive builder', () => {
   it('writes a zip with store compression', async () => {
     const base = await mkdtemp(path.join(tmpdir(), 'zf-zip-'));
     const filePath = path.join(base, 'frame_0001.png');
-    const zipPath = path.join(base, 'out.zip');
+    const zipPath = path.join(base, 'frames.zip');
     await writeFile(filePath, Buffer.from([0x89, 0x50, 0x4e, 0x47]));
 
     await createZipArchiveBuilder().createZip([filePath], zipPath);

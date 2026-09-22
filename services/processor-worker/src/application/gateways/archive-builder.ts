@@ -1,3 +1,3 @@
 export interface ArchiveBuilder {
-  readonly createZip: (filePaths: readonly string[], outputPath: string) => Promise<void>;
+  readonly createZip: (framePaths: readonly string[], framesPackagePath: string) => Promise<void>;
 }

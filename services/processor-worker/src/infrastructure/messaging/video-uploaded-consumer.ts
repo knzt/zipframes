@@ -1,4 +1,4 @@
-import type { ConsumeHandler } from '@zipframes/communication';
+import type { BrokerMessage, ConsumeContext, ConsumeHandler } from '@zipframes/communication';
 import { decideRetry, type RetryOptions } from '@zipframes/communication';
 import type { Logger } from '@zipframes/logger';
 import { runWithCorrelationId } from '@zipframes/logger';
@@ -10,10 +10,10 @@ import type { ProcessUploadedVideo } from '../../application/use-cases/process-u
 import { isProcessingError } from '../../domain/errors.js';
 
 export interface JobMetrics {
-  readonly recordSuccess: (durationSeconds: number) => void;
-  readonly recordPermanentFailure: (durationSeconds: number) => void;
-  readonly recordTransientRetry: (durationSeconds: number) => void;
-  readonly recordExhausted: (durationSeconds: number) => void;
+  readonly recordFramesPackaged: (durationSeconds: number) => void;
+  readonly recordMediaRejected: (durationSeconds: number) => void;
+  readonly recordRetryScheduled: (durationSeconds: number) => void;
+  readonly recordRetriesExhausted: (durationSeconds: number) => void;
 }
 
 export interface VideoUploadedConsumerDeps {
@@ -25,9 +25,9 @@ export interface VideoUploadedConsumerDeps {
 }
 
 export const createVideoUploadedConsumer = (deps: VideoUploadedConsumerDeps): ConsumeHandler => {
-  return async (message, context) => {
+  return async (message: BrokerMessage, context: ConsumeContext) => {
     const started = Date.now();
-    const durationSeconds = (): number => (Date.now() - started) / 1000;
+    const elapsedSeconds = (): number => (Date.now() - started) / 1000;
 
     const parsed = parseSchema(videoUploadedEventSchema, message.envelope);
     if (!parsed.ok) {
@@ -43,7 +43,7 @@ export const createVideoUploadedConsumer = (deps: VideoUploadedConsumerDeps): Co
 
     await runWithCorrelationId(event.correlationId, async () => {
       try {
-        const outcome = await deps.processUploadedVideo({
+        const processingResult = await deps.processUploadedVideo({
           videoId: event.payload.videoId,
           ownerId: event.payload.ownerId,
           sourceKey: event.payload.sourceKey,
@@ -52,31 +52,31 @@ export const createVideoUploadedConsumer = (deps: VideoUploadedConsumerDeps): Co
           attempt: context.attempt,
           correlationId: event.correlationId,
         });
-        if (outcome === 'success') {
-          deps.metrics?.recordSuccess(durationSeconds());
+        if (processingResult === 'frames_packaged') {
+          deps.metrics?.recordFramesPackaged(elapsedSeconds());
           deps.logger.info('video processed', {
             videoId: event.payload.videoId,
             ownerId: event.payload.ownerId,
             attempt: context.attempt,
             originalFileName: event.payload.originalFileName,
             sizeBytes: event.payload.sizeBytes,
-            outcome: 'success',
-            durationMs: Math.round(durationSeconds() * 1000),
+            processingResult,
+            durationMs: Math.round(elapsedSeconds() * 1000),
           });
         } else {
-          deps.metrics?.recordPermanentFailure(durationSeconds());
-          deps.logger.warn('video processing failed permanently', {
+          deps.metrics?.recordMediaRejected(elapsedSeconds());
+          deps.logger.warn('video processing rejected the media', {
             videoId: event.payload.videoId,
             ownerId: event.payload.ownerId,
             attempt: context.attempt,
             originalFileName: event.payload.originalFileName,
-            outcome: 'permanent_failure',
-            durationMs: Math.round(durationSeconds() * 1000),
+            processingResult,
+            durationMs: Math.round(elapsedSeconds() * 1000),
           });
         }
         await context.ack();
       } catch (error) {
-        // Permanent failures return from the use case; anything thrown is transient.
+        // Media rejection returns from the use case; anything thrown is transient.
         const code = isProcessingError(error) ? error.code : 'UNEXPECTED';
         const kind = isProcessingError(error) ? error.kind : 'transient';
 
@@ -92,29 +92,29 @@ export const createVideoUploadedConsumer = (deps: VideoUploadedConsumerDeps): Co
               attempts: context.attempt,
             },
           });
-          deps.metrics?.recordExhausted(durationSeconds());
+          deps.metrics?.recordRetriesExhausted(elapsedSeconds());
           deps.logger.error('video processing exhausted retries', {
             videoId: event.payload.videoId,
             ownerId: event.payload.ownerId,
             attempt: context.attempt,
             errorCode: code,
             kind,
-            outcome: 'exhausted',
-            durationMs: Math.round(durationSeconds() * 1000),
+            processingResult: 'retries_exhausted',
+            durationMs: Math.round(elapsedSeconds() * 1000),
           });
           await context.deadLetter();
           return;
         }
 
-        deps.metrics?.recordTransientRetry(durationSeconds());
+        deps.metrics?.recordRetryScheduled(elapsedSeconds());
         deps.logger.warn('video processing failed transiently; scheduling retry', {
           videoId: event.payload.videoId,
           ownerId: event.payload.ownerId,
           attempt: context.attempt,
           errorCode: code,
           kind,
-          outcome: 'transient_retry',
-          durationMs: Math.round(durationSeconds() * 1000),
+          processingResult: 'retry_scheduled',
+          durationMs: Math.round(elapsedSeconds() * 1000),
         });
         await context.retry();
       }

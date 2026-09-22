@@ -71,26 +71,29 @@ const runFfmpeg = (args: string[], signal?: AbortSignal): Promise<void> =>
   });
 
 export const createFfmpegFrameExtractor = (): FrameExtractor => ({
-  extract: async (inputPath, outputDir, signal) => {
-    await mkdir(outputDir, { recursive: true });
-    const pattern = path.join(outputDir, `frame_%04d.${FRAME_EXTENSION}`);
-    await runFfmpeg(['-y', '-i', inputPath, '-vf', `fps=${String(FRAME_FPS)}`, pattern], signal);
+  extract: async (originalVideoPath, framesDirectory, signal) => {
+    await mkdir(framesDirectory, { recursive: true });
+    const pattern = path.join(framesDirectory, `frame_%04d.${FRAME_EXTENSION}`);
+    await runFfmpeg(
+      ['-y', '-i', originalVideoPath, '-vf', `fps=${String(FRAME_FPS)}`, pattern],
+      signal,
+    );
 
-    const entries = (await readdir(outputDir))
+    const produced = (await readdir(framesDirectory))
       .filter((name) => name.endsWith(`.${FRAME_EXTENSION}`))
       .sort();
 
-    const frames: string[] = [];
-    for (const [index, name] of entries.entries()) {
-      const expected = frameFileName(index + 1);
-      const source = path.join(outputDir, name);
-      const destination = path.join(outputDir, expected);
-      if (name !== expected) {
-        await rename(source, destination);
+    const framePaths: string[] = [];
+    for (const [index, producedName] of produced.entries()) {
+      const canonicalName = frameFileName(index + 1);
+      const producedPath = path.join(framesDirectory, producedName);
+      const canonicalPath = path.join(framesDirectory, canonicalName);
+      if (producedName !== canonicalName) {
+        await rename(producedPath, canonicalPath);
       }
-      frames.push(destination);
+      framePaths.push(canonicalPath);
     }
 
-    return frames;
+    return framePaths;
   },
 });

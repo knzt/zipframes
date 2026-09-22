@@ -3,7 +3,7 @@ import { EVENT_EXCHANGE } from '@zipframes/schemas/shared';
 
 import type {
   EventPublisher,
-  ProcessingOutboundEvent,
+  ProcessingPublication,
 } from '../../application/gateways/event-publisher.js';
 
 export const createAmqpEventPublisher = (deps: {
@@ -11,7 +11,7 @@ export const createAmqpEventPublisher = (deps: {
   readonly createId: () => string;
   readonly now: () => Date;
 }): EventPublisher => ({
-  publish: async (event: ProcessingOutboundEvent) => {
+  publish: async (event: ProcessingPublication) => {
     await deps.publisher.publish(
       {
         eventId: deps.createId(),

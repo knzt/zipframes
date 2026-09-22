@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import { frameFileName } from '../src/domain/frame-extraction-policy.js';
-import { resultObjectKey } from '../src/domain/frames-package.js';
+import { framesPackageObjectKey } from '../src/domain/frames-package.js';
 import { loadConfig } from '../src/infrastructure/config.js';
 
 describe('domain helpers', () => {
-  it('builds deterministic frame names and result keys', () => {
+  it('builds deterministic frame names and frames-package keys', () => {
     expect(frameFileName(1)).toBe('frame_0001.png');
     expect(frameFileName(12)).toBe('frame_0012.png');
-    expect(resultObjectKey('owner', 'vid')).toBe('outputs/owner/vid.zip');
+    expect(framesPackageObjectKey('owner', 'vid')).toBe('outputs/owner/vid.zip');
   });
 });
 

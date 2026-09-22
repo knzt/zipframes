@@ -1,7 +1,7 @@
 export interface FrameExtractor {
   readonly extract: (
-    inputPath: string,
-    outputDir: string,
+    originalVideoPath: string,
+    framesDirectory: string,
     signal?: AbortSignal,
   ) => Promise<readonly string[]>;
 }
