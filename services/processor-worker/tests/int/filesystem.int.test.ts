@@ -3,8 +3,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { createFsWorkDirectory } from '../src/infrastructure/gateways/fs-work-directory.js';
-import { createZipArchiveBuilder } from '../src/infrastructure/gateways/zip-archive-builder.js';
+import { createFsWorkDirectory } from '../../src/infrastructure/gateways/fs-work-directory.js';
+import { createZipArchiveBuilder } from '../../src/infrastructure/gateways/zip-archive-builder.js';
 
 describe('fs work directory', () => {
   it('creates and removes a temp directory', async () => {
@@ -26,5 +26,19 @@ describe('zip archive builder', () => {
 
     await createZipArchiveBuilder().createZip([filePath], zipPath);
     await access(zipPath);
+  });
+
+  it('fails when the zip output path or a source file is unusable', async () => {
+    const base = await mkdtemp(path.join(tmpdir(), 'zf-zip-'));
+    const blocker = path.join(base, 'not-a-directory');
+    await writeFile(blocker, 'x');
+    const builder = createZipArchiveBuilder();
+
+    await expect(builder.createZip([blocker], path.join(blocker, 'out.zip'))).rejects.toMatchObject(
+      {
+        kind: 'transient',
+        code: 'ZIP_WRITE_FAILED',
+      },
+    );
   });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { classifyFfmpegFailure } from '../src/infrastructure/gateways/ffmpeg-frame-extractor.js';
+import { classifyFfmpegFailure } from '../../src/infrastructure/gateways/ffmpeg-frame-extractor.js';
 
 describe('classifyFfmpegFailure', () => {
   it.each([

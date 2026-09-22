@@ -3,11 +3,11 @@ import { createLogger } from '@zipframes/logger';
 import { getCorrelationId } from '@zipframes/logger';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { EventPublisher } from '../src/application/gateways/event-publisher.js';
-import { ProcessingError } from '../src/domain/errors.js';
-import { planAmqpSettle } from '../src/infrastructure/messaging/amqp-settle.js';
-import { UPLOADED_RETRY_QUEUE } from '../src/infrastructure/messaging/topology.js';
-import { createVideoUploadedConsumer } from '../src/infrastructure/messaging/video-uploaded-consumer.js';
+import type { EventPublisher } from '../../src/application/gateways/event-publisher.js';
+import { ProcessingError } from '../../src/domain/errors.js';
+import { planAmqpSettle } from '../../src/infrastructure/messaging/amqp-settle.js';
+import { UPLOADED_RETRY_QUEUE } from '../../src/infrastructure/messaging/topology.js';
+import { createVideoUploadedConsumer } from '../../src/infrastructure/messaging/video-uploaded-consumer.js';
 
 const ownerId = 'user-1';
 const videoId = '11111111-1111-4111-8111-111111111111';
@@ -80,6 +80,10 @@ describe('planAmqpSettle (adapter settle ≠ DLQ on retry)', () => {
 
   it('plans dlq only for explicit dlq action', () => {
     expect(planAmqpSettle('dlq', 5, retry)).toEqual({ kind: 'dlq' });
+  });
+
+  it('plans ack without touching the wait queue', () => {
+    expect(planAmqpSettle('ack', 1, retry)).toEqual({ kind: 'ack' });
   });
 });
 
@@ -199,5 +203,57 @@ describe('failure contract: video uploaded consumer', () => {
       context,
     );
     expect(seen).toBe(correlationId);
+  });
+
+  it('treats a non-processing error as an unexpected transient retry', async () => {
+    const events: EventPublisher = { publish: vi.fn(async () => undefined) };
+    const context = createContext(1);
+    const consumer = createVideoUploadedConsumer({
+      processUploadedVideo: async () => {
+        throw new Error('socket hang up');
+      },
+      events,
+      retry: { maxAttempts: 5, baseDelayMs: 10, maxDelayMs: 100 },
+      logger: silentLogger,
+    });
+
+    await consumer(
+      { envelope: uploadedEnvelope, headers: {}, routingKey: 'video.uploaded' },
+      context,
+    );
+
+    expect(context.retry).toHaveBeenCalledOnce();
+    expect(events.publish).not.toHaveBeenCalled();
+  });
+
+  it('uses a fallback reason when exhaustion throws a non-error', async () => {
+    const events: EventPublisher = { publish: vi.fn(async () => undefined) };
+    const context = createContext(5);
+    const consumer = createVideoUploadedConsumer({
+      processUploadedVideo: async () => {
+        // Exercita o ramo em que o esgotamento não carrega um Error.
+        // eslint-disable-next-line @typescript-eslint/only-throw-error
+        throw 'offline';
+      },
+      events,
+      retry: { maxAttempts: 5, baseDelayMs: 10, maxDelayMs: 100 },
+      logger: silentLogger,
+    });
+
+    await consumer(
+      { envelope: uploadedEnvelope, headers: {}, routingKey: 'video.uploaded' },
+      context,
+    );
+
+    expect(events.publish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: 'video.failed',
+        payload: expect.objectContaining({
+          errorCode: 'UNEXPECTED',
+          reason: 'max attempts exhausted',
+        }),
+      }),
+    );
+    expect(context.deadLetter).toHaveBeenCalledOnce();
   });
 });

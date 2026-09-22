@@ -4,11 +4,11 @@ import { createInMemoryBroker } from '@zipframes/test-toolkit';
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 
-import { createAmqpEventPublisher } from '../src/infrastructure/gateways/amqp-event-publisher.js';
-import { createVideoUploadedConsumer } from '../src/infrastructure/messaging/video-uploaded-consumer.js';
-import { UPLOADED_QUEUE } from '../src/infrastructure/messaging/topology.js';
-import { createProcessUploadedVideo } from '../src/application/use-cases/process-uploaded-video.js';
-import { ProcessingError } from '../src/domain/errors.js';
+import { createAmqpEventPublisher } from '../../src/infrastructure/gateways/amqp-event-publisher.js';
+import { createVideoUploadedConsumer } from '../../src/infrastructure/messaging/video-uploaded-consumer.js';
+import { UPLOADED_QUEUE } from '../../src/infrastructure/messaging/topology.js';
+import { createProcessUploadedVideo } from '../../src/application/use-cases/process-uploaded-video.js';
+import { ProcessingError } from '../../src/domain/errors.js';
 
 const ownerId = 'user-1';
 const videoId = '11111111-1111-4111-8111-111111111111';
@@ -79,7 +79,7 @@ describe('processUploadedVideo', () => {
     expect(processingResult).toBe('frames_packaged');
     expect(downloadToFile).toHaveBeenCalledWith(
       uploadedEnvelope.payload.sourceKey,
-      '/tmp/job/original',
+      '/tmp/job/original.mp4',
       expect.any(AbortSignal),
     );
     expect(uploadFile).toHaveBeenCalledWith(
@@ -89,7 +89,7 @@ describe('processUploadedVideo', () => {
       expect.any(AbortSignal),
     );
     expect(extract).toHaveBeenCalledWith(
-      '/tmp/job/original',
+      '/tmp/job/original.mp4',
       '/tmp/job/frames',
       expect.any(AbortSignal),
     );
