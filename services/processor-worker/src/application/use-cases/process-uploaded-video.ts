@@ -15,40 +15,16 @@ export interface ProcessUploadedVideoDeps {
   readonly events: EventPublisher;
   readonly now: () => Date;
   readonly processingTimeoutMs: number;
+  readonly onDeleteOriginalFailed?: (job: ProcessingJob, error: unknown) => void;
 }
 
-export type ProcessUploadedVideo = (job: ProcessingJob) => Promise<void>;
+export type ProcessOutcome = 'success' | 'permanent_failure';
 
-const publish = async (
-  events: EventPublisher,
-  eventType: string,
-  correlationId: string,
-  payload: Record<string, unknown>,
-): Promise<void> => {
-  await events.publish({ eventType, correlationId, payload });
-};
+export type ProcessUploadedVideo = (job: ProcessingJob) => Promise<ProcessOutcome>;
 
-const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number): Promise<T> => {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<T>((_, reject) => {
-        timer = setTimeout(() => {
-          reject(
-            new ProcessingError(
-              'transient',
-              'PROCESSING_TIMEOUT',
-              `processing exceeded ${String(timeoutMs)}ms`,
-            ),
-          );
-        }, timeoutMs);
-      }),
-    ]);
-  } finally {
-    if (timer !== undefined) {
-      clearTimeout(timer);
-    }
+const throwIfAborted = (signal: AbortSignal): void => {
+  if (signal.aborted) {
+    throw new ProcessingError('transient', 'PROCESSING_TIMEOUT', 'processing was cancelled');
   }
 };
 
@@ -58,76 +34,101 @@ export const createProcessUploadedVideo = (
   return async (job) => {
     const workDir = await deps.workDirectory.createTempDir(job.videoId);
     const startedAt = deps.now().getTime();
+    const controller = new AbortController();
+    const timeout = setTimeout(() => {
+      controller.abort();
+    }, deps.processingTimeoutMs);
 
     try {
-      await publish(deps.events, 'video.processing.started', job.correlationId, {
-        videoId: job.videoId,
-        attempt: job.attempt,
+      await deps.events.publish({
+        eventType: 'video.processing.started',
+        correlationId: job.correlationId,
+        payload: { videoId: job.videoId, attempt: job.attempt },
       });
 
-      await withTimeout(
-        (async () => {
-          const sourcePath = `${workDir}/source`;
-          const framesDir = `${workDir}/frames`;
-          const zipPath = `${workDir}/result.zip`;
+      throwIfAborted(controller.signal);
 
-          await deps.storage.downloadToFile(job.sourceKey, sourcePath);
-          const frames = await deps.extractor.extract(sourcePath, framesDir);
+      const sourcePath = `${workDir}/source`;
+      const framesDir = `${workDir}/frames`;
+      const zipPath = `${workDir}/result.zip`;
 
-          if (frames.length === 0) {
-            throw new ProcessingError('permanent', 'NO_FRAMES', 'ffmpeg produced no frames');
-          }
+      await deps.storage.downloadToFile(job.sourceKey, sourcePath, controller.signal);
+      throwIfAborted(controller.signal);
 
-          await deps.archive.createZip(frames, zipPath);
+      const frames = await deps.extractor.extract(sourcePath, framesDir, controller.signal);
+      throwIfAborted(controller.signal);
 
-          const resultKey = resultObjectKey(job.ownerId, job.videoId);
-          await deps.storage.uploadFile(resultKey, zipPath, 'application/zip');
+      if (frames.length === 0) {
+        throw new ProcessingError('permanent', 'NO_FRAMES', 'ffmpeg produced no frames');
+      }
 
-          const durationMs = Math.max(0, deps.now().getTime() - startedAt);
-          await publish(deps.events, 'video.processed', job.correlationId, {
-            videoId: job.videoId,
-            resultKey,
-            frameCount: frames.length,
-            durationMs,
-          });
+      await deps.archive.createZip(frames, zipPath);
+      throwIfAborted(controller.signal);
 
-          try {
-            await deps.storage.deleteObject(job.sourceKey);
-          } catch {
-            // Deletion must not undo a successful result; cleanup routine removes leftovers.
-          }
-        })(),
-        deps.processingTimeoutMs,
-      );
+      const resultKey = resultObjectKey(job.ownerId, job.videoId);
+      await deps.storage.uploadFile(resultKey, zipPath, 'application/zip', controller.signal);
+
+      const durationMs = Math.max(0, deps.now().getTime() - startedAt);
+      await deps.events.publish({
+        eventType: 'video.processed',
+        correlationId: job.correlationId,
+        payload: {
+          videoId: job.videoId,
+          resultKey,
+          frameCount: frames.length,
+          durationMs,
+        },
+      });
+
+      try {
+        await deps.storage.deleteObject(job.sourceKey);
+      } catch (error) {
+        deps.onDeleteOriginalFailed?.(job, error);
+      }
+
+      return 'success';
     } catch (error) {
-      const processingError = isProcessingError(error)
-        ? error
-        : new ProcessingError(
-            'transient',
-            'UNEXPECTED',
-            error instanceof Error ? error.message : 'unexpected processing error',
-            error,
-          );
+      const processingError =
+        controller.signal.aborted && !isProcessingError(error)
+          ? new ProcessingError(
+              'transient',
+              'PROCESSING_TIMEOUT',
+              `processing exceeded ${String(deps.processingTimeoutMs)}ms`,
+              error,
+            )
+          : isProcessingError(error)
+            ? error
+            : new ProcessingError(
+                'transient',
+                'UNEXPECTED',
+                error instanceof Error ? error.message : 'unexpected processing error',
+                error,
+              );
 
       if (processingError.kind === 'permanent') {
-        await publish(deps.events, 'video.failed', job.correlationId, {
-          videoId: job.videoId,
-          ownerId: job.ownerId,
-          errorCode: processingError.code,
-          reason: processingError.message,
-          attempts: job.attempt,
+        await deps.events.publish({
+          eventType: 'video.failed',
+          correlationId: job.correlationId,
+          payload: {
+            videoId: job.videoId,
+            ownerId: job.ownerId,
+            errorCode: processingError.code,
+            reason: processingError.message,
+            attempts: job.attempt,
+          },
         });
 
         try {
           await deps.storage.deleteObject(job.sourceKey);
-        } catch {
-          // same as success path
+        } catch (deleteError) {
+          deps.onDeleteOriginalFailed?.(job, deleteError);
         }
-        return;
+        return 'permanent_failure';
       }
 
       throw processingError;
     } finally {
+      clearTimeout(timeout);
       await deps.workDirectory.removeDir(workDir);
     }
   };

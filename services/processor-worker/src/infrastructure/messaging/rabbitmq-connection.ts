@@ -5,14 +5,22 @@ import type {
   PublishOptions,
   Topology,
 } from '@zipframes/communication';
+import type { RetryOptions } from '@zipframes/communication';
 import type { EventEnvelope } from '@zipframes/schemas/shared';
 import amqp, { type Channel, type ChannelModel, type ConsumeMessage } from 'amqplib';
+
+import { ATTEMPT_HEADER, planAmqpSettle } from './amqp-settle.js';
 
 export interface RabbitMqConnection {
   readonly publish: (envelope: EventEnvelope<unknown>, options: PublishOptions) => Promise<void>;
   readonly assertTopology: (topology: Topology) => Promise<void>;
-  readonly consume: (queue: string, handler: ConsumeHandler) => Promise<void>;
+  readonly consume: (
+    queue: string,
+    handler: ConsumeHandler,
+    options: { readonly retry: RetryOptions },
+  ) => Promise<void>;
   readonly close: () => Promise<void>;
+  readonly isConnected: () => boolean;
 }
 
 const headersFromAmqp = (message: ConsumeMessage): MessageHeaders => {
@@ -26,17 +34,7 @@ const headersFromAmqp = (message: ConsumeMessage): MessageHeaders => {
 
 const readAttempt = (message: ConsumeMessage): number => {
   const headers = message.properties.headers ?? {};
-  const deathHeader = headers['x-death'];
-  if (Array.isArray(deathHeader) && deathHeader.length > 0) {
-    const first: unknown = deathHeader[0];
-    if (typeof first === 'object' && first !== null && 'count' in first) {
-      const count = Number(first.count);
-      if (Number.isFinite(count) && count >= 0) {
-        return count + 1;
-      }
-    }
-  }
-  const headerValue: unknown = headers['x-attempt'];
+  const headerValue: unknown = headers[ATTEMPT_HEADER];
   const parsed =
     typeof headerValue === 'number' || typeof headerValue === 'string'
       ? Number(headerValue)
@@ -49,7 +47,21 @@ export const createRabbitMqConnection = async (amqpUrl: string): Promise<RabbitM
   const channel: Channel = await connection.createChannel();
   await channel.prefetch(1);
 
+  let connected = true;
+  let consumerTag: string | undefined;
+  let inFlight = 0;
+  let accepting = true;
+
+  connection.on('close', () => {
+    connected = false;
+  });
+  connection.on('error', () => {
+    connected = false;
+  });
+
   return {
+    isConnected: () => connected,
+
     assertTopology: async (topology) => {
       for (const exchange of topology.exchanges) {
         await channel.assertExchange(exchange.name, exchange.type, {
@@ -86,71 +98,127 @@ export const createRabbitMqConnection = async (amqpUrl: string): Promise<RabbitM
       }
     },
 
-    consume: async (queue, handler) => {
-      await channel.consume(queue, (message) => {
-        if (!message) {
+    consume: async (queue, handler, options) => {
+      const { consumerTag: tag } = await channel.consume(queue, (message) => {
+        if (!message || !accepting) {
+          if (message) {
+            channel.nack(message, false, true);
+          }
           return;
         }
 
+        inFlight += 1;
         void (async () => {
-          let envelope: EventEnvelope<unknown>;
           try {
-            envelope = JSON.parse(message.content.toString('utf8')) as EventEnvelope<unknown>;
-          } catch {
-            channel.nack(message, false, false);
-            return;
-          }
-
-          const brokerMessage: BrokerMessage = {
-            envelope,
-            headers: headersFromAmqp(message),
-            routingKey: message.fields.routingKey,
-          };
-
-          const attempt = readAttempt(message);
-          let settled = false;
-
-          const settle = (action: 'ack' | 'retry' | 'dlq'): void => {
-            if (settled) {
+            let envelope: EventEnvelope<unknown>;
+            try {
+              envelope = JSON.parse(message.content.toString('utf8')) as EventEnvelope<unknown>;
+            } catch {
+              channel.nack(message, false, false);
               return;
             }
-            settled = true;
-            if (action === 'ack') {
+
+            const brokerMessage: BrokerMessage = {
+              envelope,
+              headers: headersFromAmqp(message),
+              routingKey: message.fields.routingKey,
+            };
+
+            const attempt = readAttempt(message);
+            const settleState = { done: false };
+
+            const settle = (action: 'ack' | 'retry' | 'dlq'): void => {
+              if (settleState.done) {
+                return;
+              }
+              settleState.done = true;
+              const plan = planAmqpSettle(action, attempt, options.retry);
+              if (plan.kind === 'ack') {
+                channel.ack(message);
+                return;
+              }
+              if (plan.kind === 'dlq') {
+                // nack without requeue → queue DLX → shared DLQ
+                channel.nack(message, false, false);
+                return;
+              }
+
+              const nextHeaders: Record<string, string | number> = {
+                ...Object.fromEntries(
+                  Object.entries(message.properties.headers ?? {}).flatMap(([key, value]) =>
+                    value === undefined || value === null ? [] : [[key, value as string | number]],
+                  ),
+                ),
+                [ATTEMPT_HEADER]: plan.nextAttempt,
+              };
+              const contentType =
+                typeof message.properties.contentType === 'string'
+                  ? message.properties.contentType
+                  : 'application/json';
+              channel.sendToQueue(plan.waitQueue, message.content, {
+                persistent: true,
+                contentType,
+                expiration: String(plan.delayMs),
+                headers: nextHeaders,
+              });
               channel.ack(message);
-              return;
-            }
-            // nack without requeue → DLX configured on the queue
-            channel.nack(message, false, false);
-          };
+            };
 
-          try {
-            await handler(brokerMessage, {
-              attempt,
-              redelivered: message.fields.redelivered || attempt > 1,
-              ack: () => {
+            try {
+              await handler(brokerMessage, {
+                attempt,
+                redelivered: message.fields.redelivered || attempt > 1,
+                ack: () => {
+                  settle('ack');
+                  return Promise.resolve();
+                },
+                retry: () => {
+                  settle('retry');
+                  return Promise.resolve();
+                },
+                deadLetter: () => {
+                  settle('dlq');
+                  return Promise.resolve();
+                },
+              });
+              if (!settleState.done) {
                 settle('ack');
-                return Promise.resolve();
-              },
-              retry: () => {
-                settle('retry');
-                return Promise.resolve();
-              },
-              deadLetter: () => {
-                settle('dlq');
-                return Promise.resolve();
-              },
-            });
-            settle('ack');
-          } catch {
-            settle('retry');
+              }
+            } catch {
+              settle('retry');
+            }
+          } finally {
+            inFlight -= 1;
           }
         })();
       });
+      consumerTag = tag;
     },
 
     close: async () => {
-      await channel.close();
-      await connection.close();
+      accepting = false;
+      if (consumerTag) {
+        try {
+          await channel.cancel(consumerTag);
+        } catch {
+          // channel may already be closing
+        }
+      }
+      const deadline = Date.now() + 30_000;
+      while (inFlight > 0 && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      try {
+        await channel.close();
+      } catch {
+        // ignore
+      }
+      try {
+        await connection.close();
+      } catch {
+        // ignore
+      }
+      connected = false;
     },
   };
 };

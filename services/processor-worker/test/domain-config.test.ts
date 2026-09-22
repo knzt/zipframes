@@ -27,6 +27,8 @@ describe('loadConfig', () => {
       MAX_ATTEMPTS: '3',
       RETRY_BASE_DELAY_MS: '100',
       RETRY_MAX_DELAY_MS: '1000',
+      HEALTH_PORT: '8081',
+      METRICS_PORT: '9091',
       LOG_LEVEL: 'info',
       SERVICE_VERSION: '0.0.0',
     });
@@ -34,5 +36,7 @@ describe('loadConfig', () => {
     expect(config.s3Bucket).toBe('videos');
     expect(config.maxAttempts).toBe(3);
     expect(config.s3ForcePathStyle).toBe(true);
+    expect(config.healthPort).toBe(8081);
+    expect(config.metricsPort).toBe(9091);
   });
 });

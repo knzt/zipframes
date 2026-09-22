@@ -43,15 +43,15 @@ Neste serviço seguimos o vocabulário da Clean Architecture:
 ```
 services/processor-worker/src/
 ├── domain/
-│   ├── processing-job.ts          # ProcessingJob
-│   ├── frame-extraction-policy.ts # fps, PNG, frame_0001…
-│   ├── frames-package.ts          # chave outputs/{ownerId}/{videoId}.zip
-│   └── errors.ts                  # FailureKind permanent | transient
+│   ├── processing-job.ts
+│   ├── frame-extraction-policy.ts
+│   ├── frames-package.ts
+│   └── errors.ts
 │
 ├── application/
 │   ├── use-cases/
 │   │   └── process-uploaded-video.ts
-│   └── gateways/                  # só interfaces (ports de saída)
+│   └── gateways/
 │       ├── object-storage.ts
 │       ├── frame-extractor.ts
 │       ├── archive-builder.ts
@@ -60,14 +60,15 @@ services/processor-worker/src/
 │
 ├── infrastructure/
 │   ├── messaging/
-│   │   ├── video-uploaded-consumer.ts   # entrada: schema → use case → settle
-│   │   └── rabbitmq-connection.ts       # driver AMQP
+│   │   ├── topology.ts                  # filas main / wait / DLQ
+│   │   ├── amqp-settle.ts               # retry ≠ DLQ (TTL wait queue)
+│   │   ├── video-uploaded-consumer.ts
+│   │   └── rabbitmq-connection.ts
 │   ├── gateways/
-│   │   ├── s3-object-storage.ts
-│   │   ├── ffmpeg-frame-extractor.ts
-│   │   ├── zip-archive-builder.ts
-│   │   ├── amqp-event-publisher.ts
-│   │   └── fs-work-directory.ts
+│   ├── http/
+│   │   └── health.ts                    # /livez /readyz + /metrics
+│   ├── observability/
+│   │   └── job-metrics.ts
 │   └── config.ts
 │
 └── main/
@@ -86,89 +87,74 @@ services/processor-worker/src/
 | `FramesPackage`                   | Chave determinística do zip; sem recompressão (store)                              |
 | `ProcessingError` / `FailureKind` | Permanente (falha imediata + `video.failed`) vs transitória (retry)                |
 
-Sem import de AMQP, S3, ffmpeg ou `@zipframes/communication`.
-
 ### Use Cases (`application/`)
 
-| Caso de uso            | Orquestra                                                                                                                                                                                |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ProcessUploadedVideo` | Publica `started` → download → extract → zip → upload → `processed` → apaga original; em falha permanente publica `failed` e apaga original; em transitória propaga erro para o consumer |
+| Caso de uso            | Orquestra                                                                                                                                                                                              |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ProcessUploadedVideo` | Publica `started` → download → extract → zip → upload → `processed` → apaga original; em falha **permanente** publica `failed` e retorna `permanent_failure`; em **transitória** lança para o consumer |
 
-Depende apenas de `domain/` e das **interfaces** em `application/gateways/`. Não importa `infrastructure/`.
+Timeout: `AbortController` cancela download/ffmpeg; o diretório temporário é removido no `finally`.
+
+Ownership de falha:
+
+- **Use case** — falhas permanentes (`video.failed` + outcome).
+- **Consumer** — só esgotamento de tentativas transitórias (`video.failed` + DLQ).
 
 ### Gateways (interfaces em `application/gateways/`)
 
-| Gateway          | Operações                                                 |
-| ---------------- | --------------------------------------------------------- |
-| `ObjectStorage`  | `downloadToFile`, `uploadFile`, `deleteObject`            |
-| `FrameExtractor` | `extract(input, outputDir) → paths`                       |
-| `ArchiveBuilder` | `createZip(files, outputPath)`                            |
-| `EventPublisher` | `publish(envelope, routingKey)` (ou contrato equivalente) |
-| `WorkDirectory`  | `createTempDir`, `removeDir`                              |
-
-Opcional: `Clock` / `IdGenerator` como gateways se quiser evitar `Date`/`randomUUID` direto no use case (facilita teste).
+| Gateway          | Operações                                                                      |
+| ---------------- | ------------------------------------------------------------------------------ |
+| `ObjectStorage`  | `downloadToFile`, `uploadFile`, `deleteObject`, `ping` (streams + AbortSignal) |
+| `FrameExtractor` | `extract(input, outputDir, signal?) → paths`                                   |
+| `ArchiveBuilder` | `createZip(files, outputPath)`                                                 |
+| `EventPublisher` | `publish(started \| processed \| failed)` tipado                               |
+| `WorkDirectory`  | `createTempDir`, `removeDir`                                                   |
 
 ### Interface Adapters de entrada (`infrastructure/messaging/`)
 
-| Componente              | Responsabilidade                                                                                                                                                     |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `VideoUploadedConsumer` | Valida envelope (`@zipframes/schemas`), monta `ProcessingJob`, chama o use case, aplica ack / retry / DLQ e, na última tentativa transitória, publica `video.failed` |
+| Componente              | Responsabilidade                                                                                          |
+| ----------------------- | --------------------------------------------------------------------------------------------------------- |
+| `VideoUploadedConsumer` | Valida envelope, `runWithCorrelationId`, chama use case, settle (ack / retry / DLQ), métricas e logs JSON |
 
-Não contém a política de frames nem a chave do zip — isso fica no domínio / use case.
-
-### Implementações de gateway (`infrastructure/gateways/`)
-
-| Implementação          | Driver                                  |
-| ---------------------- | --------------------------------------- |
-| `S3ObjectStorage`      | `@aws-sdk/client-s3` (SeaweedFS)        |
-| `FfmpegFrameExtractor` | processo `ffmpeg`                       |
-| `ZipArchiveBuilder`    | `archiver` (store)                      |
-| `AmqpEventPublisher`   | canal AMQP / `@zipframes/communication` |
-| `FsWorkDirectory`      | `node:fs` sob `WORK_DIR`                |
+Envelope inválido (poison) → DLQ **sem** `video.failed`.
 
 ### Composition root (`main/`)
 
-Lê config, cria drivers e implementações de gateway, instancia o use case, liga o consumer à fila `processor.video.uploaded`, inicia o loop de consumo.
+Lê config, cria drivers, asserta topologia, inicia consume, sobe health/metrics HTTP, shutdown graceful (cancela consume, drena in-flight, fecha canal).
 
-## Fluxo de uma mensagem
+## Topologia AMQP (retry real)
 
 ```mermaid
 flowchart LR
-  subgraph external [Exterior]
-    Q[RabbitMQ]
-    S3[Object storage]
-    FF[ffmpeg]
-  end
+  events[zipframes.events]
+  main[processor.video.uploaded]
+  wait[processor.video.uploaded.wait]
+  dlx[zipframes.events.dlx]
+  dlq[zipframes.events.dlq]
 
-  subgraph infra [infrastructure]
-    Cons[VideoUploadedConsumer]
-    Pub[AmqpEventPublisher]
-    Stor[S3ObjectStorage]
-    Ext[FfmpegFrameExtractor]
-  end
-
-  subgraph app [application]
-    UC[ProcessUploadedVideo]
-    GW[gateway interfaces]
-  end
-
-  subgraph dom [domain]
-    Job[ProcessingJob]
-    Pol[FrameExtractionPolicy]
-  end
-
-  Q --> Cons
-  Cons --> UC
-  UC --> Job
-  UC --> Pol
-  UC --> GW
-  GW -. implementado por .-> Stor
-  GW -. implementado por .-> Ext
-  GW -. implementado por .-> Pub
-  Stor --> S3
-  Ext --> FF
-  Pub --> Q
+  events -->|video.uploaded| main
+  main -->|nack requeue=false| dlx --> dlq
+  main -->|retry: publish + ack| wait
+  wait -->|TTL expiration DLX| events
 ```
+
+| Destino settle | Comportamento                                                                                                   |
+| -------------- | --------------------------------------------------------------------------------------------------------------- |
+| `ack`          | Confirma a mensagem                                                                                             |
+| `retry`        | Publica na fila **wait** com `expiration` (backoff) + header `x-attempt` + ack da original — **não** é nack→DLQ |
+| `dlq`          | `nack(requeue=false)` → DLX da fila principal → `zipframes.events.dlq`                                          |
+
+Config: `MAX_ATTEMPTS`, `RETRY_BASE_DELAY_MS`, `RETRY_MAX_DELAY_MS`.
+
+## Contratos de falha
+
+| Caso                         | Evento            | Settle                       |
+| ---------------------------- | ----------------- | ---------------------------- |
+| Sucesso                      | `video.processed` | ack                          |
+| Permanente (mídia inválida…) | `video.failed`    | ack                          |
+| Transitória, attempts < max  | —                 | retry (wait queue + backoff) |
+| Transitória, attempt = max   | `video.failed`    | dlq                          |
+| Envelope poison              | —                 | dlq                          |
 
 ## Eventos
 
@@ -179,7 +165,12 @@ flowchart LR
 | Out     | `video.processed`          | Sucesso (`resultKey`, `frameCount`, `durationMs`) |
 | Out     | `video.failed`             | Falha permanente ou esgotamento de tentativas     |
 
-Exchange: `zipframes.events`. Fila do worker: `processor.video.uploaded`.
+## Observabilidade e operação
+
+- Logs estruturados: `videoId`, `ownerId`, `attempt`, `errorCode`, `kind`, `durationMs`, `outcome` (com `correlationId` via ALS).
+- Métricas Prometheus (`@zipframes/telemetry`): `messages_handled_total` / `message_duration_seconds` por outcome (`success`, `permanent_failure`, `transient_retry`, `exhausted`, `delete_original_failed`).
+- HTTP: `GET /livez` (liveness), `GET /readyz` (AMQP conectado + `HeadBucket` no storage), `GET /metrics` na porta de métricas.
+- Falha ao apagar o original após sucesso/permanente: log + métrica (cleanup secundário; não falha o job).
 
 ## Regras de dependência (verificação)
 
@@ -187,14 +178,14 @@ Verificadas pelo dependency-cruiser (`.dependency-cruiser.mjs`):
 
 - `domain/` → não importa `application/`, `infrastructure/`, `main/`, nem libs de infra
 - `application/` → só `domain/`; **não** importa `infrastructure/` nem libs de broker/storage
-- `infrastructure/` → pode importar `application/` e `domain/` (implementa gateways e chama use cases); não importa `main/`
+- `infrastructure/` → pode importar `application/` e `domain/`; não importa `main/`
 - `main/` → monta o grafo
 
-Pacotes `@zipframes/communication`, `@zipframes/schemas`, `@zipframes/logger` entram pela borda (`infrastructure/` / `main/`), não pelo `domain/`.
+Pacotes `@zipframes/communication`, `@zipframes/schemas`, `@zipframes/logger`, `@zipframes/telemetry` entram pela borda (`infrastructure/` / `main/`), não pelo `domain/`.
 
 ## Fora de escopo deste serviço
 
 - Banco de dados e migrations
-- HTTP / JWT / JWKS
+- HTTP de negócio / JWT / JWKS (apenas health/metrics)
 - Decisão de status do vídeo no agregado `Video` (isso é video-service)
 - Envio de e-mail (notification-service consome `video.failed`)
