@@ -19,11 +19,14 @@ concurrency:
 
 permissions:
   contents: read
+  packages: read
 
 jobs:
   verify:
     name: Lint, typecheck, layers, build and test
     runs-on: ubuntu-latest
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v5
 
@@ -33,13 +36,16 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: pnpm
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            services/processor-worker/pnpm-lock.yaml
 
-      # The @zipframes/* packages are published to GitHub Packages, which
-      # requires authentication even for public packages.
-      - name: Install dependencies
+      - name: Install root tooling
         run: pnpm install --frozen-lockfile
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
+
+      - name: Install processor-worker
+        working-directory: services/processor-worker
+        run: pnpm install --frozen-lockfile
 
       - name: Format
         run: pnpm format
@@ -73,7 +79,7 @@ jobs:
           node-version-file: .nvmrc
           # setup-node@v5 enables the package manager cache by default,
           # which invokes pnpm to resolve the cache directory. This job
-          # never installs the workspace — it only runs two npx tools
+          # never installs the repo — it only runs two npx tools
           # against the spec files — so pnpm is not set up here.
           package-manager-cache: false
 

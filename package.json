@@ -3,15 +3,12 @@
   "private": true,
   "version": "0.0.0",
   "description": "ZipFrames — sistema de processamento de vídeos da FIAP X",
-  "workspaces": [
-    "services/*"
-  ],
   "scripts": {
-    "build": "turbo build",
-    "test": "turbo test",
+    "build": "pnpm --dir services/processor-worker build",
+    "test": "pnpm --dir services/processor-worker test",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "typecheck": "turbo typecheck",
+    "typecheck": "pnpm --dir services/processor-worker typecheck",
     "check:layers": "sh validate-layers.sh",
     "format": "prettier --check .",
     "format:write": "prettier --write .",
@@ -30,7 +27,6 @@
     "husky": "^9.1.7",
     "lint-staged": "^16.1.0",
     "prettier": "^3.5.3",
-    "turbo": "^2.5.4",
     "typescript": "^5.8.3",
     "dependency-cruiser": "^16.10.2"
   },

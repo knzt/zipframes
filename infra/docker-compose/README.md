@@ -26,6 +26,8 @@ Na raiz do monorepo, os atalhos equivalentes são `pnpm infra:up`, `pnpm infra:d
 | SeaweedFS (filer)  | 8888  | http://localhost:8888                                           |
 | Mailpit (SMTP)     | 1025  | `smtp://localhost:1025`                                         |
 | Mailpit (web)      | 8025  | http://localhost:8025                                           |
+| processor-worker   | 8081  | http://localhost:8081/readyz                                    |
+| processor-worker   | 9091  | http://localhost:9091/metrics                                   |
 
 As três instâncias de PostgreSQL existem para manter o isolamento real entre serviços
 
@@ -44,6 +46,15 @@ docker run --rm --network zipframes \
 ```
 
 O container `storage-init` cria o bucket `videos` na primeira subida e encerra. Vê-lo como `Exited (0)` é o comportamento esperado.
+
+O `processor-worker` sobe junto. Antes do build da imagem, no serviço:
+
+```bash
+pnpm --dir services/processor-worker build
+pnpm --dir services/processor-worker stage-runtime
+```
+
+`stage-runtime` monta os `node_modules` de produção já instalados. O build da imagem não baixa `@zipframes/*` de novo. Com RabbitMQ e o bucket saudáveis, `GET /readyz` responde 200.
 
 ## Zerar tudo
 
