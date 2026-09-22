@@ -6,15 +6,18 @@ RUN apt-get update \
 
 WORKDIR /app
 
-COPY package.json pnpm-lock.yaml* ./
-COPY services/processor-worker/package.json services/processor-worker/
+COPY package.json pnpm-lock.yaml .npmrc ./
 
-RUN corepack enable && pnpm install --filter @zipframes/processor-worker --frozen-lockfile
+ARG NODE_AUTH_TOKEN
+ENV NODE_AUTH_TOKEN=$NODE_AUTH_TOKEN
 
-COPY services/processor-worker services/processor-worker
+RUN corepack enable && pnpm install --frozen-lockfile
 
-RUN pnpm --filter @zipframes/processor-worker build
+COPY tsconfig.json tsconfig.build.json ./
+COPY src ./src
+
+RUN pnpm build \
+  && rm -f .npmrc
 
 ENV NODE_ENV=production
-WORKDIR /app/services/processor-worker
 CMD ["node", "dist/main/index.js"]
