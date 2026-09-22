@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: processor-worker
+  namespace: zipframes
+  labels:
+    app: processor-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: processor-worker
+  template:
+    metadata:
+      labels:
+        app: processor-worker
+    spec:
+      terminationGracePeriodSeconds: 40
+      containers:
+        - name: processor-worker
+          image: zipframes-processor-worker:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: health
+              containerPort: 8081
+            - name: metrics
+              containerPort: 9091
+          envFrom:
+            - configMapRef:
+                name: processor-worker
+            - secretRef:
+                name: processor-worker
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: health
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: '1'
+              memory: 1Gi

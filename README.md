@@ -25,7 +25,7 @@ zipframes/
 └── tests/             # testes e2e e de carga
 ```
 
-Cada serviço tem `package.json`, `Dockerfile`, migrations e testes próprios. **Nenhum serviço importa código de outro serviço.**
+Cada serviço tem `package.json`, `pnpm-lock.yaml`, `Dockerfile`, migrations e testes próprios. **Nenhum serviço importa código de outro serviço.** Não há pnpm workspace: a raiz só tem o tooling do repositório (lint, format, hooks); cada serviço instala e trava as próprias dependências.
 
 O código compartilhado não vive aqui: ele é publicado como pacotes npm (`@zipframes/*`) a partir de um repositório próprio, e cada serviço declara a versão que usa. Assim um serviço só adota uma mudança quando escolhe subir de versão, em vez de ser afetado no mesmo instante.
 
@@ -49,14 +49,18 @@ Os pacotes trazem **forma**, nunca **política**: validam o que é universal (um
 ## Desenvolvimento local
 
 ```bash
-# instalar dependências
+# tooling do repositório (eslint, prettier, husky)
 pnpm install
 
-# subir a infraestrutura (Postgres, RabbitMQ, Redis, SeaweedFS, Mailpit)
-docker compose -f infra/docker-compose/docker-compose.yml up -d
+# cada serviço tem o próprio lockfile — instale dentro dele
+cd services/processor-worker
+pnpm install   # precisa de NODE_AUTH_TOKEN para @zipframes/* no GitHub Packages
 
-# rodar todos os serviços em modo watch
-pnpm build --filter=...
+# subir a infraestrutura (Postgres, RabbitMQ, Redis, SeaweedFS, Mailpit)
+pnpm infra:up
+
+# build / testes do worker (a partir da raiz ou do serviço)
+pnpm --dir services/processor-worker test
 ```
 
 ## Convenções
@@ -80,7 +84,7 @@ pnpm build --filter=...
 | E-mail           | Nodemailer                                    |
 | Banco de dados   | PostgreSQL (uma instância por serviço)        |
 | Testes           | Vitest + Testcontainers                       |
-| Monorepo         | pnpm workspaces + Turborepo                   |
+| Monorepo         | um `pnpm-lock.yaml` por serviço               |
 | Containers       | Docker + Kubernetes (kind)                    |
 | Escala           | KEDA (worker escala pelo tamanho da fila)     |
 | CD               | Argo CD (GitOps)                              |
