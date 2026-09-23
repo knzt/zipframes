@@ -146,6 +146,50 @@ services:
     networks: [zipframes]
     restart: 'no'
 
+  # ─── Identidade ─────────────────────────────────────────────
+  auth-service:
+    build:
+      context: ../../services/auth-service
+      dockerfile: Dockerfile
+      secrets:
+        - node_auth_token
+    image: zipframes-auth-service
+    container_name: zipframes-auth-service
+    depends_on:
+      auth-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      AUTH_DATABASE_URL: postgresql://${AUTH_DB_USER:-zipframes}:${AUTH_DB_PASSWORD:-zipframes}@auth-db:5432/${AUTH_DB_NAME:-auth_db}
+      AMQP_URL: amqp://${RABBITMQ_USER:-zipframes}:${RABBITMQ_PASSWORD:-zipframes}@rabbitmq:5672
+      JWT_PRIVATE_KEY_FILE: /run/secrets/jwt-dev.pem
+      JWT_KID: dev-1
+      JWT_ISSUER: https://auth.zipframes.local
+      JWT_AUDIENCE: zipframes
+      PORT: '3000'
+      OUTBOX_INTERVAL_MS: '2000'
+      OUTBOX_MAX_ATTEMPTS: '30'
+      LOG_LEVEL: info
+      SERVICE_VERSION: '0.1.0'
+    volumes:
+      - ./auth/jwt-dev.pem:/run/secrets/jwt-dev.pem:ro
+    ports:
+      - '${AUTH_HTTP_PORT:-3000}:3000'
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000/health/ready').then((response)=>process.exit(response.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks: [zipframes]
+
   # ─── Processamento ──────────────────────────────────────────
   processor-worker:
     build:
@@ -216,3 +260,7 @@ volumes:
 networks:
   zipframes:
     name: zipframes
+
+secrets:
+  node_auth_token:
+    environment: NODE_AUTH_TOKEN
