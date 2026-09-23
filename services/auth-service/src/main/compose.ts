@@ -16,8 +16,8 @@ import { createAmqpPublishPort } from '../infrastructure/messaging/amqp-publishe
 import { connectAmqp } from '../infrastructure/messaging/amqp-connection.js';
 import { createOutboxRelay } from '../infrastructure/messaging/outbox-relay.js';
 import { createOutboxMetrics } from '../infrastructure/observability/outbox-metrics.js';
-import { createPrismaClient, pingDatabase } from '../infrastructure/repositories/prisma-client.js';
-import { PrismaUserRepository } from '../infrastructure/repositories/prisma-user-repository.js';
+import { createPrismaClient, pingDatabase } from '../infrastructure/repositories/prisma/client.js';
+import { PrismaUserRepository } from '../infrastructure/repositories/prisma/user-repository.js';
 
 export const startAuthService = async (): Promise<{ stop: () => Promise<void> }> => {
   const config = loadConfig();

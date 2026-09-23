@@ -14,7 +14,6 @@ RUN --mount=type=secret,id=node_auth_token \
     pnpm install --frozen-lockfile
 
 COPY tsconfig.json tsconfig.build.json ./
-COPY prisma ./prisma
 COPY src ./src
 RUN pnpm exec prisma generate \
   && pnpm exec tsc -p tsconfig.build.json \
@@ -31,7 +30,8 @@ ENV NODE_ENV=production
 
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
-COPY --from=build /app/prisma ./prisma
+COPY --from=build /app/src/infrastructure/repositories/prisma/schema.prisma ./src/infrastructure/repositories/prisma/schema.prisma
+COPY --from=build /app/src/infrastructure/repositories/prisma/migrations ./src/infrastructure/repositories/prisma/migrations
 COPY --from=build /app/package.json ./
 
 CMD ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy && node dist/main/index.js"]

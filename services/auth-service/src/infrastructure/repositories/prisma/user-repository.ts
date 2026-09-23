@@ -5,10 +5,10 @@ import { Prisma, type PrismaClient } from '@prisma/client';
 import { err, ok } from '@zipframes/core';
 import type { Result } from '@zipframes/core';
 
-import { asPasswordHash } from '../../domain/password.js';
-import { asUserId } from '../../domain/user.js';
-import type { User, UserRegistered } from '../../domain/user.js';
-import type { EmailTakenError, UserRepository } from '../../domain/user-repository.js';
+import { asPasswordHash } from '../../../domain/password.js';
+import { asUserId } from '../../../domain/user.js';
+import type { User, UserRegistered } from '../../../domain/user.js';
+import type { EmailTakenError, UserRepository } from '../../../domain/user-repository.js';
 
 const UNIQUE_CONSTRAINT_VIOLATION = 'P2002';
 

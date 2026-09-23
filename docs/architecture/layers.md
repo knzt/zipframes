@@ -24,7 +24,13 @@ A regra é a direção da dependência, não um único mapa de pastas. A interfa
 | `src/infrastructure/` | Interface Adapters + Frameworks & Drivers | Gateways, controllers, clientes (amqplib, S3, Prisma, Fastify…)                                   |
 | `src/main/`           | Composition root                          | Wiring na inicialização                                                                           |
 
-`infrastructure/` agrupa as duas camadas externas numa pasta só. `application/gateways/` é um lugar válido quando a interface pertence ao caso de uso, como no [processor-worker](./services/processor-worker.md). Não é obrigatório: o [auth-service](./services/auth-service.md) declara `UserRepository` em `domain/` e implementa o gateway em `infrastructure/repositories/`.
+`infrastructure/` agrupa as duas camadas externas numa pasta só. `application/gateways/` é um lugar válido quando a interface pertence ao caso de uso, como no [processor-worker](./services/processor-worker.md). O [auth-service](./services/auth-service.md) declara `UserRepository` em `domain/` e implementa o gateway em `infrastructure/repositories/`.
+
+### Dependência externa
+
+O código que importa um SDK mora em `src/infrastructure/`. A interface que esse código implementa mora na camada da regra: `domain/` quando o contrato é da entidade, `application/` quando o contrato existe para o caso de uso. `main/` instancia o SDK e entrega a classe pronta ao caso de uso.
+
+Tudo o que pertence a um SDK fica na pasta desse gateway. Para o Prisma, schema, migrations, client e o repositório concreto ficam juntos em `src/infrastructure/repositories/prisma/`. O `package.json` aponta `prisma.schema` para esse schema; `prisma generate` e `prisma migrate` seguem esse caminho.
 
 ### Layout legado
 

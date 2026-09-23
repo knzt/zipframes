@@ -23,14 +23,27 @@ Frameworks & Drivers  →  Interface Adapters  →  Use Cases  →  Entities
 | Interface Adapters + Frameworks & Drivers | `src/infrastructure/` | Gateway Prisma, bcrypt, RS256, rotas HTTP, relay do outbox                                                   |
 | Composition root                          | `src/main/`           | `compose.ts` monta o grafo; `index.ts` trata sinal e shutdown                                                |
 
-O **gateway** é a classe de fora. `PrismaUserRepository` implementa `UserRepository` e mora em `infrastructure/repositories/`. A interface fica no domínio, ao lado de `User`, porque persistir e buscar usuário é contrato da entidade. O caso de uso chama a interface e não importa Prisma.
+O **gateway** é a classe de fora. A interface `UserRepository` fica no domínio, ao lado de `User`, porque persistir e buscar usuário é contrato da entidade. O caso de uso chama essa interface.
+
+O Prisma fica reunido no gateway:
+
+```
+src/domain/user-repository.ts                         # interface UserRepository
+src/infrastructure/repositories/prisma/
+├── schema.prisma                                     # schema; prisma.schema no package.json aponta aqui
+├── migrations/
+├── client.ts                                         # cria o PrismaClient
+└── user-repository.ts                                # PrismaUserRepository implementa UserRepository
+```
+
+`PrismaUserRepository` mapeia a linha do Postgres para `User` e grava o outbox na mesma transação. `main/compose.ts` cria o client e injeta o gateway no caso de uso.
 
 ## Casos de uso
 
-| Caso de uso    | O que faz                                                                                                                                                            |
-| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `registerUser` | Valida a senha, pede o hash, monta o `User` e entrega `User` + `UserRegistered` ao repositório. E-mail duplicado volta `EMAIL_TAKEN`.                                |
-| `login`        | Normaliza o e-mail, busca o usuário e compara a senha. E-mail desconhecido também passa pelo `verify`, para não ser mais rápido que uma senha errada. Emite o token. |
+| Caso de uso    | O que faz                                                                                                                                   |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `registerUser` | Valida a senha, pede o hash, monta o `User` e entrega `User` + `UserRegistered` ao repositório. E-mail duplicado volta `EMAIL_TAKEN`.       |
+| `login`        | Normaliza o e-mail, busca o usuário e compara a senha. E-mail desconhecido responde `INVALID_CREDENTIALS` sem comparar hash. Emite o token. |
 
 Falha de login é sempre `INVALID_CREDENTIALS`.
 

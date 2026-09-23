@@ -19,7 +19,7 @@ src/
 ├── infrastructure/
 │   ├── config.ts
 │   ├── http/               # controllers
-│   ├── repositories/       # gateway Prisma (usuário + outbox na mesma transação)
+│   ├── repositories/prisma/  # schema, migrations, client e PrismaUserRepository
 │   ├── crypto/             # bcrypt e RS256
 │   ├── messaging/          # conexão, publisher, envelope, relay
 │   └── observability/
