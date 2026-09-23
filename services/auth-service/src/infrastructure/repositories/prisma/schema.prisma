@@ -1,0 +1,46 @@
+// Matches docs/data/modelagem-de-dados.md exactly: this file (and the
+// generated migration SQL) is the script of record for the auth-db schema.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("AUTH_DATABASE_URL")
+}
+
+model User {
+  id           String   @id @db.Uuid
+  name         String   @db.VarChar(120)
+  email        String   @unique @db.VarChar(255)
+  passwordHash String   @map("password_hash") @db.Char(60)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime @default(now()) @map("updated_at") @db.Timestamptz
+
+  @@map("users")
+}
+
+/// Events pending publication, written in the same transaction as the
+/// aggregate that raised them (ADR-0008). The relay reads what has no
+/// `publishedAt` yet and publishes it.
+///
+/// The partial index over pending rows (`WHERE published_at IS NULL`,
+/// per docs/data/modelagem-de-dados.md) is not expressible in the Prisma
+/// schema DSL, which only supports full indexes. It is added by hand in
+/// the migration SQL instead of declared here, where a full index would
+/// silently replace the documented design with a bigger one that keeps
+/// growing as published rows pile up.
+model OutboxEvent {
+  id             String    @id @db.Uuid
+  aggregateType  String    @map("aggregate_type") @db.VarChar(50)
+  aggregateId    String    @map("aggregate_id") @db.Uuid
+  eventType      String    @map("event_type") @db.VarChar(100)
+  version        Int       @default(1) @db.SmallInt
+  payload        Json
+  correlationId  String?   @map("correlation_id") @db.Uuid
+  occurredAt     DateTime  @default(now()) @map("occurred_at") @db.Timestamptz
+  publishedAt    DateTime? @map("published_at") @db.Timestamptz
+  attempts       Int       @default(0) @db.SmallInt
+
+  @@map("outbox")
+}

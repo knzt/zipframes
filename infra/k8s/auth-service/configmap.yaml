@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: auth-service
+  namespace: zipframes
+data:
+  PORT: '3000'
+  CORS_ORIGIN: '*'
+  JWT_ISSUER: https://auth.zipframes.local
+  JWT_AUDIENCE: zipframes
+  JWT_KID: auth-1
+  OUTBOX_INTERVAL_MS: '2000'
+  OUTBOX_MAX_ATTEMPTS: '30'
+  LOG_LEVEL: info
+  SERVICE_VERSION: '0.1.0'

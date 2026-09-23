@@ -1,0 +1,74 @@
+# Checks scoped to the auth-service.
+#
+# Triggered by path, so a change to another service does not run this suite.
+# The service installs itself: the repository no longer has a pnpm workspace.
+name: auth-service
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'services/auth-service/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'tsconfig.base.json'
+      - 'eslint.config.mjs'
+      - '.dependency-cruiser.mjs'
+      - '.github/workflows/auth-service.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'services/auth-service/**'
+
+concurrency:
+  group: auth-service-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  verify:
+    name: Typecheck, layers, build and test
+    runs-on: ubuntu-latest
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            services/auth-service/pnpm-lock.yaml
+
+      - name: Install root tooling
+        run: pnpm install --frozen-lockfile
+
+      - name: Install auth-service
+        working-directory: services/auth-service
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate the Prisma client
+        working-directory: services/auth-service
+        run: pnpm db:generate
+
+      - name: Typecheck
+        working-directory: services/auth-service
+        run: pnpm typecheck
+
+      - name: Layer rules
+        run: pnpm check:layers
+
+      - name: Build
+        working-directory: services/auth-service
+        run: pnpm build
+
+      - name: Test with coverage
+        working-directory: services/auth-service
+        run: pnpm test:coverage
