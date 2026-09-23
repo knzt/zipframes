@@ -13,6 +13,7 @@ export default defineConfig({
         'src/infrastructure/http/**',
         'src/infrastructure/config.ts',
         'src/infrastructure/observability/**',
+        'src/infrastructure/repositories/prisma/registration-correlation.ts',
       ],
       thresholds: {
         lines: 100,

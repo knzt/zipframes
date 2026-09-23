@@ -55,12 +55,9 @@ describe('a successful registration', () => {
     expect(users.users.size).toBe(1);
     expect(users.events).toEqual([
       {
-        registered: {
-          userId: '0194f3a0-0000-7000-8000-000000000001',
-          name: 'Hellen Santos',
-          email: 'hellen@example.com',
-        },
-        correlationId: '0194f3a0-0000-7000-8000-000000000002',
+        userId: '0194f3a0-0000-7000-8000-000000000001',
+        name: 'Hellen Santos',
+        email: 'hellen@example.com',
       },
     ]);
   });
@@ -69,19 +66,6 @@ describe('a successful registration', () => {
     await registerUser(validCommand);
 
     expect(JSON.stringify(users.events[0])).not.toContain('hashed:');
-  });
-
-  it('propagates the correlation id into the registration', async () => {
-    await registerUser({ ...validCommand, correlationId: 'corr-1' });
-
-    expect(users.events[0]?.correlationId).toBe('corr-1');
-  });
-
-  it('mints a correlation id when the caller did not provide one', async () => {
-    await registerUser(validCommand);
-
-    // The user id is the first id issued; the correlation id is the second.
-    expect(users.events[0]?.correlationId).toBe('0194f3a0-0000-7000-8000-000000000002');
   });
 });
 

@@ -49,7 +49,7 @@ Falha de login é sempre `INVALID_CREDENTIALS`.
 
 ## Outbox
 
-O gateway grava a linha de `outbox` na mesma transação do usuário. O relay publica o que está pendente.
+O gateway grava a linha de `outbox` na mesma transação do usuário e coloca nela o id de correlação do pedido. Se o pedido não trouxe um, o gateway cria. O relay publica o que está pendente.
 
 - Intervalo: `OUTBOX_INTERVAL_MS` (padrão 2s).
 - Teto: `OUTBOX_MAX_ATTEMPTS` (padrão 30), cerca de um minuto de broker fora do ar.

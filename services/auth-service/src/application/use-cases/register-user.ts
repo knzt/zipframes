@@ -12,7 +12,6 @@ export interface RegisterUserCommand {
   readonly name: string;
   readonly email: string;
   readonly password: string;
-  readonly correlationId?: string | undefined;
 }
 
 export interface RegisterUserResult {
@@ -55,12 +54,7 @@ export const makeRegisterUser =
       return err({ code: 'INVALID_INPUT' as const, message: user.error.message });
     }
 
-    // @zipframes/schemas requires every published envelope to carry a real
-    // correlationId. A caller with no incoming id still gets one minted
-    // here, rather than leaving it for the relay to notice missing at
-    // publish time. The outbox row itself is the repository's concern.
-    const correlationId = command.correlationId ?? deps.ids.next();
-    const saved = await deps.users.save(user.value, userRegisteredFrom(user.value), correlationId);
+    const saved = await deps.users.save(user.value, userRegisteredFrom(user.value));
     if (!saved.ok) {
       return err({ code: 'EMAIL_TAKEN' as const, message: 'email is already registered' });
     }

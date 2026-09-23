@@ -9,6 +9,7 @@ import { asPasswordHash } from '../../../domain/password.js';
 import { asUserId } from '../../../domain/user.js';
 import type { User, UserRegistered } from '../../../domain/user.js';
 import type { EmailTakenError, UserRepository } from '../../../domain/user-repository.js';
+import { correlationIdForRegistration } from './registration-correlation.js';
 
 const UNIQUE_CONSTRAINT_VIOLATION = 'P2002';
 
@@ -36,11 +37,8 @@ export class PrismaUserRepository implements UserRepository {
     return row === null ? null : toDomain(row);
   }
 
-  async save(
-    user: User,
-    registered: UserRegistered,
-    correlationId: string,
-  ): Promise<Result<void, EmailTakenError>> {
+  async save(user: User, registered: UserRegistered): Promise<Result<void, EmailTakenError>> {
+    const correlationId = correlationIdForRegistration();
     try {
       await this.prisma.$transaction([
         this.prisma.user.create({

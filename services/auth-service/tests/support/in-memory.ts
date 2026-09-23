@@ -9,33 +9,24 @@ import type { PasswordHasher } from '../../src/domain/password-hasher.js';
 import type { User, UserId, UserRegistered } from '../../src/domain/user.js';
 import type { EmailTakenError, UserRepository } from '../../src/domain/user-repository.js';
 
-export interface SavedRegistration {
-  readonly registered: UserRegistered;
-  readonly correlationId: string;
-}
-
 /**
  * In-memory stand-ins for the domain and use-case interfaces, so the use
  * cases can be tested without a database, a broker or bcrypt.
  */
 export class InMemoryUserRepository implements UserRepository {
   readonly users = new Map<string, User>();
-  readonly events: SavedRegistration[] = [];
+  readonly events: UserRegistered[] = [];
 
   findByEmail(email: string): Promise<User | null> {
     return Promise.resolve(this.users.get(email) ?? null);
   }
 
-  save(
-    user: User,
-    registered: UserRegistered,
-    correlationId: string,
-  ): Promise<Result<void, EmailTakenError>> {
+  save(user: User, registered: UserRegistered): Promise<Result<void, EmailTakenError>> {
     if (this.users.has(user.email)) {
       return Promise.resolve(err({ code: 'EMAIL_TAKEN' as const }));
     }
     this.users.set(user.email, user);
-    this.events.push({ registered, correlationId });
+    this.events.push(registered);
     return Promise.resolve(ok(undefined));
   }
 }

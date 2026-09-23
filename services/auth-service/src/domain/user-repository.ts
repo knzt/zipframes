@@ -9,16 +9,9 @@ export interface EmailTakenError {
 export interface UserRepository {
   findByEmail: (email: string) => Promise<User | null>;
   /**
-   * Persists the user and the registration fact together.
-   *
-   * The gateway writes the outbox row in the same transaction as the user.
-   * Publishing without the row would tell the notification context about a
-   * user the database does not have, and the reverse would leave an event
-   * that is never published.
+   * Persists the user and the registration fact together, in one transaction.
+   * A registration is never recorded without its user, and a user is never
+   * stored without the fact that they registered.
    */
-  save: (
-    user: User,
-    registered: UserRegistered,
-    correlationId: string,
-  ) => Promise<Result<void, EmailTakenError>>;
+  save: (user: User, registered: UserRegistered) => Promise<Result<void, EmailTakenError>>;
 }

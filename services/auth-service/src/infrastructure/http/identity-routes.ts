@@ -48,7 +48,7 @@ export const registerIdentityRoutes = (
         return;
       }
 
-      const result = await deps.registerUser({ ...body.value, correlationId });
+      const result = await deps.registerUser(body.value);
 
       if (!result.ok) {
         const status = result.error.code === 'EMAIL_TAKEN' ? 409 : 400;
