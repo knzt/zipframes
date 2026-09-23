@@ -5,5 +5,5 @@
     "noEmit": false
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["test/**/*.ts"]
+  "exclude": ["tests/**/*.ts", "vitest.config.ts"]
 }

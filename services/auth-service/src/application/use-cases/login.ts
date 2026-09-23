@@ -1,9 +1,10 @@
 import { err, ok } from '@zipframes/core';
 import type { Result } from '@zipframes/core';
-
 import { Email } from '@zipframes/value-objects';
 
-import type { PasswordHasher, TokenIssuer, UserRepository } from '../ports/index.js';
+import type { PasswordHasher } from '../../domain/password-hasher.js';
+import type { UserRepository } from '../../domain/user-repository.js';
+import type { TokenIssuer } from '../token-issuer.js';
 
 export interface LoginCommand {
   readonly email: string;
@@ -30,7 +31,7 @@ export interface LoginDependencies {
 /**
  * The same error for every failure, on purpose: telling "no such email"
  * apart from "wrong password" would let anyone enumerate which addresses
- * are registered (docs/domain/dominio.md).
+ * are registered.
  */
 const invalidCredentials: LoginError = {
   code: 'INVALID_CREDENTIALS',
@@ -46,12 +47,10 @@ export const makeLogin =
     }
 
     const user = await deps.users.findByEmail(email.value);
-    if (user === null) {
-      return err(invalidCredentials);
-    }
-
-    const matches = await deps.hasher.verify(command.password, user.passwordHash);
-    if (!matches) {
+    // A missing user still pays for a comparison. Returning before verify
+    // would make "no such email" faster than "wrong password".
+    const matches = await deps.hasher.verify(command.password, user?.passwordHash ?? null);
+    if (user === null || !matches) {
       return err(invalidCredentials);
     }
 

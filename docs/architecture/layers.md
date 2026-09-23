@@ -2,7 +2,7 @@
 
 Este documento descreve as regras de dependência entre camadas, verificadas automaticamente pelo [dependency-cruiser](https://github.com/sverweij/dependency-cruiser) no CI e no script `pnpm check:layers`.
 
-Seguimos a **Clean Architecture** de Robert C. Martin (Uncle Bob). A arquitetura interna de cada microsserviço (mapa de pastas, gateways, fluxos) vive em [services/](./services/). Referência completa do worker: [processor-worker.md](./services/processor-worker.md).
+Seguimos a **Clean Architecture** de Robert C. Martin (Uncle Bob). A arquitetura interna de cada microsserviço (mapa de pastas, contratos e gateways) vive em [services/](./services/).
 
 ## A regra de dependência
 
@@ -13,16 +13,18 @@ Frameworks & Drivers  →  Interface Adapters  →  Use Cases  →  Entities
 (mais externo)                                              (mais interno)
 ```
 
-### Layout preferido (serviços novos)
+### Layout
 
-| Pasta                 | Camada Uncle Bob                          | Conteúdo                                                              |
-| --------------------- | ----------------------------------------- | --------------------------------------------------------------------- |
-| `src/domain/`         | Entities                                  | Conceitos e regras do contexto                                        |
-| `src/application/`    | Use Cases                                 | Casos de uso + **interfaces de gateway** (`application/gateways/`)    |
-| `src/infrastructure/` | Interface Adapters + Frameworks & Drivers | Consumers, implementações de gateway, clientes (amqplib, S3, Prisma…) |
-| `src/main/`           | Composition root                          | Wiring na inicialização                                               |
+A regra é a direção da dependência, não um único mapa de pastas. A interface fica na camada que define a regra. O **gateway** é a classe de fora que implementa essa interface e fala com um banco, um broker ou uma biblioteca. Ela vive em `infrastructure/`.
 
-`infrastructure/` agrupa as duas camadas externas numa pasta só. Saídas do use case são **gateways**: interface em `application/gateways/`, implementação em `infrastructure/gateways/`.
+| Pasta                 | Camada Uncle Bob                          | Conteúdo                                                                                          |
+| --------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `src/domain/`         | Entities                                  | Conceitos, regras e contratos do contexto (o repositório de um agregado, quando ele é do domínio) |
+| `src/application/`    | Use Cases                                 | Casos de uso e interfaces que existem por causa do caso de uso                                    |
+| `src/infrastructure/` | Interface Adapters + Frameworks & Drivers | Gateways, controllers, clientes (amqplib, S3, Prisma, Fastify…)                                   |
+| `src/main/`           | Composition root                          | Wiring na inicialização                                                                           |
+
+`infrastructure/` agrupa as duas camadas externas numa pasta só. `application/gateways/` é um lugar válido quando a interface pertence ao caso de uso, como no [processor-worker](./services/processor-worker.md). Não é obrigatório: o [auth-service](./services/auth-service.md) declara `UserRepository` em `domain/` e implementa o gateway em `infrastructure/repositories/`.
 
 ### Layout legado
 
@@ -30,12 +32,12 @@ Alguns esboços antigos usavam `src/adapters/` + `src/frameworks/`. O dependency
 
 ## O que cada pasta pode importar
 
-| Pasta                 | Pode importar                                                                                   | Nunca pode importar                                                                           |
-| --------------------- | ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `src/domain/`         | Biblioteca padrão, `@types/*`, `@zipframes/core`, `@zipframes/value-objects`                    | `application/`, `infrastructure/`, `adapters/`, `frameworks/`, `main/`, libs de infra         |
-| `src/application/`    | `domain/`, pacotes `@zipframes/*` de contrato (ex.: schemas só se inevitável; preferir gateway) | `infrastructure/`, `adapters/`, `frameworks/`, `main/`, Prisma, amqplib, `@aws-sdk`, Fastify… |
-| `src/infrastructure/` | `application/`, `domain/`, bibliotecas de integração                                            | `main/`                                                                                       |
-| `src/main/`           | Todas as camadas                                                                                | —                                                                                             |
+| Pasta                 | Pode importar                                                                | Nunca pode importar                                                                           |
+| --------------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `src/domain/`         | Biblioteca padrão, `@types/*`, `@zipframes/core`, `@zipframes/value-objects` | `application/`, `infrastructure/`, `adapters/`, `frameworks/`, `main/`, libs de infra         |
+| `src/application/`    | `domain/`, pacotes `@zipframes/*` de contrato                                | `infrastructure/`, `adapters/`, `frameworks/`, `main/`, Prisma, amqplib, `@aws-sdk`, Fastify… |
+| `src/infrastructure/` | `application/`, `domain/`, bibliotecas de integração                         | `main/`                                                                                       |
+| `src/main/`           | Todas as camadas                                                             | —                                                                                             |
 
 O `main/` é a única exceção que conhece todas as camadas para montar o grafo.
 
@@ -43,7 +45,7 @@ O `main/` é a única exceção que conhece todas as camadas para montar o grafo
 
 - **Serviços não importam outros serviços.** Código compartilhado vem dos pacotes npm `@zipframes/*`, por versão.
 - **Política fica no serviço.** O pacote valida forma (ex.: e-mail); o serviço decide política de negócio.
-- **Saídas do use case são gateways**, não imports diretos de SDK.
+- **A interface fica para dentro e o gateway para fora.** O caso de uso não importa SDK. A classe que fala com o SDK implementa a interface e mora em `infrastructure/`.
 
 ## Regras adicionais
 
@@ -67,7 +69,7 @@ pnpm exec depcruise --config .dependency-cruiser.mjs services/processor-worker/s
 1. Leia o nome da regra na saída.
 2. Opções comuns:
    - Mover o código para a camada correta.
-   - Extrair uma interface de gateway em `application/gateways/` e injetar a implementação pelo `main/`.
+   - Extrair a interface na camada que define a regra (`domain/` ou `application/`) e injetar o gateway pelo `main/`.
    - Publicar código técnico universal em um pacote `@zipframes/*`.
 3. Nunca suprima a regra sem comentário explicando o porquê.
 

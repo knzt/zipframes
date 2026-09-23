@@ -1,8 +1,7 @@
 # Checks scoped to the auth-service.
 #
-# Triggered by path, so a change to another service (or to the docs) does
-# not run this suite — and so this one runs whenever the shared root
-# configuration it depends on changes.
+# Triggered by path, so a change to another service does not run this suite.
+# The service installs itself: the repository no longer has a pnpm workspace.
 name: auth-service
 
 on:
@@ -12,7 +11,6 @@ on:
       - 'services/auth-service/**'
       - 'package.json'
       - 'pnpm-lock.yaml'
-      - 'pnpm-workspace.yaml'
       - 'tsconfig.base.json'
       - 'eslint.config.mjs'
       - '.dependency-cruiser.mjs'
@@ -28,11 +26,14 @@ concurrency:
 
 permissions:
   contents: read
+  packages: read
 
 jobs:
   verify:
     name: Typecheck, layers, build and test
     runs-on: ubuntu-latest
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v5
 
@@ -42,26 +43,32 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: pnpm
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            services/auth-service/pnpm-lock.yaml
 
-      # The @zipframes/* packages live in a separate repository and are
-      # published to GitHub Packages, which requires authentication even
-      # for public packages. PACKAGES_TOKEN is a read:packages token.
-      - name: Install dependencies
+      - name: Install root tooling
         run: pnpm install --frozen-lockfile
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
+
+      - name: Install auth-service
+        working-directory: services/auth-service
+        run: pnpm install --frozen-lockfile
 
       - name: Generate the Prisma client
-        run: pnpm --filter @zipframes/auth-service db:generate
+        working-directory: services/auth-service
+        run: pnpm db:generate
 
       - name: Typecheck
-        run: pnpm --filter @zipframes/auth-service typecheck
+        working-directory: services/auth-service
+        run: pnpm typecheck
 
       - name: Layer rules
         run: pnpm check:layers
 
       - name: Build
-        run: pnpm --filter @zipframes/auth-service build
+        working-directory: services/auth-service
+        run: pnpm build
 
       - name: Test with coverage
-        run: pnpm --filter @zipframes/auth-service test:coverage
+        working-directory: services/auth-service
+        run: pnpm test:coverage

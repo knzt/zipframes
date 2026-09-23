@@ -4,8 +4,9 @@ Documentos de arquitetura interna de cada microsserviço, alinhados à **Clean A
 
 As regras gerais de dependência do monorepo estão em [layers.md](../layers.md). Cada serviço pode detalhar aqui o mapa de pastas, componentes e fluxos do seu contexto.
 
-| Serviço            | Documento                                    | Persistência        |
-| ------------------ | -------------------------------------------- | ------------------- |
-| `processor-worker` | [processor-worker.md](./processor-worker.md) | Nenhuma (stateless) |
+| Serviço            | Documento                                    | Persistência         |
+| ------------------ | -------------------------------------------- | -------------------- |
+| `auth-service`     | [auth-service.md](./auth-service.md)         | Postgres (`auth-db`) |
+| `processor-worker` | [processor-worker.md](./processor-worker.md) | Nenhuma (stateless)  |
 
-Demais serviços (`auth-service`, `video-service`, `notification-service`, `web-client`) entram nesta pasta à medida que forem implementados.
+Demais serviços (`video-service`, `notification-service`, `web-client`) entram nesta pasta à medida que forem implementados.

@@ -46,7 +46,7 @@ export default {
     {
       name: 'application-não-importa-infrastructure',
       comment:
-        'Use Cases só podem importar domain/ e interfaces de gateway. ' +
+        'Use Cases só podem importar domain/ e as interfaces definidas lá ou na própria application/. ' +
         'Implementações ficam em infrastructure/ e são injetadas pelo main/.',
       severity: 'error',
       from: { path: '/src/application/' },
@@ -58,7 +58,7 @@ export default {
       name: 'application-não-importa-libs-de-infra',
       comment:
         'Use Cases não podem importar Prisma, amqplib, ioredis, @aws-sdk, nodemailer, fastify… ' +
-        'Use gateways em src/application/gateways/.',
+        'A interface fica em domain/ ou application/; a implementação fica em infrastructure/.',
       severity: 'error',
       from: { path: '/src/application/' },
       to: {

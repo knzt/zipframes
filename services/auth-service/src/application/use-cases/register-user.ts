@@ -2,14 +2,11 @@ import { err, ok } from '@zipframes/core';
 import type { Result } from '@zipframes/core';
 
 import { createPassword } from '../../domain/password.js';
+import type { PasswordHasher } from '../../domain/password-hasher.js';
+import type { UserRepository } from '../../domain/user-repository.js';
 import { registerUser, userRegisteredFrom } from '../../domain/user.js';
-import type {
-  Clock,
-  IdGenerator,
-  OutboxEvent,
-  PasswordHasher,
-  UserRepository,
-} from '../ports/index.js';
+import type { Clock } from '../clock.js';
+import type { IdGenerator } from '../id-generator.js';
 
 export interface RegisterUserCommand {
   readonly name: string;
@@ -59,26 +56,11 @@ export const makeRegisterUser =
     }
 
     // @zipframes/schemas requires every published envelope to carry a real
-    // correlationId (it is how a trace is followed from the request that
-    // caused it through every service the event reaches). A caller with no
-    // incoming id — a test, a script, a request that arrived without one —
-    // still gets one minted here, rather than leaving it for the relay to
-    // notice missing at publish time.
-    const event: OutboxEvent = {
-      id: deps.ids.next(),
-      aggregateType: 'User',
-      aggregateId: user.value.id,
-      eventType: 'user.registered',
-      version: 1,
-      payload: { ...userRegisteredFrom(user.value) },
-      correlationId: command.correlationId ?? deps.ids.next(),
-      occurredAt: now,
-    };
-
-    // Uniqueness is enforced by the database, not by a prior read: two
-    // concurrent registrations with the same email would both pass a
-    // check-then-insert.
-    const saved = await deps.users.saveWithEvent(user.value, event);
+    // correlationId. A caller with no incoming id still gets one minted
+    // here, rather than leaving it for the relay to notice missing at
+    // publish time. The outbox row itself is the repository's concern.
+    const correlationId = command.correlationId ?? deps.ids.next();
+    const saved = await deps.users.save(user.value, userRegisteredFrom(user.value), correlationId);
     if (!saved.ok) {
       return err({ code: 'EMAIL_TAKEN' as const, message: 'email is already registered' });
     }
