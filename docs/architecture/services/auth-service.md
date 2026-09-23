@@ -2,7 +2,7 @@
 
 Clean Architecture aplicada ao contexto de **Identidade** do ZipFrames.
 
-Referências: [dominio.md — Identidade](../../domain/dominio.md), [OpenAPI](../../openapi/auth-service.yaml), [AsyncAPI](../../asyncapi/events.yaml), [modelagem de dados](../../data/modelagem-de-dados.md).
+Referências: [dominio.md — Identidade](../../domain/dominio.md), [OpenAPI](../../openapi/auth-service.yaml), [AsyncAPI](../../asyncapi/events.yaml), [modelagem de dados](../../data/modelagem-de-dados.md), [regras de camadas](../layers.md).
 
 ## Objetivo do serviço
 
@@ -16,63 +16,77 @@ As dependências apontam para dentro.
 Frameworks & Drivers  →  Interface Adapters  →  Use Cases  →  Entities
 ```
 
-| Camada                                    | Pasta                 | O que há aqui                                                                                                |
-| ----------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------ |
-| Entities                                  | `src/domain/`         | `User`, `Password`, `UserRegistered`, e os contratos `UserRepository` e `PasswordHasher`                     |
-| Use Cases                                 | `src/application/`    | `register-user`, `login`, e as interfaces que existem por causa do caso de uso (`TokenIssuer`, relógio, ids) |
-| Interface Adapters + Frameworks & Drivers | `src/infrastructure/` | Gateway Prisma, bcrypt, RS256, rotas HTTP, relay do outbox                                                   |
-| Composition root                          | `src/main/`           | `compose.ts` monta o grafo; `index.ts` trata sinal e shutdown                                                |
+| Camada                                    | Pasta                 | O que há aqui                                                                                                      |
+| ----------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Entities                                  | `src/domain/`         | `User`, `Password`, `UserRegistered`, erros de domínio                                                             |
+| Use Cases                                 | `src/application/`    | `registerUser`, `login`, DTOs e portas (`UserRepository`, `PasswordHasher`, `TokenIssuer`, `Clock`, `IdGenerator`) |
+| Interface Adapters + Frameworks & Drivers | `src/infrastructure/` | Prisma, bcrypt, RS256, rotas HTTP, relay do outbox, publisher AMQP                                                 |
+| Composition root                          | `src/main/`           | `compose.ts` monta o grafo; `index.ts` trata sinal e shutdown                                                      |
 
-O **gateway** é a classe de fora. A interface `UserRepository` fica no domínio, ao lado de `User`, porque persistir e buscar usuário é contrato da entidade. O caso de uso chama essa interface.
+Portas moram em `application/ports/`. Implementações espelham a categoria em `infrastructure/` (`repositories/`, `services/`).
 
-O Prisma fica reunido no gateway:
+## Mapa de pastas
 
 ```
-src/domain/user-repository.ts                         # interface UserRepository
-src/infrastructure/repositories/prisma/
-├── schema.prisma                                     # schema; prisma.schema no package.json aponta aqui
-├── migrations/
-├── client.ts                                         # cria o PrismaClient
-└── user-repository.ts                                # PrismaUserRepository implementa UserRepository
+auth-service/src/
+├── domain/
+│   ├── entities/user.ts
+│   ├── valueObjects/password.ts
+│   ├── events/userRegistered.ts
+│   ├── errors/userErrors.ts
+│   └── index.ts
+├── application/
+│   ├── useCases/
+│   │   ├── registerUser/{registerUser.useCase.ts, registerUser.dto.ts}
+│   │   └── login/{login.useCase.ts, login.dto.ts}
+│   └── ports/
+│       ├── repositories/user.repository.ts
+│       └── services/{passwordHasher,tokenIssuer,clock,idGenerator}.service.ts
+├── infrastructure/
+│   ├── http/
+│   │   ├── routes/{identity,health}.routes.ts
+│   │   └── server.ts
+│   ├── repositories/prisma/{schema.prisma,migrations/,client.ts,user.repository.ts}
+│   ├── services/crypto/{bcryptPasswordHasher,rs256TokenIssuer,rsaKeys}.ts
+│   ├── messaging/{amqpConnection,amqpPublisher,outboxEnvelope,outboxRelay}.ts
+│   ├── observability/outboxMetrics.ts
+│   └── config.ts
+└── main/{compose.ts,index.ts}
 ```
 
-`PrismaUserRepository` mapeia a linha do Postgres para `User` e grava o outbox na mesma transação. `main/compose.ts` cria o client e injeta o gateway no caso de uso.
+Não há `ports/gateways/` neste serviço: Postgres é repository; AMQP de saída é orquestrado pelo outbox relay (messaging), não por uma porta de application.
 
 ## Casos de uso
 
-| Caso de uso    | O que faz                                                                                                                                   |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `registerUser` | Valida a senha, pede o hash, monta o `User` e entrega `User` + `UserRegistered` ao repositório. E-mail duplicado volta `EMAIL_TAKEN`.       |
-| `login`        | Normaliza o e-mail, busca o usuário e compara a senha. E-mail desconhecido responde `INVALID_CREDENTIALS` sem comparar hash. Emite o token. |
+| Caso de uso    | O que faz                                                                                                                                                        |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `registerUser` | Valida a senha, pede o hash, monta o `User`, monta o envelope de outbox (`id`, `version`, `correlationId`, payload) e persiste user + outbox na mesma transação. |
+| `login`        | Normaliza o e-mail, busca o usuário e compara a senha. E-mail desconhecido responde `INVALID_CREDENTIALS` sem comparar hash. Emite o token.                      |
 
-Falha de login é sempre `INVALID_CREDENTIALS`.
+Falha de login é sempre `INVALID_CREDENTIALS`. Erros de aplicação usam `Result` de `@zipframes/core`. Erros HTTP usam Problem Details (RFC 9457) via `@zipframes/core`.
 
 ## Outbox
 
-O gateway grava a linha de `outbox` na mesma transação do usuário e coloca nela o id de correlação do pedido. Se o pedido não trouxe um, o gateway cria. O relay publica o que está pendente.
+O **caso de uso** decide o que publicar (`user.registered`, versão, payload, `correlationId` vindo do comando HTTP, id via `IdGenerator`). O repositório só persiste a linha de `outbox` na mesma transação do usuário.
 
 - Intervalo: `OUTBOX_INTERVAL_MS` (padrão 2s).
-- Teto: `OUTBOX_MAX_ATTEMPTS` (padrão 30), cerca de um minuto de broker fora do ar.
+- Teto: `OUTBOX_MAX_ATTEMPTS` (padrão 30).
 - Falha de publish incrementa `attempts` e deixa `published_at` nulo.
 - A busca é `published_at IS NULL AND attempts < max`, pela ordem de `occurred_at`, com `FOR UPDATE SKIP LOCKED`.
-- Ao atingir o teto a linha sai do ciclo e permanece na tabela. A limpeza de 7 dias só remove linhas publicadas.
-- Nesse momento o relay registra erro (id, `eventType`, `attempts`, `correlationId`) e incrementa `outbox_exhausted_total`.
-- Linha esgotada não muda `/health/ready`.
-
-A transação do relay continua aberta durante o round-trip do broker.
+- Ao atingir o teto a linha sai do ciclo; o relay incrementa `outbox_exhausted_total`. Linha esgotada não muda `/health/ready`.
 
 ## HTTP
 
-| Método e path                | Papel                                                               |
-| ---------------------------- | ------------------------------------------------------------------- |
-| `POST /register`             | Cadastro                                                            |
-| `POST /login`                | Token                                                               |
-| `GET /.well-known/jwks.json` | Chave pública                                                       |
-| `GET /health/live`           | Processo de pé                                                      |
-| `GET /health/ready`          | 200 com Postgres (`SELECT 1`) e AMQP conectados; 503 caso contrário |
-| `GET /metrics`               | Texto Prometheus, incluindo `outbox_exhausted_total`                |
+| Método e path                | Papel                                                              |
+| ---------------------------- | ------------------------------------------------------------------ |
+| `POST /register`             | Cadastro                                                           |
+| `POST /login`                | Token                                                              |
+| `GET /.well-known/jwks.json` | Chave pública                                                      |
+| `GET /health/live`           | Processo de pé (`{ status: "ok" }`)                                |
+| `GET /health/ready`          | 200 com Postgres e AMQP; 503 com `{ status: "not_ready", reason }` |
+| `GET /metrics`               | Texto Prometheus, incluindo `outbox_exhausted_total`               |
 
-Tudo na porta `3000`.
+Tudo na porta `PORT` (padrão 3000). Readiness usa `Pingable` + `createReadinessCheck`.
 
 ## Onde o processo sobe
 
@@ -82,4 +96,7 @@ No cluster, o Argo CD aplica [`infra/k8s/auth-service`](../../../infra/k8s/auth-
 
 ## Testes
 
-`tests/unit` cobre domínio, casos de uso, HTTP, crypto, config, envelope e o contador do outbox, com as interfaces substituídas. A barra nesses arquivos é 100%. O gateway Prisma, o relay e `main/index.ts` ficam de fora: dependem de Postgres e do broker de verdade.
+| Pasta        | O que prova                                                            |
+| ------------ | ---------------------------------------------------------------------- |
+| `tests/unit` | Domínio, casos de uso, HTTP, crypto, config, envelope — com fakes      |
+| `tests/int`  | Prisma + outbox e AMQP contra Postgres/RabbitMQ reais (Testcontainers) |

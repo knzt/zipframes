@@ -13,22 +13,21 @@ Na raiz do monorepo, os atalhos equivalentes são `pnpm infra:up`, `pnpm infra:d
 
 ## Serviços e portas
 
-| Serviço            | Porta | Acesso                                                          |
-| ------------------ | ----- | --------------------------------------------------------------- |
-| auth-db            | 5432  | `postgres://zipframes:zipframes@localhost:5432/auth_db`         |
-| video-db           | 5433  | `postgres://zipframes:zipframes@localhost:5433/video_db`        |
-| notification-db    | 5434  | `postgres://zipframes:zipframes@localhost:5434/notification_db` |
-| RabbitMQ (AMQP)    | 5672  | `amqp://zipframes:zipframes@localhost:5672`                     |
-| RabbitMQ (painel)  | 15672 | http://localhost:15672                                          |
-| Redis              | 6379  | `redis://localhost:6379`                                        |
-| SeaweedFS (S3)     | 8333  | `http://localhost:8333`, bucket `videos`                        |
-| SeaweedFS (master) | 9333  | http://localhost:9333                                           |
-| SeaweedFS (filer)  | 8888  | http://localhost:8888                                           |
-| Mailpit (SMTP)     | 1025  | `smtp://localhost:1025`                                         |
-| Mailpit (web)      | 8025  | http://localhost:8025                                           |
-| auth-service       | 3000  | http://localhost:3000/health/ready                              |
-| processor-worker   | 8081  | http://localhost:8081/readyz                                    |
-| processor-worker   | 9091  | http://localhost:9091/metrics                                   |
+| Serviço            | Porta | Acesso                                                                 |
+| ------------------ | ----- | ---------------------------------------------------------------------- |
+| auth-db            | 5432  | `postgres://zipframes:zipframes@localhost:5432/auth_db`                |
+| video-db           | 5433  | `postgres://zipframes:zipframes@localhost:5433/video_db`               |
+| notification-db    | 5434  | `postgres://zipframes:zipframes@localhost:5434/notification_db`        |
+| RabbitMQ (AMQP)    | 5672  | `amqp://zipframes:zipframes@localhost:5672`                            |
+| RabbitMQ (painel)  | 15672 | http://localhost:15672                                                 |
+| Redis              | 6379  | `redis://localhost:6379`                                               |
+| SeaweedFS (S3)     | 8333  | `http://localhost:8333`, bucket `videos`                               |
+| SeaweedFS (master) | 9333  | http://localhost:9333                                                  |
+| SeaweedFS (filer)  | 8888  | http://localhost:8888                                                  |
+| Mailpit (SMTP)     | 1025  | `smtp://localhost:1025`                                                |
+| Mailpit (web)      | 8025  | http://localhost:8025                                                  |
+| auth-service       | 3000  | http://localhost:3000/health/ready                                     |
+| processor-worker   | 8081  | http://localhost:8081/health/ready (também `/health/live`, `/metrics`) |
 
 As três instâncias de PostgreSQL existem para manter o isolamento real entre serviços
 
@@ -55,7 +54,7 @@ pnpm --dir services/processor-worker build
 pnpm --dir services/processor-worker stage-runtime
 ```
 
-`stage-runtime` monta os `node_modules` de produção já instalados. O build da imagem não baixa `@zipframes/*` de novo. Com RabbitMQ e o bucket saudáveis, `GET /readyz` responde 200.
+`stage-runtime` monta os `node_modules` de produção já instalados. O build da imagem não baixa `@zipframes/*` de novo. Com RabbitMQ e o bucket saudáveis, `GET /health/ready` responde 200.
 
 O `auth-service` também sobe junto. A imagem instala as dependências durante o build, então `NODE_AUTH_TOKEN` precisa estar exportado. A chave RS256 de desenvolvimento está em `infra/docker-compose/auth/jwt-dev.pem` e só vale para esta máquina. O processo aplica as migrations e então escuta; `GET /health/ready` responde 200 com o Postgres e o RabbitMQ alcançáveis.
 

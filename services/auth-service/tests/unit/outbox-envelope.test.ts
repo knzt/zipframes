@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { authService } from '@zipframes/schemas';
 
-import { toEventEnvelope } from '../../src/infrastructure/messaging/outbox-envelope.js';
-import type { OutboxRow } from '../../src/infrastructure/messaging/outbox-envelope.js';
+import { toEventEnvelope } from '../../src/infrastructure/messaging/outboxEnvelope.js';
+import type { OutboxRow } from '../../src/infrastructure/messaging/outboxEnvelope.js';
 
 const row: OutboxRow = {
   id: '0194f3a0-0000-7000-8000-000000000001',

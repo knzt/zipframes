@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { createPassword } from '../../src/domain/password.js';
+import { createPassword } from '../../src/domain/valueObjects/password.js';
 
 describe('valid passwords', () => {
   it.each(['senha123', 'correct-horse-1', 'A1bcdefg', '12345678a'])('accepts %s', (raw) => {

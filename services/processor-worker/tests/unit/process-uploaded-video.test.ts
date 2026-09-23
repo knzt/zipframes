@@ -4,11 +4,11 @@ import { createInMemoryBroker } from '@zipframes/test-toolkit';
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 
-import { createAmqpEventPublisher } from '../../src/infrastructure/gateways/amqp-event-publisher.js';
-import { createVideoUploadedConsumer } from '../../src/infrastructure/messaging/video-uploaded-consumer.js';
+import { createAmqpEventPublisher } from '../../src/infrastructure/gateways/amqpEventPublisher.gateway.js';
+import { createVideoUploadedConsumer } from '../../src/infrastructure/messaging/videoUploadedConsumer.js';
 import { UPLOADED_QUEUE } from '../../src/infrastructure/messaging/topology.js';
-import { createProcessUploadedVideo } from '../../src/application/use-cases/process-uploaded-video.js';
-import { ProcessingError } from '../../src/domain/errors.js';
+import { createProcessUploadedVideo } from '../../src/application/useCases/processUploadedVideo/processUploadedVideo.useCase.js';
+import { ProcessingError } from '../../src/domain/errors/processingError.js';
 
 const ownerId = 'user-1';
 const videoId = '11111111-1111-4111-8111-111111111111';
@@ -36,8 +36,6 @@ const silentLogger = createLogger({
   destination: { write: () => undefined },
 });
 
-const noopPing = async (): Promise<void> => undefined;
-
 describe('processUploadedVideo', () => {
   it('publishes started and processed, then deletes the source', async () => {
     const broker = createInMemoryBroker();
@@ -61,7 +59,7 @@ describe('processUploadedVideo', () => {
     const removeDir = vi.fn(async () => undefined);
 
     const processUploadedVideo = createProcessUploadedVideo({
-      storage: { downloadToFile, uploadFile, deleteObject, ping: noopPing },
+      storage: { downloadToFile, uploadFile, deleteObject },
       extractor: { extract },
       archive: { createZip },
       workDirectory: { createTempDir, removeDir },
@@ -111,11 +109,10 @@ describe('processUploadedVideo', () => {
     const processUploadedVideo = createProcessUploadedVideo({
       storage: {
         downloadToFile: async () => {
-          throw new ProcessingError('permanent', 'UNSUPPORTED_MEDIA', 'bad file');
+          throw new ProcessingError(false, 'UNSUPPORTED_MEDIA', 'bad file');
         },
         uploadFile: async () => undefined,
         deleteObject: async () => undefined,
-        ping: noopPing,
       },
       extractor: { extract: async () => [] },
       archive: { createZip: async () => undefined },
@@ -141,7 +138,7 @@ describe('processUploadedVideo', () => {
     ]);
   });
 
-  it('rethrows transient errors for the consumer to retry', async () => {
+  it('rethrows retryable errors for the consumer to retry', async () => {
     const broker = createInMemoryBroker();
     const events = createAmqpEventPublisher({
       publisher: createPublisher(broker),
@@ -152,11 +149,10 @@ describe('processUploadedVideo', () => {
     const processUploadedVideo = createProcessUploadedVideo({
       storage: {
         downloadToFile: async () => {
-          throw new ProcessingError('transient', 'STORAGE_DOWNLOAD_FAILED', 'down');
+          throw new ProcessingError(true, 'STORAGE_DOWNLOAD_FAILED', 'down');
         },
         uploadFile: async () => undefined,
         deleteObject: async () => undefined,
-        ping: noopPing,
       },
       extractor: { extract: async () => [] },
       archive: { createZip: async () => undefined },
@@ -175,7 +171,7 @@ describe('processUploadedVideo', () => {
         attempt: 1,
         correlationId,
       }),
-    ).rejects.toMatchObject({ kind: 'transient', code: 'STORAGE_DOWNLOAD_FAILED' });
+    ).rejects.toMatchObject({ retryable: true, code: 'STORAGE_DOWNLOAD_FAILED' });
   });
 
   it('aborts via AbortSignal on timeout and cleans up the work dir', async () => {
@@ -185,13 +181,12 @@ describe('processUploadedVideo', () => {
         downloadToFile: async (_key, _path, signal) => {
           await new Promise<void>((_resolve, reject) => {
             signal?.addEventListener('abort', () => {
-              reject(new ProcessingError('transient', 'PROCESSING_TIMEOUT', 'cancelled'));
+              reject(new ProcessingError(true, 'PROCESSING_TIMEOUT', 'cancelled'));
             });
           });
         },
         uploadFile: async () => undefined,
         deleteObject: async () => undefined,
-        ping: noopPing,
       },
       extractor: { extract: async () => [] },
       archive: { createZip: async () => undefined },
@@ -223,7 +218,6 @@ describe('processUploadedVideo', () => {
         deleteObject: async () => {
           throw new Error('delete boom');
         },
-        ping: noopPing,
       },
       extractor: { extract: async () => ['/tmp/frame_0001.png'] },
       archive: { createZip: async () => undefined },
@@ -266,7 +260,6 @@ describe('video uploaded consumer + in-memory broker', () => {
         downloadToFile: async () => undefined,
         uploadFile: async () => undefined,
         deleteObject: async () => undefined,
-        ping: noopPing,
       },
       extractor: { extract: async () => ['/tmp/frame_0001.png'] },
       archive: { createZip: async () => undefined },

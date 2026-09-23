@@ -8,12 +8,11 @@ export default defineConfig({
       include: [
         'src/domain/**',
         'src/application/**',
-        'src/infrastructure/crypto/**',
-        'src/infrastructure/messaging/outbox-envelope.ts',
+        'src/infrastructure/services/crypto/**',
+        'src/infrastructure/messaging/outboxEnvelope.ts',
         'src/infrastructure/http/**',
         'src/infrastructure/config.ts',
         'src/infrastructure/observability/**',
-        'src/infrastructure/repositories/prisma/registration-correlation.ts',
       ],
       thresholds: {
         lines: 100,

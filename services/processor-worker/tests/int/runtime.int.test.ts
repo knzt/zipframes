@@ -9,9 +9,9 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { framesPackageObjectKey } from '../../src/domain/frames-package.js';
-import { createFfmpegFrameExtractor } from '../../src/infrastructure/gateways/ffmpeg-frame-extractor.js';
-import { createS3ObjectStorage } from '../../src/infrastructure/gateways/s3-object-storage.js';
+import { framesPackageObjectKey } from '../../src/domain/policies/framesPackage.js';
+import { createFfmpegFrameExtractor } from '../../src/infrastructure/gateways/media/ffmpegFrameExtractor.gateway.js';
+import { createS3ObjectStorage } from '../../src/infrastructure/gateways/storage/s3ObjectStorage.gateway.js';
 import {
   createProcessorTopology,
   DLQ_QUEUE,
@@ -19,7 +19,7 @@ import {
   UPLOADED_QUEUE,
   UPLOADED_RETRY_QUEUE,
 } from '../../src/infrastructure/messaging/topology.js';
-import { createRabbitMqConnection } from '../../src/infrastructure/messaging/rabbitmq-connection.js';
+import { createRabbitMqConnection } from '../../src/infrastructure/messaging/rabbitmqConnection.js';
 import { startWorker } from '../../src/main/compose.js';
 import { useBundledFfmpeg } from './ffmpeg-bin.js';
 
@@ -223,7 +223,7 @@ describe('processor runtime against RabbitMQ and S3', () => {
       code: 'PROCESSING_TIMEOUT',
     });
     await expect(storage.downloadToFile('samples/missing.bin', downloaded)).rejects.toMatchObject({
-      kind: 'permanent',
+      retryable: false,
       code: 'SOURCE_MISSING',
     });
   });
@@ -283,7 +283,6 @@ describe('processor runtime against RabbitMQ and S3', () => {
 
   it('packages frames for a real upload and becomes ready', async () => {
     const healthPort = 18181;
-    const metricsPort = 19091;
     const workDir = await mkdtemp(path.join(tmpdir(), 'zf-worker-'));
     const sourceKey = `uploads/${ownerId}/${videoId}`;
     const clip = await stat(clipPath);
@@ -319,15 +318,14 @@ describe('processor runtime against RabbitMQ and S3', () => {
     process.env.RETRY_BASE_DELAY_MS = '1000';
     process.env.RETRY_MAX_DELAY_MS = '5000';
     process.env.HEALTH_PORT = String(healthPort);
-    process.env.METRICS_PORT = String(metricsPort);
     process.env.LOG_LEVEL = 'info';
     process.env.SERVICE_VERSION = '0.0.0';
 
     const worker = await startWorker();
     try {
-      const ready = await fetch(`http://127.0.0.1:${String(healthPort)}/readyz`);
+      const ready = await fetch(`http://127.0.0.1:${String(healthPort)}/health/ready`);
       expect(ready.status).toBe(200);
-      const metrics = await fetch(`http://127.0.0.1:${String(metricsPort)}/metrics`);
+      const metrics = await fetch(`http://127.0.0.1:${String(healthPort)}/metrics`);
       expect(metrics.status).toBe(200);
 
       const probe = await amqp.connect(amqpUri);

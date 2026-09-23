@@ -18,6 +18,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.787.0",
     "@zipframes/communication": "^0.1.0",
+    "@zipframes/core": "file:../../../zipframes-packages/packages/core",
     "@zipframes/logger": "^0.1.0",
     "@zipframes/schemas": "^0.1.0",
     "@zipframes/telemetry": "^0.1.0",
@@ -40,6 +41,11 @@
   "engines": {
     "node": ">=22.0.0",
     "pnpm": ">=9.0.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "@zipframes/core": "file:../../../zipframes-packages/packages/core"
+    }
   },
   "packageManager": "pnpm@9.15.9"
 }

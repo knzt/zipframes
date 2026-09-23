@@ -7,9 +7,9 @@ Arquitetura: Clean Architecture (Uncle Bob) — ver [docs/architecture/services/
 ## Camadas
 
 ```
-src/domain/            # Entities
-src/application/       # Use cases + gateway interfaces
-src/infrastructure/    # Consumers, gateway implementations, drivers
+src/domain/            # Value objects, policies, erros
+src/application/       # Use cases + ports (gateways/services)
+src/infrastructure/    # Consumers, gateways, services, health HTTP
 src/main/              # Composition root
 ```
 
@@ -19,7 +19,7 @@ src/main/              # Composition root
 - baixa o original do storage (stream), extrai 1 frame/s em PNG e gera um zip (store)
 - publica `video.processing.started`, `video.processed` ou `video.failed`
 - apaga o original ao terminar (sucesso ou falha permanente); falha no delete vira log/métrica
-- health (`/livez`, `/readyz`) e métricas Prometheus
+- health unificado na mesma porta: `GET /health/live`, `GET /health/ready`, `GET /metrics`
 - **sem banco próprio**
 
 ## Testes
@@ -42,7 +42,7 @@ pnpm --dir services/processor-worker stage-runtime
 pnpm infra:up
 ```
 
-`GET http://localhost:8081/readyz` responde 200 quando o processo alcança o RabbitMQ e o bucket.
+`GET http://localhost:8081/health/ready` responde 200 quando o processo alcança o RabbitMQ e o bucket.
 
 Fora do container, com `ffmpeg` no PATH:
 
@@ -53,6 +53,6 @@ pnpm install
 pnpm dev
 ```
 
-O lockfile deste serviço é `services/processor-worker/pnpm-lock.yaml`. `pnpm install` precisa de `NODE_AUTH_TOKEN` para os pacotes `@zipframes/*`.
+O lockfile deste serviço é `services/processor-worker/pnpm-lock.yaml`. `pnpm install` precisa de `NODE_AUTH_TOKEN` para os pacotes `@zipframes/*` (exceto `@zipframes/core`, linkado via `file:`).
 
 No cluster, o Argo CD aplica `infra/k8s/processor-worker`. O Secret de exemplo não entra nesse apply.

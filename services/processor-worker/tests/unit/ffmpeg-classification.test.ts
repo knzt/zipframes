@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { classifyFfmpegFailure } from '../../src/infrastructure/gateways/ffmpeg-frame-extractor.js';
+import { classifyFfmpegFailure } from '../../src/infrastructure/gateways/media/ffmpegFrameExtractor.gateway.js';
 
 describe('classifyFfmpegFailure', () => {
   it.each([
@@ -9,9 +9,9 @@ describe('classifyFfmpegFailure', () => {
     'moov atom not found',
     'Invalid argument',
     'Protocol not found',
-  ])('classifies permanent stderr: %s', (stderr) => {
+  ])('classifies non-retryable stderr: %s', (stderr) => {
     const error = classifyFfmpegFailure(1, stderr);
-    expect(error.kind).toBe('permanent');
+    expect(error.retryable).toBe(false);
     expect(error.code).toBe('UNSUPPORTED_MEDIA');
   });
 
@@ -20,9 +20,9 @@ describe('classifyFfmpegFailure', () => {
     'Error opening input files',
     'Resource temporarily unavailable',
     '',
-  ])('classifies transient stderr: %s', (stderr) => {
+  ])('classifies retryable stderr: %s', (stderr) => {
     const error = classifyFfmpegFailure(1, stderr);
-    expect(error.kind).toBe('transient');
+    expect(error.retryable).toBe(true);
     expect(error.code).toBe('FFMPEG_FAILED');
   });
 });

@@ -1,23 +1,26 @@
 import { randomUUID } from 'node:crypto';
 
 import { createPublisher } from '@zipframes/communication';
+import { createReadinessCheck } from '@zipframes/core';
+import type { Pingable } from '@zipframes/core';
 import { createLogger } from '@zipframes/logger';
 import { createMetrics } from '@zipframes/telemetry';
 
-import { makeLogin } from '../application/use-cases/login.js';
-import { makeRegisterUser } from '../application/use-cases/register-user.js';
-import { BcryptPasswordHasher } from '../infrastructure/crypto/bcrypt-password-hasher.js';
-import { deriveRsaKeyMaterial } from '../infrastructure/crypto/rsa-keys.js';
-import { Rs256TokenIssuer } from '../infrastructure/crypto/rs256-token-issuer.js';
-import { registerIdentityRoutes } from '../infrastructure/http/identity-routes.js';
-import { createHttpServer } from '../infrastructure/http/server.js';
+import { makeLogin } from '../application/useCases/login/login.useCase.js';
+import { makeRegisterUser } from '../application/useCases/registerUser/registerUser.useCase.js';
 import { loadConfig } from '../infrastructure/config.js';
-import { createAmqpPublishPort } from '../infrastructure/messaging/amqp-publisher.js';
-import { connectAmqp } from '../infrastructure/messaging/amqp-connection.js';
-import { createOutboxRelay } from '../infrastructure/messaging/outbox-relay.js';
-import { createOutboxMetrics } from '../infrastructure/observability/outbox-metrics.js';
+import { createHttpServer } from '../infrastructure/http/server.js';
+import { registerHealthRoutes } from '../infrastructure/http/routes/health.routes.js';
+import { registerIdentityRoutes } from '../infrastructure/http/routes/identity.routes.js';
+import { connectAmqp } from '../infrastructure/messaging/amqpConnection.js';
+import { createAmqpPublishPort } from '../infrastructure/messaging/amqpPublisher.js';
+import { createOutboxRelay } from '../infrastructure/messaging/outboxRelay.js';
+import { createOutboxMetrics } from '../infrastructure/observability/outboxMetrics.js';
 import { createPrismaClient, pingDatabase } from '../infrastructure/repositories/prisma/client.js';
-import { PrismaUserRepository } from '../infrastructure/repositories/prisma/user-repository.js';
+import { PrismaUserRepository } from '../infrastructure/repositories/prisma/user.repository.js';
+import { BcryptPasswordHasher } from '../infrastructure/services/crypto/bcryptPasswordHasher.js';
+import { deriveRsaKeyMaterial } from '../infrastructure/services/crypto/rsaKeys.js';
+import { Rs256TokenIssuer } from '../infrastructure/services/crypto/rs256TokenIssuer.js';
 
 export const startAuthService = async (): Promise<{ stop: () => Promise<void> }> => {
   const config = loadConfig();
@@ -82,19 +85,28 @@ export const startAuthService = async (): Promise<{ stop: () => Promise<void> }>
     });
   }, config.outboxIntervalMs);
 
+  const prismaPing: Pingable = {
+    ping: () => pingDatabase(prisma),
+  };
+  const amqpPing: Pingable = {
+    ping: () => {
+      if (!amqp.isConnected()) {
+        return Promise.reject(new Error('amqp disconnected'));
+      }
+      return Promise.resolve();
+    },
+  };
+  const isReady = createReadinessCheck([prismaPing, amqpPing]);
+
   const app = createHttpServer({ corsOrigin: config.corsOrigin });
   registerIdentityRoutes(app, {
     registerUser,
     login,
     logger,
     jwks: [keys.publicJwk],
-    isReady: async () => {
-      if (!amqp.isConnected()) {
-        return false;
-      }
-      await pingDatabase(prisma);
-      return true;
-    },
+  });
+  registerHealthRoutes(app, {
+    isReady,
     renderMetrics: () => technicalMetrics.registry.metrics(),
   });
 

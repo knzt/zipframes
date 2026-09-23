@@ -3,11 +3,11 @@ import { createLogger } from '@zipframes/logger';
 import { getCorrelationId } from '@zipframes/logger';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { EventPublisher } from '../../src/application/gateways/event-publisher.js';
-import { ProcessingError } from '../../src/domain/errors.js';
-import { planAmqpSettle } from '../../src/infrastructure/messaging/amqp-settle.js';
+import type { EventPublisher } from '../../src/application/ports/gateways/eventPublisher.gateway.js';
+import { ProcessingError } from '../../src/domain/errors/processingError.js';
+import { planAmqpSettle } from '../../src/infrastructure/messaging/amqpSettle.js';
 import { UPLOADED_RETRY_QUEUE } from '../../src/infrastructure/messaging/topology.js';
-import { createVideoUploadedConsumer } from '../../src/infrastructure/messaging/video-uploaded-consumer.js';
+import { createVideoUploadedConsumer } from '../../src/infrastructure/messaging/videoUploadedConsumer.js';
 
 const ownerId = 'user-1';
 const videoId = '11111111-1111-4111-8111-111111111111';
@@ -108,12 +108,12 @@ describe('failure contract: video uploaded consumer', () => {
     expect(context.deadLetter).not.toHaveBeenCalled();
   });
 
-  it('retries transient failures without publishing video.failed', async () => {
+  it('retries retryable failures without publishing video.failed', async () => {
     const events: EventPublisher = { publish: vi.fn(async () => undefined) };
     const context = createContext(1);
     const consumer = createVideoUploadedConsumer({
       processUploadedVideo: async () => {
-        throw new ProcessingError('transient', 'STORAGE_DOWNLOAD_FAILED', 'down');
+        throw new ProcessingError(true, 'STORAGE_DOWNLOAD_FAILED', 'down');
       },
       events,
       retry: { maxAttempts: 5, baseDelayMs: 10, maxDelayMs: 100 },
@@ -135,7 +135,7 @@ describe('failure contract: video uploaded consumer', () => {
     const context = createContext(5);
     const consumer = createVideoUploadedConsumer({
       processUploadedVideo: async () => {
-        throw new ProcessingError('transient', 'FFMPEG_FAILED', 'busy');
+        throw new ProcessingError(true, 'FFMPEG_FAILED', 'busy');
       },
       events,
       retry: { maxAttempts: 5, baseDelayMs: 10, maxDelayMs: 100 },
@@ -205,7 +205,7 @@ describe('failure contract: video uploaded consumer', () => {
     expect(seen).toBe(correlationId);
   });
 
-  it('treats a non-processing error as an unexpected transient retry', async () => {
+  it('treats a non-processing error as an unexpected retryable retry', async () => {
     const events: EventPublisher = { publish: vi.fn(async () => undefined) };
     const context = createContext(1);
     const consumer = createVideoUploadedConsumer({

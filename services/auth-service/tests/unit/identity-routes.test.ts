@@ -3,9 +3,10 @@ import { describe, expect, it } from 'vitest';
 
 import { createLogger } from '@zipframes/logger';
 
-import { makeLogin } from '../../src/application/use-cases/login.js';
-import { makeRegisterUser } from '../../src/application/use-cases/register-user.js';
-import { registerIdentityRoutes } from '../../src/infrastructure/http/identity-routes.js';
+import { makeLogin } from '../../src/application/useCases/login/login.useCase.js';
+import { makeRegisterUser } from '../../src/application/useCases/registerUser/registerUser.useCase.js';
+import { registerHealthRoutes } from '../../src/infrastructure/http/routes/health.routes.js';
+import { registerIdentityRoutes } from '../../src/infrastructure/http/routes/identity.routes.js';
 import { createHttpServer } from '../../src/infrastructure/http/server.js';
 import {
   FakeHasher,
@@ -16,7 +17,7 @@ import {
 } from '../support/in-memory.js';
 
 const buildApp = (overrides?: {
-  isReady?: () => Promise<boolean>;
+  isReady?: () => Promise<{ ready: boolean; reason?: string }>;
   renderMetrics?: () => Promise<string>;
 }): FastifyInstance => {
   const users = new InMemoryUserRepository();
@@ -34,7 +35,9 @@ const buildApp = (overrides?: {
     login: makeLogin({ users, hasher, tokens }),
     logger: createLogger({ service: 'auth-service', version: 'test', level: 'error' }),
     jwks: [{ kty: 'RSA', kid: 'k1', alg: 'RS256', use: 'sig', n: 'abc', e: 'AQAB' }],
-    isReady: overrides?.isReady ?? (async () => true),
+  });
+  registerHealthRoutes(app, {
+    isReady: overrides?.isReady ?? (async () => ({ ready: true })),
     renderMetrics: overrides?.renderMetrics ?? (async () => 'outbox_exhausted_total 0\n'),
   });
 
@@ -175,6 +178,7 @@ describe('health and metrics', () => {
     const response = await app.inject({ method: 'GET', url: '/health/live' });
 
     expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ status: 'ok' });
   });
 
   it('answers 200 when the process can reach its dependencies', async () => {
@@ -183,14 +187,16 @@ describe('health and metrics', () => {
     const response = await app.inject({ method: 'GET', url: '/health/ready' });
 
     expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ status: 'ready' });
   });
 
   it('answers 503 when a dependency is down', async () => {
-    const app = buildApp({ isReady: async () => false });
+    const app = buildApp({ isReady: async () => ({ ready: false, reason: 'amqp disconnected' }) });
 
     const response = await app.inject({ method: 'GET', url: '/health/ready' });
 
     expect(response.statusCode).toBe(503);
+    expect(response.json()).toEqual({ status: 'not_ready', reason: 'amqp disconnected' });
   });
 
   it('answers 503 when the readiness check throws', async () => {
@@ -203,6 +209,7 @@ describe('health and metrics', () => {
     const response = await app.inject({ method: 'GET', url: '/health/ready' });
 
     expect(response.statusCode).toBe(503);
+    expect(response.json()).toEqual({ status: 'not_ready', reason: 'database down' });
   });
 
   it('returns the prometheus text from the metrics registry', async () => {

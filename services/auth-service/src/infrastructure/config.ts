@@ -1,73 +1,95 @@
 import { readFileSync } from 'node:fs';
 
 import { LOG_LEVELS, type LogLevel } from '@zipframes/logger';
+import { z } from 'zod';
 
-export interface Config {
-  readonly port: number;
-  readonly corsOrigin: string;
-  readonly databaseUrl: string;
-  readonly amqpUrl: string;
-  readonly jwtPrivateKeyPem: string;
-  readonly jwtKid: string;
-  readonly jwtIssuer: string;
-  readonly jwtAudience: string;
-  readonly outboxIntervalMs: number;
-  readonly outboxMaxAttempts: number;
-  readonly logLevel: LogLevel;
-  readonly serviceVersion: string;
-}
+const emptyToUndefined = (value: string | undefined): string | undefined =>
+  value === undefined || value.length === 0 ? undefined : value;
 
-const required = (name: string): string => {
-  const value = process.env[name];
-  if (value === undefined || value.length === 0) {
-    throw new Error(`missing required environment variable: ${name}`);
+const positiveIntFromEnv = z.preprocess((value: unknown) => {
+  if (typeof value !== 'string') {
+    return value;
   }
-  return value;
-};
+  return emptyToUndefined(value);
+}, z.coerce.number().int().positive());
 
-const positiveInt = (name: string, fallback: number): number => {
-  const raw = process.env[name];
-  if (raw === undefined || raw.length === 0) {
-    return fallback;
-  }
-  const parsed = Number(raw);
-  if (!Number.isInteger(parsed) || parsed <= 0) {
-    throw new Error(`invalid environment variable: ${name}`);
-  }
-  return parsed;
-};
+const configSchema = z.object({
+  port: positiveIntFromEnv,
+  corsOrigin: z.string().min(1),
+  databaseUrl: z.string().min(1),
+  amqpUrl: z.string().min(1),
+  jwtPrivateKeyPem: z.string().min(1),
+  jwtKid: z.string().min(1),
+  jwtIssuer: z.string().min(1),
+  jwtAudience: z.string().min(1),
+  outboxIntervalMs: positiveIntFromEnv,
+  outboxMaxAttempts: positiveIntFromEnv,
+  logLevel: z.enum(LOG_LEVELS as unknown as [LogLevel, ...LogLevel[]]),
+  serviceVersion: z.string().min(1),
+});
 
-const logLevel = (): LogLevel => {
-  const raw = process.env.LOG_LEVEL ?? 'info';
-  if ((LOG_LEVELS as readonly string[]).includes(raw)) {
-    return raw as LogLevel;
-  }
-  throw new Error('invalid environment variable: LOG_LEVEL');
-};
+export type Config = z.infer<typeof configSchema>;
 
-const jwtPrivateKeyPem = (): string => {
-  const inline = process.env.JWT_PRIVATE_KEY_PEM;
+const resolveJwtPrivateKeyPem = (env: NodeJS.ProcessEnv): string => {
+  const inline = env.JWT_PRIVATE_KEY_PEM;
   if (inline !== undefined && inline.length > 0) {
     return inline;
   }
-  const file = process.env.JWT_PRIVATE_KEY_FILE;
+  const file = env.JWT_PRIVATE_KEY_FILE;
   if (file === undefined || file.length === 0) {
     throw new Error('missing required environment variable: JWT_PRIVATE_KEY_PEM');
   }
   return readFileSync(file, 'utf8');
 };
 
-export const loadConfig = (): Config => ({
-  port: positiveInt('PORT', 3000),
-  corsOrigin: process.env.CORS_ORIGIN ?? '*',
-  databaseUrl: required('AUTH_DATABASE_URL'),
-  amqpUrl: required('AMQP_URL'),
-  jwtPrivateKeyPem: jwtPrivateKeyPem(),
-  jwtKid: required('JWT_KID'),
-  jwtIssuer: required('JWT_ISSUER'),
-  jwtAudience: required('JWT_AUDIENCE'),
-  outboxIntervalMs: positiveInt('OUTBOX_INTERVAL_MS', 2000),
-  outboxMaxAttempts: positiveInt('OUTBOX_MAX_ATTEMPTS', 30),
-  logLevel: logLevel(),
-  serviceVersion: process.env.SERVICE_VERSION ?? '0.1.0',
-});
+const formatZodError = (error: z.ZodError): Error => {
+  const issue = error.issues[0];
+  const path = issue?.path[0];
+  const field =
+    path === 'databaseUrl'
+      ? 'AUTH_DATABASE_URL'
+      : path === 'amqpUrl'
+        ? 'AMQP_URL'
+        : path === 'jwtPrivateKeyPem'
+          ? 'JWT_PRIVATE_KEY_PEM'
+          : path === 'jwtKid'
+            ? 'JWT_KID'
+            : path === 'jwtIssuer'
+              ? 'JWT_ISSUER'
+              : path === 'jwtAudience'
+                ? 'JWT_AUDIENCE'
+                : path === 'outboxMaxAttempts'
+                  ? 'OUTBOX_MAX_ATTEMPTS'
+                  : path === 'outboxIntervalMs'
+                    ? 'OUTBOX_INTERVAL_MS'
+                    : path === 'port'
+                      ? 'PORT'
+                      : path === 'logLevel'
+                        ? 'LOG_LEVEL'
+                        : String(path ?? 'config');
+  return new Error(`invalid environment variable: ${field}`);
+};
+
+export const loadConfig = (env: NodeJS.ProcessEnv = process.env): Config => {
+  try {
+    return configSchema.parse({
+      port: emptyToUndefined(env.PORT) ?? '3000',
+      corsOrigin: emptyToUndefined(env.CORS_ORIGIN) ?? '*',
+      databaseUrl: env.AUTH_DATABASE_URL,
+      amqpUrl: env.AMQP_URL,
+      jwtPrivateKeyPem: resolveJwtPrivateKeyPem(env),
+      jwtKid: env.JWT_KID,
+      jwtIssuer: env.JWT_ISSUER,
+      jwtAudience: env.JWT_AUDIENCE,
+      outboxIntervalMs: emptyToUndefined(env.OUTBOX_INTERVAL_MS) ?? '2000',
+      outboxMaxAttempts: emptyToUndefined(env.OUTBOX_MAX_ATTEMPTS) ?? '30',
+      logLevel: emptyToUndefined(env.LOG_LEVEL) ?? 'info',
+      serviceVersion: emptyToUndefined(env.SERVICE_VERSION) ?? '0.1.0',
+    });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      throw formatZodError(error);
+    }
+    throw error;
+  }
+};

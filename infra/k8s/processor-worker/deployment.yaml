@@ -23,8 +23,6 @@ spec:
           ports:
             - name: health
               containerPort: 8081
-            - name: metrics
-              containerPort: 9091
           envFrom:
             - configMapRef:
                 name: processor-worker
@@ -32,12 +30,12 @@ spec:
                 name: processor-worker
           readinessProbe:
             httpGet:
-              path: /readyz
+              path: /health/ready
               port: health
             periodSeconds: 10
           livenessProbe:
             httpGet:
-              path: /livez
+              path: /health/live
               port: health
             periodSeconds: 20
           resources:
