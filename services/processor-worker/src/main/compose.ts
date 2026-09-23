@@ -1,20 +1,22 @@
 import { createPublisher } from '@zipframes/communication';
+import { createReadinessCheck } from '@zipframes/core';
+import type { Pingable } from '@zipframes/core';
 import { createLogger } from '@zipframes/logger';
 import { createMetrics } from '@zipframes/telemetry';
 import { randomUUID } from 'node:crypto';
 
-import { createProcessUploadedVideo } from '../application/use-cases/process-uploaded-video.js';
+import { createProcessUploadedVideo } from '../application/useCases/processUploadedVideo/processUploadedVideo.useCase.js';
 import { loadConfig } from '../infrastructure/config.js';
-import { createAmqpEventPublisher } from '../infrastructure/gateways/amqp-event-publisher.js';
-import { createFfmpegFrameExtractor } from '../infrastructure/gateways/ffmpeg-frame-extractor.js';
-import { createFsWorkDirectory } from '../infrastructure/gateways/fs-work-directory.js';
-import { createS3ObjectStorage } from '../infrastructure/gateways/s3-object-storage.js';
-import { createZipArchiveBuilder } from '../infrastructure/gateways/zip-archive-builder.js';
-import { startHealthServer, startMetricsServer } from '../infrastructure/http/health.js';
-import { createRabbitMqConnection } from '../infrastructure/messaging/rabbitmq-connection.js';
+import { createAmqpEventPublisher } from '../infrastructure/gateways/amqpEventPublisher.gateway.js';
+import { createFfmpegFrameExtractor } from '../infrastructure/gateways/media/ffmpegFrameExtractor.gateway.js';
+import { createS3ObjectStorage } from '../infrastructure/gateways/storage/s3ObjectStorage.gateway.js';
+import { createFsWorkDirectory } from '../infrastructure/services/filesystem/fsWorkDirectory.service.js';
+import { createZipArchiveBuilder } from '../infrastructure/services/media/zipArchiveBuilder.service.js';
+import { startHealthServer } from '../infrastructure/http/health.routes.js';
+import { createRabbitMqConnection } from '../infrastructure/messaging/rabbitmqConnection.js';
 import { createProcessorTopology, UPLOADED_QUEUE } from '../infrastructure/messaging/topology.js';
-import { createVideoUploadedConsumer } from '../infrastructure/messaging/video-uploaded-consumer.js';
-import { createJobMetrics } from '../infrastructure/observability/job-metrics.js';
+import { createVideoUploadedConsumer } from '../infrastructure/messaging/videoUploadedConsumer.js';
+import { createJobMetrics } from '../infrastructure/observability/jobMetrics.js';
 
 export const startWorker = async (): Promise<{ stop: () => Promise<void> }> => {
   const config = loadConfig();
@@ -87,33 +89,30 @@ export const startWorker = async (): Promise<{ stop: () => Promise<void> }> => {
     },
   });
 
+  const amqpPing: Pingable = {
+    ping: () => {
+      if (!connection.isConnected()) {
+        return Promise.reject(new Error('amqp disconnected'));
+      }
+      return Promise.resolve();
+    },
+  };
+  const isReady = createReadinessCheck([amqpPing, storage]);
+
   const healthServer = startHealthServer(config.healthPort, {
-    isAmqpConnected: () => connection.isConnected(),
-    pingStorage: () => storage.ping(),
+    isReady,
+    renderMetrics: () => technicalMetrics.registry.metrics(),
   });
-  const metricsServer = startMetricsServer(config.metricsPort, () =>
-    technicalMetrics.registry.metrics(),
-  );
 
   logger.info('processor-worker started', {
     queue: UPLOADED_QUEUE,
     healthPort: config.healthPort,
-    metricsPort: config.metricsPort,
   });
 
   return {
     stop: async () => {
       await new Promise<void>((resolve, reject) => {
         healthServer.close((error) => {
-          if (error) {
-            reject(error);
-            return;
-          }
-          resolve();
-        });
-      }).catch(() => undefined);
-      await new Promise<void>((resolve, reject) => {
-        metricsServer.close((error) => {
           if (error) {
             reject(error);
             return;

@@ -4,8 +4,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 
-import { frameFileName } from '../../src/domain/frame-extraction-policy.js';
-import { createFfmpegFrameExtractor } from '../../src/infrastructure/gateways/ffmpeg-frame-extractor.js';
+import { frameFileName } from '../../src/domain/policies/frameExtractionPolicy.js';
+import { createFfmpegFrameExtractor } from '../../src/infrastructure/gateways/media/ffmpegFrameExtractor.gateway.js';
 import { useBundledFfmpeg } from './ffmpeg-bin.js';
 
 const renderClip = (destination: string, durationSeconds: number): Promise<void> =>
@@ -54,7 +54,7 @@ describe('ffmpeg frame extractor', () => {
 
     await expect(
       createFfmpegFrameExtractor().extract(video, path.join(base, 'frames')),
-    ).rejects.toMatchObject({ kind: 'permanent', code: 'UNSUPPORTED_MEDIA' });
+    ).rejects.toMatchObject({ retryable: false, code: 'UNSUPPORTED_MEDIA' });
   });
 
   it('kills ffmpeg when the caller aborts', async () => {

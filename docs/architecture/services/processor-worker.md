@@ -1,128 +1,82 @@
 # Arquitetura: processor-worker
 
-Clean Architecture (Uncle Bob) aplicada ao contexto de **Processamento** do ZipFrames.
+Clean Architecture aplicada ao contexto de **Processamento** do ZipFrames.
 
-Referências de domínio: [dominio.md — Processamento](../../domain/dominio.md), [AsyncAPI](../../asyncapi/events.yaml), [modelagem de dados](../../data/modelagem-de-dados.md) (_“O processor-worker não tem banco”_).
+Referências: [dominio.md — Processamento](../../domain/dominio.md), [AsyncAPI](../../asyncapi/events.yaml), [modelagem de dados](../../data/modelagem-de-dados.md), [regras de camadas](../layers.md).
 
 ## Objetivo do serviço
 
 Consumir `video.uploaded`, extrair frames (1 fps, PNG), empacotar em zip (store), gravar o resultado no object storage e publicar `video.processing.started` / `video.processed` / `video.failed`. Stateless: sem Postgres; estado vem da mensagem, do storage e do disco temporário da tentativa.
 
-## Camadas (Uncle Bob)
+## Camadas
 
-As dependências de código apontam **sempre para dentro**.
+As dependências apontam para dentro.
 
 ```
 Frameworks & Drivers  →  Interface Adapters  →  Use Cases  →  Entities
-        (mais externo)                                      (mais interno)
 ```
 
-No código do serviço essas camadas se organizam em pastas assim:
+| Camada Clean Arch                         | Pasta                 | Conteúdo                                                            |
+| ----------------------------------------- | --------------------- | ------------------------------------------------------------------- |
+| Entities                                  | `src/domain/`         | Value objects, policies e erros (`ProcessingError` com `retryable`) |
+| Use Cases                                 | `src/application/`    | `processUploadedVideo`, DTOs e portas                               |
+| Interface Adapters + Frameworks & Drivers | `src/infrastructure/` | Consumer AMQP, gateways S3/ffmpeg, services zip/fs, health HTTP     |
+| Composition root                          | `src/main/`           | Wiring na inicialização                                             |
 
-| Camada Clean Arch                         | Pasta                 | Conteúdo                                                             |
-| ----------------------------------------- | --------------------- | -------------------------------------------------------------------- |
-| Entities                                  | `src/domain/`         | Conceitos e regras do Processamento                                  |
-| Use Cases                                 | `src/application/`    | Casos de uso e **interfaces de gateway**                             |
-| Interface Adapters + Frameworks & Drivers | `src/infrastructure/` | Consumers, implementações de gateway, clientes (amqplib, S3, ffmpeg) |
-| Composition root                          | `src/main/`           | Wiring na inicialização                                              |
+Não há `domain/entities/` nem `ports/repositories/`: o contexto não persiste agregado próprio.
 
-`infrastructure/` agrupa as duas camadas externas (Interface Adapters e Frameworks & Drivers) numa pasta só, sem misturar Use Cases com detalhes de entrega.
+### Repository vs gateway vs service
 
-### Por que “gateway” e não “adapter”?
+| Categoria       | Neste serviço                                                           |
+| --------------- | ----------------------------------------------------------------------- |
+| `repositories/` | Ausente (stateless)                                                     |
+| `gateways/`     | `ObjectStorage`, `EventPublisher`, `FrameExtractor` (cruzam o processo) |
+| `services/`     | `ArchiveBuilder`, `WorkDirectory` (local)                               |
 
-Neste serviço seguimos o vocabulário da Clean Architecture:
-
-- **Gateway** — limite de _saída_ que o use case exige do mundo externo (storage, extração de frames, arquivo zip, publicação de eventos). A **interface** do gateway vive em `application/`; a **implementação** vive em `infrastructure/`.
-- **Controller / Consumer** — Interface Adapter de _entrada_: traduz a mensagem do broker em chamada ao use case e cuida de ack / retry / DLQ.
-- **Frameworks & Drivers** — bibliotecas e processos concretos (amqplib, `@aws-sdk`, spawn do ffmpeg, filesystem), usados só por `infrastructure/` e montados em `main/`.
-
-“Adapter” (hexagonal) descreve a mesma ideia de implementação de porta; aqui preferimos **gateway** para deixar explícito o alinhamento com Uncle Bob.
+`ObjectStorage` não inclui `ping`: readiness usa `Pingable` à parte (`createReadinessCheck`).
 
 ## Mapa de pastas
 
 ```
-services/processor-worker/src/
+processor-worker/src/
 ├── domain/
-│   ├── processing-job.ts
-│   ├── processing-result.ts
-│   ├── frame-extraction-policy.ts
-│   ├── frames-package.ts
-│   └── errors.ts
-│
+│   ├── valueObjects/{processingJob,processingResult}.ts
+│   ├── errors/processingError.ts
+│   ├── policies/{frameExtractionPolicy,framesPackage}.ts
+│   └── index.ts
 ├── application/
-│   ├── use-cases/
-│   │   └── process-uploaded-video.ts
-│   └── gateways/
-│       ├── object-storage.ts
-│       ├── frame-extractor.ts
-│       ├── archive-builder.ts
-│       ├── event-publisher.ts
-│       └── work-directory.ts
-│
+│   ├── useCases/processUploadedVideo/
+│   │   ├── processUploadedVideo.useCase.ts
+│   │   └── processUploadedVideo.dto.ts
+│   └── ports/
+│       ├── gateways/{objectStorage,eventPublisher,frameExtractor}.gateway.ts
+│       └── services/{archiveBuilder,workDirectory}.service.ts
 ├── infrastructure/
-│   ├── messaging/
-│   │   ├── topology.ts                  # filas main / wait / DLQ
-│   │   ├── amqp-settle.ts               # retry ≠ DLQ (TTL wait queue)
-│   │   ├── video-uploaded-consumer.ts
-│   │   └── rabbitmq-connection.ts
+│   ├── http/health.routes.ts
 │   ├── gateways/
-│   ├── http/
-│   │   └── health.ts                    # /livez /readyz + /metrics
-│   ├── observability/
-│   │   └── job-metrics.ts
+│   │   ├── storage/s3ObjectStorage.gateway.ts
+│   │   ├── media/ffmpegFrameExtractor.gateway.ts
+│   │   └── amqpEventPublisher.gateway.ts
+│   ├── services/
+│   │   ├── media/zipArchiveBuilder.service.ts
+│   │   └── filesystem/fsWorkDirectory.service.ts
+│   ├── messaging/{rabbitmqConnection,topology,videoUploadedConsumer}.ts
+│   ├── observability/jobMetrics.ts
 │   └── config.ts
-│
-└── main/
-    ├── compose.ts
-    └── index.ts
+└── main/{compose.ts,index.ts}
 ```
 
-## Componentes por camada
+## Casos de uso
 
-### Entities (`domain/`)
-
-| Conceito                          | Responsabilidade                                                                     |
-| --------------------------------- | ------------------------------------------------------------------------------------ |
-| `ProcessingJob`                   | Unidade de trabalho: `videoId`, `ownerId`, `sourceKey`, tentativa, `correlationId`   |
-| `ProcessingResult`                | `frames_packaged` ou `media_rejected` (falha transitória não é resultado: é lançada) |
-| `FrameExtractionPolicy`           | 1 frame/s, PNG, nomes `frame_0001.png`…                                              |
-| `FramesPackage`                   | Chave determinística do zip; sem recompressão (store)                                |
-| `ProcessingError` / `FailureKind` | Permanente (falha imediata + `video.failed`) vs transitória (retry)                  |
-
-### Use Cases (`application/`)
-
-| Caso de uso            | Orquestra                                                                                                                                                                                                                            |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `ProcessUploadedVideo` | Publica `started` → baixa original → extrai frames → empacota zip → grava pacote → `processed` → descarta original; mídia **rejeitada** publica `failed` e retorna `media_rejected`; falha **transitória** é lançada para o consumer |
+| Caso de uso            | Orquestra                                                                                                                                            |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `processUploadedVideo` | Publica `started` → baixa original → extrai frames → zip → grava pacote → `processed`; mídia rejeitada publica `failed`; falha transitória é lançada |
 
 Timeout: `AbortController` cancela download/ffmpeg; o diretório temporário é removido no `finally`.
 
-Ownership de falha:
+Falhas usam `throw` com `retryable` (alinhado a `InfrastructureError` em `@zipframes/core`), não `Result`.
 
-- **Use case** — mídia rejeitada (`video.failed` + `media_rejected`).
-- **Consumer** — só esgotamento de tentativas transitórias (`video.failed` + DLQ).
-
-### Gateways (interfaces em `application/gateways/`)
-
-| Gateway          | Operações                                                                      |
-| ---------------- | ------------------------------------------------------------------------------ |
-| `ObjectStorage`  | `downloadToFile`, `uploadFile`, `deleteObject`, `ping` (streams + AbortSignal) |
-| `FrameExtractor` | `extract(originalVideoPath, framesDirectory, signal?) → framePaths`            |
-| `ArchiveBuilder` | `createZip(framePaths, framesPackagePath)`                                     |
-| `EventPublisher` | `publish(started \| processed \| failed)` tipado                               |
-| `WorkDirectory`  | `createTempDir`, `removeDir`                                                   |
-
-### Interface Adapters de entrada (`infrastructure/messaging/`)
-
-| Componente              | Responsabilidade                                                                                          |
-| ----------------------- | --------------------------------------------------------------------------------------------------------- |
-| `VideoUploadedConsumer` | Valida envelope, `runWithCorrelationId`, chama use case, settle (ack / retry / DLQ), métricas e logs JSON |
-
-Envelope inválido (poison) → DLQ **sem** `video.failed`.
-
-### Composition root (`main/`)
-
-Lê config, cria drivers, asserta topologia, inicia consume, sobe health/metrics HTTP, shutdown graceful (cancela consume, drena in-flight, fecha canal).
+Payloads de eventos de saída tipados com `@zipframes/schemas/processor-worker`.
 
 ## Topologia AMQP (retry real)
 
@@ -140,13 +94,11 @@ flowchart LR
   wait -->|TTL expiration DLX| events
 ```
 
-| Destino settle | Comportamento                                                                                                   |
-| -------------- | --------------------------------------------------------------------------------------------------------------- |
-| `ack`          | Confirma a mensagem                                                                                             |
-| `retry`        | Publica na fila **wait** com `expiration` (backoff) + header `x-attempt` + ack da original — **não** é nack→DLQ |
-| `dlq`          | `nack(requeue=false)` → DLX da fila principal → `zipframes.events.dlq`                                          |
-
-Config: `MAX_ATTEMPTS`, `RETRY_BASE_DELAY_MS`, `RETRY_MAX_DELAY_MS`.
+| Destino settle | Comportamento                                                                              |
+| -------------- | ------------------------------------------------------------------------------------------ |
+| `ack`          | Confirma a mensagem                                                                        |
+| `retry`        | Publica na fila **wait** com `expiration` (backoff) + header `x-attempt` + ack da original |
+| `dlq`          | `nack(requeue=false)` → DLX → `zipframes.events.dlq`                                       |
 
 ## Contratos de falha
 
@@ -158,51 +110,30 @@ Config: `MAX_ATTEMPTS`, `RETRY_BASE_DELAY_MS`, `RETRY_MAX_DELAY_MS`.
 | Transitória, attempt = max  | `video.failed`    | dlq                          |
 | Envelope poison             | —                 | dlq                          |
 
-## Eventos
-
-| Direção | Evento                     | Papel                                             |
-| ------- | -------------------------- | ------------------------------------------------- |
-| In      | `video.uploaded`           | Dispara o job                                     |
-| Out     | `video.processing.started` | Início da tentativa                               |
-| Out     | `video.processed`          | Sucesso (`resultKey`, `frameCount`, `durationMs`) |
-| Out     | `video.failed`             | Falha permanente ou esgotamento de tentativas     |
-
 ## Observabilidade e operação
 
-- Logs estruturados: `videoId`, `ownerId`, `attempt`, `errorCode`, `kind`, `durationMs`, `processingResult` (com `correlationId` via ALS).
-- Métricas Prometheus (`@zipframes/telemetry`): `messages_handled_total` / `message_duration_seconds` com o label `outcome` do pacote (`success`, `permanent_failure`, `transient_retry`, `exhausted`, `delete_original_failed`). No código do worker o vocabulário de domínio é `frames_packaged`, `media_rejected`, `retry_scheduled`, `retries_exhausted`.
-- HTTP: `GET /livez` (liveness), `GET /readyz` (AMQP conectado + `HeadBucket` no storage), `GET /metrics` na porta de métricas.
-- Falha ao apagar o original após sucesso/permanente: log + métrica (cleanup secundário; não falha o job).
-
-## Regras de dependência (verificação)
-
-Verificadas pelo dependency-cruiser (`.dependency-cruiser.mjs`):
-
-- `domain/` → não importa `application/`, `infrastructure/`, `main/`, nem libs de infra
-- `application/` → só `domain/`; **não** importa `infrastructure/` nem libs de broker/storage
-- `infrastructure/` → pode importar `application/` e `domain/`; não importa `main/`
-- `main/` → monta o grafo
-
-Pacotes `@zipframes/communication`, `@zipframes/schemas`, `@zipframes/logger`, `@zipframes/telemetry` entram pela borda (`infrastructure/` / `main/`), não pelo `domain/`.
+- Logs estruturados com `correlationId` via ALS.
+- Métricas Prometheus via `@zipframes/telemetry`.
+- HTTP na mesma porta: `GET /health/live`, `GET /health/ready` (AMQP + storage), `GET /metrics`. Body JSON no ready.
 
 ## Processo
 
-Um processo consome `processor.video.uploaded` com prefetch 1. `SIGINT` e `SIGTERM` cancelam o consume, esperam o job em andamento (até 30s) e fecham o canal. `/livez` responde se o processo está de pé. `/readyz` só responde 200 com o AMQP conectado e o bucket alcançável.
+Um processo consome `processor.video.uploaded` com prefetch 1. `SIGINT`/`SIGTERM` cancelam o consume, drenam o job em andamento e fecham o canal.
 
-A decisão de réplicas está no [diagrama de containers](../../domain/c4/02-containers.md): KEDA pelo tamanho da fila. No cluster, o Argo CD aplica [`infra/k8s/processor-worker`](../../../infra/k8s/processor-worker) pela Application [`infra/argocd/processor-worker.yaml`](../../../infra/argocd/processor-worker.yaml). O Secret fica de fora desse apply. Na máquina, o mesmo processo sobe pelo Docker Compose, na rede `zipframes`, com `/readyz` na porta 8081.
+Réplicas: KEDA pelo tamanho da fila. No cluster, Argo CD aplica [`infra/k8s/processor-worker`](../../../infra/k8s/processor-worker). Na máquina, Docker Compose na rede `zipframes`.
 
 ## Testes
 
-| Pasta        | O que prova                                                                   |
-| ------------ | ----------------------------------------------------------------------------- |
-| `tests/unit` | Regras e contratos com dependências substituídas                              |
-| `tests/int`  | Filesystem, zip, HTTP, ffmpeg, RabbitMQ e S3 de verdade — sem mock de gateway |
+| Pasta        | O que prova                                             |
+| ------------ | ------------------------------------------------------- |
+| `tests/unit` | Regras e contratos com dependências substituídas        |
+| `tests/int`  | Filesystem, zip, HTTP, ffmpeg, RabbitMQ e S3 de verdade |
 
-Cobertura mínima no `src/` executável: 80% (statements, branches, functions, lines).
+Cobertura mínima no `src/` executável: 80%.
 
 ## Fora de escopo deste serviço
 
 - Banco de dados e migrations
 - HTTP de negócio / JWT / JWKS (apenas health/metrics)
-- Decisão de status do vídeo no agregado `Video` (isso é video-service)
+- Decisão de status do vídeo no agregado `Video` (video-service)
 - Envio de e-mail (notification-service consome `video.failed`)

@@ -1,7 +1,7 @@
 import { Registry } from 'prom-client';
 import { describe, expect, it } from 'vitest';
 
-import { createOutboxMetrics } from '../../src/infrastructure/observability/outbox-metrics.js';
+import { createOutboxMetrics } from '../../src/infrastructure/observability/outboxMetrics.js';
 
 describe('outbox metrics', () => {
   it('counts rows that reached the attempt limit', async () => {

@@ -216,19 +216,17 @@ services:
       RETRY_BASE_DELAY_MS: '1000'
       RETRY_MAX_DELAY_MS: '30000'
       HEALTH_PORT: '8081'
-      METRICS_PORT: '9091'
       LOG_LEVEL: info
       SERVICE_VERSION: '0.0.0'
     ports:
       - '${PROCESSOR_HEALTH_PORT:-8081}:8081'
-      - '${PROCESSOR_METRICS_PORT:-9091}:9091'
     healthcheck:
       test:
         [
           'CMD',
           'node',
           '-e',
-          "fetch('http://127.0.0.1:8081/readyz').then((response)=>process.exit(response.ok?0:1)).catch(()=>process.exit(1))",
+          "fetch('http://127.0.0.1:8081/health/ready').then((response)=>process.exit(response.ok?0:1)).catch(()=>process.exit(1))",
         ]
       interval: 10s
       timeout: 5s

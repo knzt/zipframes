@@ -6,10 +6,10 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { createAuthenticator } from '@zipframes/authenticator';
 
-import { deriveRsaKeyMaterial } from '../../src/infrastructure/crypto/rsa-keys.js';
-import type { RsaKeyMaterial } from '../../src/infrastructure/crypto/rsa-keys.js';
-import { Rs256TokenIssuer } from '../../src/infrastructure/crypto/rs256-token-issuer.js';
-import { asUserId } from '../../src/domain/user.js';
+import { asUserId } from '../../src/domain/entities/user.js';
+import { deriveRsaKeyMaterial } from '../../src/infrastructure/services/crypto/rsaKeys.js';
+import type { RsaKeyMaterial } from '../../src/infrastructure/services/crypto/rsaKeys.js';
+import { Rs256TokenIssuer } from '../../src/infrastructure/services/crypto/rs256TokenIssuer.js';
 
 const ISSUER = 'https://auth.zipframes.test';
 const AUDIENCE = 'zipframes';

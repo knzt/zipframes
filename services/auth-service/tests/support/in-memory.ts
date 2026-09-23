@@ -1,13 +1,17 @@
 import { err, ok } from '@zipframes/core';
 import type { Result } from '@zipframes/core';
 
-import type { Clock } from '../../src/application/clock.js';
-import type { IdGenerator } from '../../src/application/id-generator.js';
-import type { TokenIssuer } from '../../src/application/token-issuer.js';
-import type { PasswordHash } from '../../src/domain/password.js';
-import type { PasswordHasher } from '../../src/domain/password-hasher.js';
-import type { User, UserId, UserRegistered } from '../../src/domain/user.js';
-import type { EmailTakenError, UserRepository } from '../../src/domain/user-repository.js';
+import type {
+  EmailTakenError,
+  OutboxEventWrite,
+  UserRepository,
+} from '../../src/application/ports/repositories/user.repository.js';
+import type { Clock } from '../../src/application/ports/services/clock.service.js';
+import type { IdGenerator } from '../../src/application/ports/services/idGenerator.service.js';
+import type { PasswordHasher } from '../../src/application/ports/services/passwordHasher.service.js';
+import type { TokenIssuer } from '../../src/application/ports/services/tokenIssuer.service.js';
+import type { User, UserId } from '../../src/domain/entities/user.js';
+import type { PasswordHash } from '../../src/domain/valueObjects/password.js';
 
 /**
  * In-memory stand-ins for the domain and use-case interfaces, so the use
@@ -15,18 +19,18 @@ import type { EmailTakenError, UserRepository } from '../../src/domain/user-repo
  */
 export class InMemoryUserRepository implements UserRepository {
   readonly users = new Map<string, User>();
-  readonly events: UserRegistered[] = [];
+  readonly events: OutboxEventWrite[] = [];
 
   findByEmail(email: string): Promise<User | null> {
     return Promise.resolve(this.users.get(email) ?? null);
   }
 
-  save(user: User, registered: UserRegistered): Promise<Result<void, EmailTakenError>> {
+  save(user: User, outbox: OutboxEventWrite): Promise<Result<void, EmailTakenError>> {
     if (this.users.has(user.email)) {
       return Promise.resolve(err({ code: 'EMAIL_TAKEN' as const }));
     }
     this.users.set(user.email, user);
-    this.events.push(registered);
+    this.events.push(outbox);
     return Promise.resolve(ok(undefined));
   }
 }

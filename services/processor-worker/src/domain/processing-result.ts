@@ -1,5 +1,0 @@
-/**
- * How a processing attempt finished from the use case's perspective.
- * Transient faults are not a result: they are thrown for the consumer to retry.
- */
-export type ProcessingResult = 'frames_packaged' | 'media_rejected';

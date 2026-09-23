@@ -6,19 +6,11 @@ export default {
   forbidden: [
     {
       name: 'domain-não-importa-nada-externo',
-      comment:
-        'Entities não podem importar application, infrastructure, main ' +
-        'nem o layout legado adapters/frameworks.',
+      comment: 'Entities não podem importar application, infrastructure ou main.',
       severity: 'error',
       from: { path: '/src/domain/' },
       to: {
-        path: [
-          '/src/application/',
-          '/src/infrastructure/',
-          '/src/adapters/',
-          '/src/frameworks/',
-          '/src/main/',
-        ],
+        path: ['/src/application/', '/src/infrastructure/', '/src/main/'],
       },
     },
     {
@@ -51,14 +43,14 @@ export default {
       severity: 'error',
       from: { path: '/src/application/' },
       to: {
-        path: ['/src/infrastructure/', '/src/adapters/', '/src/frameworks/', '/src/main/'],
+        path: ['/src/infrastructure/', '/src/main/'],
       },
     },
     {
       name: 'application-não-importa-libs-de-infra',
       comment:
         'Use Cases não podem importar Prisma, amqplib, ioredis, @aws-sdk, nodemailer, fastify… ' +
-        'A interface fica em domain/ ou application/; a implementação fica em infrastructure/.',
+        'A interface fica em application/ports/; a implementação fica em infrastructure/.',
       severity: 'error',
       from: { path: '/src/application/' },
       to: {
@@ -85,27 +77,6 @@ export default {
       to: { path: '/src/main/' },
     },
 
-    // Layout legado (adapters + frameworks) — mantido enquanto algum serviço ainda o usar
-    {
-      name: 'adapters-não-importa-frameworks',
-      comment: 'Layout legado: Interface Adapters não importam frameworks diretamente.',
-      severity: 'error',
-      from: { path: '/src/adapters/' },
-      to: { path: '/src/frameworks/' },
-    },
-    {
-      name: 'adapters-não-importa-main',
-      severity: 'error',
-      from: { path: '/src/adapters/' },
-      to: { path: '/src/main/' },
-    },
-    {
-      name: 'frameworks-não-importa-main',
-      severity: 'error',
-      from: { path: '/src/frameworks/' },
-      to: { path: '/src/main/' },
-    },
-
     {
       name: 'serviços-não-importam-outros-serviços',
       comment:
@@ -115,7 +86,7 @@ export default {
       from: { path: '^services/([^/]+)/' },
       to: {
         path: '^services/',
-        pathNot: '^services/$1/',
+        pathNot: ['^services/$1/', 'node_modules'],
       },
     },
     {

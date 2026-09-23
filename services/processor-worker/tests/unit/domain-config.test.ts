@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { ProcessingError } from '../../src/domain/errors.js';
-import { frameFileName } from '../../src/domain/frame-extraction-policy.js';
-import { framesPackageObjectKey } from '../../src/domain/frames-package.js';
+import { ProcessingError } from '../../src/domain/errors/processingError.js';
+import { frameFileName } from '../../src/domain/policies/frameExtractionPolicy.js';
+import { framesPackageObjectKey } from '../../src/domain/policies/framesPackage.js';
 import { loadConfig } from '../../src/infrastructure/config.js';
 
 describe('domain helpers', () => {
@@ -29,7 +29,6 @@ describe('loadConfig', () => {
       RETRY_BASE_DELAY_MS: '100',
       RETRY_MAX_DELAY_MS: '1000',
       HEALTH_PORT: '8081',
-      METRICS_PORT: '9091',
       LOG_LEVEL: 'info',
       SERVICE_VERSION: '0.0.0',
     });
@@ -38,7 +37,6 @@ describe('loadConfig', () => {
     expect(config.maxAttempts).toBe(3);
     expect(config.s3ForcePathStyle).toBe(true);
     expect(config.healthPort).toBe(8081);
-    expect(config.metricsPort).toBe(9091);
   });
 
   it('applies defaults and rejects a boolean false for path style', () => {
@@ -66,8 +64,8 @@ describe('loadConfig', () => {
 describe('ProcessingError', () => {
   it('keeps the cause when one is provided', () => {
     const cause = new Error('disk');
-    const error = new ProcessingError('transient', 'ZIP_WRITE_FAILED', 'failed writing zip', cause);
+    const error = new ProcessingError(true, 'ZIP_WRITE_FAILED', 'failed writing zip', cause);
     expect(error.cause).toBe(cause);
-    expect(error.kind).toBe('transient');
+    expect(error.retryable).toBe(true);
   });
 });

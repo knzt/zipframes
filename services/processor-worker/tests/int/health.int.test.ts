@@ -1,7 +1,10 @@
 import type { Server } from 'node:http';
 import { describe, expect, it } from 'vitest';
 
-import { startHealthServer, startMetricsServer } from '../../src/infrastructure/http/health.js';
+import { createReadinessCheck } from '@zipframes/core';
+import type { Pingable, ReadinessResult } from '@zipframes/core';
+
+import { startHealthServer } from '../../src/infrastructure/http/health.routes.js';
 
 const listen = async (server: Server): Promise<number> =>
   new Promise((resolve, reject) => {
@@ -32,25 +35,29 @@ const close = async (server: Server): Promise<void> =>
     });
   });
 
+const readyChecks = (checks: readonly Pingable[]): (() => Promise<ReadinessResult>) =>
+  createReadinessCheck(checks);
+
 describe('health and metrics HTTP', () => {
-  it('answers liveness, readiness and unknown routes', async () => {
+  it('answers liveness, readiness, metrics and unknown routes on one port', async () => {
     const server = startHealthServer(0, {
-      isAmqpConnected: () => true,
-      pingStorage: async () => undefined,
+      isReady: readyChecks([{ ping: async () => undefined }, { ping: async () => undefined }]),
+      renderMetrics: async () => 'frames_packaged 1\n',
     });
     const port = await listen(server);
 
     try {
-      const live = await fetch(`http://127.0.0.1:${String(port)}/livez`);
+      const live = await fetch(`http://127.0.0.1:${String(port)}/health/live`);
       expect(live.status).toBe(200);
       expect(await live.json()).toEqual({ status: 'ok' });
 
-      const ready = await fetch(`http://127.0.0.1:${String(port)}/readyz`);
+      const ready = await fetch(`http://127.0.0.1:${String(port)}/health/ready`);
       expect(ready.status).toBe(200);
       expect(await ready.json()).toEqual({ status: 'ready' });
 
-      const metricsHint = await fetch(`http://127.0.0.1:${String(port)}/metrics`);
-      expect(metricsHint.status).toBe(404);
+      const metrics = await fetch(`http://127.0.0.1:${String(port)}/metrics`);
+      expect(metrics.status).toBe(200);
+      expect(await metrics.text()).toContain('frames_packaged');
 
       const missing = await fetch(`http://127.0.0.1:${String(port)}/nope`);
       expect(missing.status).toBe(404);
@@ -59,42 +66,57 @@ describe('health and metrics HTTP', () => {
     }
   });
 
-  it('reports not ready when the broker or the bucket is unreachable', async () => {
+  it('reports not ready when a dependency ping fails', async () => {
     const disconnected = startHealthServer(0, {
-      isAmqpConnected: () => false,
-      pingStorage: async () => undefined,
+      isReady: readyChecks([
+        {
+          ping: async () => {
+            throw new Error('amqp disconnected');
+          },
+        },
+      ]),
+      renderMetrics: async () => '',
     });
     const storageDown = startHealthServer(0, {
-      isAmqpConnected: () => true,
-      pingStorage: async () => {
-        throw new Error('bucket missing');
-      },
+      isReady: readyChecks([
+        { ping: async () => undefined },
+        {
+          ping: async () => {
+            throw new Error('bucket missing');
+          },
+        },
+      ]),
+      renderMetrics: async () => '',
     });
     const disconnectedPort = await listen(disconnected);
     const storagePort = await listen(storageDown);
 
     try {
-      const broker = await fetch(`http://127.0.0.1:${String(disconnectedPort)}/readyz`);
+      const broker = await fetch(`http://127.0.0.1:${String(disconnectedPort)}/health/ready`);
       expect(broker.status).toBe(503);
       expect(await broker.json()).toEqual({ status: 'not_ready', reason: 'amqp disconnected' });
 
-      const storage = await fetch(`http://127.0.0.1:${String(storagePort)}/readyz`);
+      const storage = await fetch(`http://127.0.0.1:${String(storagePort)}/health/ready`);
       expect(storage.status).toBe(503);
       const body = (await storage.json()) as { status: string; reason: string };
       expect(body.status).toBe('not_ready');
       expect(body.reason).toBe('bucket missing');
 
       const unknown = startHealthServer(0, {
-        isAmqpConnected: () => true,
-        pingStorage: async () => {
-          // Exercita o ramo em que a falha não é um Error.
-          // eslint-disable-next-line @typescript-eslint/only-throw-error
-          throw 'offline';
-        },
+        isReady: readyChecks([
+          {
+            ping: async () => {
+              // Exercita o ramo em que a falha não é um Error.
+              // eslint-disable-next-line @typescript-eslint/only-throw-error
+              throw 'offline';
+            },
+          },
+        ]),
+        renderMetrics: async () => '',
       });
       const unknownPort = await listen(unknown);
       try {
-        const response = await fetch(`http://127.0.0.1:${String(unknownPort)}/readyz`);
+        const response = await fetch(`http://127.0.0.1:${String(unknownPort)}/health/ready`);
         expect(response.status).toBe(503);
         expect(await response.json()).toEqual({ status: 'not_ready', reason: 'unknown' });
       } finally {
@@ -106,29 +128,26 @@ describe('health and metrics HTTP', () => {
     }
   });
 
-  it('serves metrics text and a 500 when rendering fails', async () => {
-    const ok = startMetricsServer(0, async () => 'frames_packaged 1\n');
-    const failing = startMetricsServer(0, async () => {
-      throw new Error('registry closed');
+  it('serves a 500 when metrics rendering fails', async () => {
+    const failing = startHealthServer(0, {
+      isReady: readyChecks([{ ping: async () => undefined }]),
+      renderMetrics: async () => {
+        throw new Error('registry closed');
+      },
     });
-    const okPort = await listen(ok);
     const failingPort = await listen(failing);
 
     try {
-      const metrics = await fetch(`http://127.0.0.1:${String(okPort)}/metrics`);
-      expect(metrics.status).toBe(200);
-      expect(await metrics.text()).toContain('frames_packaged');
-
-      const missing = await fetch(`http://127.0.0.1:${String(okPort)}/livez`);
-      expect(missing.status).toBe(404);
-
       const broken = await fetch(`http://127.0.0.1:${String(failingPort)}/metrics`);
       expect(broken.status).toBe(500);
       expect(await broken.text()).toBe('registry closed');
 
-      const bareFailure = startMetricsServer(0, () => {
-        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
-        return Promise.reject('offline');
+      const bareFailure = startHealthServer(0, {
+        isReady: readyChecks([{ ping: async () => undefined }]),
+        renderMetrics: () => {
+          // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+          return Promise.reject('offline');
+        },
       });
       const barePort = await listen(bareFailure);
       try {
@@ -139,7 +158,6 @@ describe('health and metrics HTTP', () => {
         await close(bareFailure);
       }
     } finally {
-      await close(ok);
       await close(failing);
     }
   });

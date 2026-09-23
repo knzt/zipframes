@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { registerUser, userRegisteredFrom } from '../../src/domain/user.js';
+import { registerUser, userRegisteredFrom } from '../../src/domain/index.js';
 
 const validInput = {
   id: '0194f3a0-0000-7000-8000-000000000001',

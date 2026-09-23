@@ -1,7 +1,7 @@
 import { createMetrics } from '@zipframes/telemetry';
 import { describe, expect, it } from 'vitest';
 
-import { createJobMetrics } from '../../src/infrastructure/observability/job-metrics.js';
+import { createJobMetrics } from '../../src/infrastructure/observability/jobMetrics.js';
 
 describe('createJobMetrics', () => {
   it('records each job outcome on the shared technical metrics', async () => {

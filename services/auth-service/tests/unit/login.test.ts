@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { makeLogin } from '../../src/application/use-cases/login.js';
-import { makeRegisterUser } from '../../src/application/use-cases/register-user.js';
+import { makeLogin } from '../../src/application/useCases/login/login.useCase.js';
+import { makeRegisterUser } from '../../src/application/useCases/registerUser/registerUser.useCase.js';
 import {
   FakeHasher,
   FakeTokenIssuer,
@@ -25,7 +25,12 @@ beforeEach(async () => {
     hasher,
     ids: new SequentialIds(),
     clock: new FixedClock(),
-  })({ name: 'Hellen Santos', email: 'hellen@example.com', password: 'senha1234' });
+  })({
+    name: 'Hellen Santos',
+    email: 'hellen@example.com',
+    password: 'senha1234',
+    correlationId: '0194f3a0-0000-7000-8000-000000000099',
+  });
 
   login = makeLogin({ users, hasher, tokens });
   hasher.verifiedAgainst.length = 0;
