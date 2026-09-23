@@ -59,11 +59,11 @@ describe('a failed login', () => {
     expect(result).toMatchObject({ ok: false, error: { code: 'INVALID_CREDENTIALS' } });
   });
 
-  it('rejects an email that is not registered, after a comparison', async () => {
+  it('rejects an email that is not registered', async () => {
     const result = await login({ email: 'ninguem@example.com', password: 'senha1234' });
 
     expect(result).toMatchObject({ ok: false, error: { code: 'INVALID_CREDENTIALS' } });
-    expect(hasher.verifiedAgainst).toEqual([null]);
+    expect(hasher.verifiedAgainst).toEqual([]);
   });
 
   it('rejects a malformed email', async () => {

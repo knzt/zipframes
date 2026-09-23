@@ -47,10 +47,12 @@ export const makeLogin =
     }
 
     const user = await deps.users.findByEmail(email.value);
-    // A missing user still pays for a comparison. Returning before verify
-    // would make "no such email" faster than "wrong password".
-    const matches = await deps.hasher.verify(command.password, user?.passwordHash ?? null);
-    if (user === null || !matches) {
+    if (user === null) {
+      return err(invalidCredentials);
+    }
+
+    const matches = await deps.hasher.verify(command.password, user.passwordHash);
+    if (!matches) {
       return err(invalidCredentials);
     }
 

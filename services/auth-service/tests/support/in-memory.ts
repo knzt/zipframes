@@ -41,17 +41,14 @@ export class InMemoryUserRepository implements UserRepository {
 }
 
 export class FakeHasher implements PasswordHasher {
-  readonly verifiedAgainst: (PasswordHash | null)[] = [];
+  readonly verifiedAgainst: PasswordHash[] = [];
 
   hash(password: string): Promise<PasswordHash> {
     return Promise.resolve(`hashed:${password}` as PasswordHash);
   }
 
-  verify(password: string, hash: PasswordHash | null): Promise<boolean> {
+  verify(password: string, hash: PasswordHash): Promise<boolean> {
     this.verifiedAgainst.push(hash);
-    if (hash === null) {
-      return Promise.resolve(false);
-    }
     return Promise.resolve(`hashed:${password}` === hash);
   }
 }

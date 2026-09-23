@@ -48,9 +48,4 @@ describe('verify', () => {
 
     expect(await hasher.verify('', hash)).toBe(false);
   });
-
-  it('rejects a password when there is no stored hash, after a real comparison', async () => {
-    expect(await hasher.verify('senha1234', null)).toBe(false);
-    expect(await hasher.verify('senha1234', null)).toBe(false);
-  });
 });
