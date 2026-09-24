@@ -2,7 +2,7 @@
 
 Clean Architecture aplicada ao contexto de **Processamento** do ZipFrames.
 
-Referências: [dominio.md — Processamento](../../domain/dominio.md), [AsyncAPI](../../asyncapi/events.yaml), [modelagem de dados](../../data/modelagem-de-dados.md), [regras de camadas](../layers.md).
+Referências: [dominio.md — Processamento](../../domain/dominio.md), [HTTP e OpenAPI gerado](../http.md), [AsyncAPI](../../asyncapi/events.yaml), [modelagem de dados](../../data/modelagem-de-dados.md), [regras de camadas](../layers.md).
 
 ## Objetivo do serviço
 
@@ -16,14 +16,14 @@ As dependências apontam para dentro.
 Frameworks & Drivers  →  Interface Adapters  →  Use Cases  →  Entities
 ```
 
-| Camada Clean Arch                         | Pasta                 | Conteúdo                                                            |
-| ----------------------------------------- | --------------------- | ------------------------------------------------------------------- |
-| Entities                                  | `src/domain/`         | Value objects, policies e erros (`ProcessingError` com `retryable`) |
-| Use Cases                                 | `src/application/`    | `processUploadedVideo`, DTOs e portas                               |
-| Interface Adapters + Frameworks & Drivers | `src/infrastructure/` | Consumer AMQP, gateways S3/ffmpeg, services zip/fs, health HTTP     |
-| Composition root                          | `src/main/`           | Wiring na inicialização                                             |
+| Camada Clean Arch                         | Pasta                 | Conteúdo                                                                   |
+| ----------------------------------------- | --------------------- | -------------------------------------------------------------------------- |
+| Entities                                  | `src/domain/`         | Value objects, policies e erros (`ProcessingError` com `retryable`)        |
+| Use Cases                                 | `src/application/`    | `processUploadedVideo`, DTOs e interfaces                                  |
+| Interface Adapters + Frameworks & Drivers | `src/infrastructure/` | Consumer AMQP, adapters S3/ffmpeg, services zip/fs, health HTTP no Fastify |
+| Composition root                          | `src/main/`           | Wiring na inicialização                                                    |
 
-Não há `domain/entities/` nem `ports/repositories/`: o contexto não persiste agregado próprio.
+Não há `domain/entities/` nem `interfaces/repositories/`: o contexto não persiste agregado próprio.
 
 ### Repository vs gateway vs service
 
@@ -48,7 +48,7 @@ processor-worker/src/
 │   ├── useCases/processUploadedVideo/
 │   │   ├── processUploadedVideo.useCase.ts
 │   │   └── processUploadedVideo.dto.ts
-│   └── ports/
+│   └── interfaces/
 │       ├── gateways/{objectStorage,eventPublisher,frameExtractor}.gateway.ts
 │       └── services/{archiveBuilder,workDirectory}.service.ts
 ├── infrastructure/
@@ -114,7 +114,7 @@ flowchart LR
 
 - Logs estruturados com `correlationId` via ALS.
 - Métricas Prometheus via `@zipframes/telemetry`.
-- HTTP na mesma porta: `GET /health/live`, `GET /health/ready` (AMQP + storage), `GET /metrics`. Body JSON no ready.
+- HTTP no Fastify, na porta `HEALTH_PORT` (padrão 8081): `GET /health/live`, `GET /health/ready` (AMQP + storage), `GET /metrics`, `GET /docs` e `GET /docs/json`. O contrato está em [http.md](../http.md).
 
 ## Processo
 

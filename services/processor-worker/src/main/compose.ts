@@ -99,7 +99,7 @@ export const startWorker = async (): Promise<{ stop: () => Promise<void> }> => {
   };
   const isReady = createReadinessCheck([amqpPing, storage]);
 
-  const healthServer = startHealthServer(config.healthPort, {
+  const healthServer = await startHealthServer(config.healthPort, {
     isReady,
     renderMetrics: () => technicalMetrics.registry.metrics(),
   });
@@ -111,15 +111,7 @@ export const startWorker = async (): Promise<{ stop: () => Promise<void> }> => {
 
   return {
     stop: async () => {
-      await new Promise<void>((resolve, reject) => {
-        healthServer.close((error) => {
-          if (error) {
-            reject(error);
-            return;
-          }
-          resolve();
-        });
-      }).catch(() => undefined);
+      await healthServer.close().catch(() => undefined);
       await connection.close();
       logger.info('processor-worker stopped');
     },

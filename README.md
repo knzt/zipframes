@@ -70,22 +70,26 @@ pnpm --dir services/processor-worker test
 - **Lint:** ESLint com typescript-eslint em modo strict, com a regra de camadas da Clean Architecture verificada no CI.
 - **Branches:** `feat/`, `fix/`, `docs/`, `chore/`, `ci/`, `test/`, `refactor/` saindo da `main`.
 
+## CI
+
+Cada serviço é construído, testado e empacotado no próprio workflow (`.github/workflows/auth-service.yml` e `processor-worker.yml`), com filtro de caminho. Os dois chamam `.github/workflows/service-ci.yml`. O workflow da raiz só formata o repositório e valida o AsyncAPI. A imagem fica com a tag local já usada nos manifests (`zipframes-auth-service:local`, `zipframes-processor-worker:local`) e não é publicada.
+
 ## Stack
 
-| Camada           | Tecnologia                                    |
-| ---------------- | --------------------------------------------- |
-| Linguagem        | Node.js 22 + TypeScript 5 (strict)            |
-| HTTP             | Fastify                                       |
-| Validação        | Zod                                           |
-| ORM / migrations | Prisma                                        |
-| Mensageria       | RabbitMQ + amqplib                            |
-| Object storage   | SeaweedFS (API S3)                            |
-| Cache            | Redis + ioredis                               |
-| E-mail           | Nodemailer                                    |
-| Banco de dados   | PostgreSQL (uma instância por serviço)        |
-| Testes           | Vitest + Testcontainers                       |
-| Monorepo         | um `pnpm-lock.yaml` por serviço               |
-| Containers       | Docker + Kubernetes (kind)                    |
-| Escala           | KEDA (worker escala pelo tamanho da fila)     |
-| CD               | Argo CD (GitOps)                              |
-| Observabilidade  | OpenTelemetry + Prometheus + Grafana + Jaeger |
+| Camada           | Tecnologia                                            |
+| ---------------- | ----------------------------------------------------- |
+| Linguagem        | Node.js 22 + TypeScript 5 (strict)                    |
+| HTTP             | Fastify (API e saúde, em todo serviço)                |
+| Validação        | Zod                                                   |
+| ORM / migrations | Prisma                                                |
+| Mensageria       | RabbitMQ + amqplib                                    |
+| Object storage   | SeaweedFS (API S3)                                    |
+| Cache            | Redis + ioredis                                       |
+| E-mail           | Nodemailer                                            |
+| Banco de dados   | PostgreSQL (uma instância por serviço)                |
+| Testes           | Vitest + Testcontainers                               |
+| Monorepo         | um `pnpm-lock.yaml` por serviço                       |
+| Containers       | Docker + Kubernetes (kind)                            |
+| Escala           | KEDA (worker escala pelo tamanho da fila)             |
+| CD               | Argo CD (GitOps), imagens locais, sem deploy em nuvem |
+| Observabilidade  | OpenTelemetry + Prometheus + Grafana + Jaeger         |

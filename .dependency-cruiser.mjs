@@ -50,7 +50,7 @@ export default {
       name: 'application-não-importa-libs-de-infra',
       comment:
         'Use Cases não podem importar Prisma, amqplib, ioredis, @aws-sdk, nodemailer, fastify… ' +
-        'A interface fica em application/ports/; a implementação fica em infrastructure/.',
+        'A interface fica em application/interfaces/; a implementação fica em infrastructure/.',
       severity: 'error',
       from: { path: '/src/application/' },
       to: {

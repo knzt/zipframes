@@ -2,7 +2,7 @@
 
 Documentos de arquitetura interna de cada microsserviço, alinhados à **Clean Architecture** de Robert C. Martin (Uncle Bob).
 
-As regras gerais de dependência, taxonomia de portas e nomenclatura estão em [layers.md](../layers.md). Cada serviço detalha aqui o mapa de pastas, componentes e fluxos do seu contexto.
+As regras gerais de dependência, a taxonomia das interfaces da camada de casos de uso e a nomenclatura estão em [layers.md](../layers.md). O HTTP comum (saúde e OpenAPI) está em [http.md](../http.md). Cada serviço detalha aqui o mapa de pastas, componentes e fluxos do seu contexto.
 
 | Serviço            | Documento                                    | Persistência         |
 | ------------------ | -------------------------------------------- | -------------------- |

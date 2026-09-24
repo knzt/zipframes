@@ -4,28 +4,23 @@ Cadastro, autenticação e emissão de tokens do ZipFrames.
 
 Este serviço não conhece vídeos: sua única responsabilidade é identidade. Os demais serviços validam os tokens localmente contra as chaves publicadas aqui, sem chamar o auth-service a cada requisição.
 
-O contrato HTTP está em [`docs/openapi/auth-service.yaml`](../../docs/openapi/auth-service.yaml) e os eventos que ele publica, em [`docs/asyncapi/events.yaml`](../../docs/asyncapi/events.yaml). A arquitetura interna está em [`docs/architecture/services/auth-service.md`](../../docs/architecture/services/auth-service.md).
+O contrato HTTP é o documento gerado em `GET /docs` (ver [`docs/architecture/http.md`](../../docs/architecture/http.md)). Os eventos que ele publica estão em [`docs/asyncapi/events.yaml`](../../docs/asyncapi/events.yaml). A arquitetura interna está em [`docs/architecture/services/auth-service.md`](../../docs/architecture/services/auth-service.md).
 
 ## Camadas
 
 ```
 src/
-├── domain/                 # User, Password, UserRegistered, UserRepository, PasswordHasher
+├── domain/                 # User, Password, UserRegistered
 ├── application/
-│   ├── use-cases/          # register-user, login
-│   ├── token-issuer.ts
-│   ├── clock.ts
-│   └── id-generator.ts
+│   ├── useCases/           # registerUser, login
+│   └── interfaces/         # interfaces da camada de casos de uso
 ├── infrastructure/
-│   ├── config.ts
-│   ├── http/               # controllers
-│   ├── repositories/prisma/  # schema, migrations, client e PrismaUserRepository
-│   ├── crypto/             # bcrypt e RS256
-│   ├── messaging/          # conexão, publisher, envelope, relay
+│   ├── http/               # Fastify, rotas e OpenAPI gerado
+│   ├── repositories/prisma/
+│   ├── services/crypto/
+│   ├── messaging/
 │   └── observability/
-└── main/
-    ├── compose.ts          # wiring
-    └── index.ts            # sinais
+└── main/                   # composition root
 ```
 
 ```

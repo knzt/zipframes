@@ -8,8 +8,8 @@ Arquitetura: Clean Architecture (Uncle Bob) — ver [docs/architecture/services/
 
 ```
 src/domain/            # Value objects, policies, erros
-src/application/       # Use cases + ports (gateways/services)
-src/infrastructure/    # Consumers, gateways, services, health HTTP
+src/application/       # Use cases + interfaces (gateways/services)
+src/infrastructure/    # Consumers, interface adapters, health HTTP (Fastify)
 src/main/              # Composition root
 ```
 
@@ -19,7 +19,7 @@ src/main/              # Composition root
 - baixa o original do storage (stream), extrai 1 frame/s em PNG e gera um zip (store)
 - publica `video.processing.started`, `video.processed` ou `video.failed`
 - apaga o original ao terminar (sucesso ou falha permanente); falha no delete vira log/métrica
-- health unificado na mesma porta: `GET /health/live`, `GET /health/ready`, `GET /metrics`
+- saúde no Fastify, na mesma porta: `GET /health/live`, `GET /health/ready`, `GET /metrics`, `GET /docs`
 - **sem banco próprio**
 
 ## Testes

@@ -1,6 +1,6 @@
-import type { UserRepository } from '../../ports/repositories/user.repository.js';
-import type { PasswordHasher } from '../../ports/services/passwordHasher.service.js';
-import type { TokenIssuer } from '../../ports/services/tokenIssuer.service.js';
+import type { UserRepository } from '../../interfaces/repositories/user.repository.js';
+import type { PasswordHasher } from '../../interfaces/services/passwordHasher.service.js';
+import type { TokenIssuer } from '../../interfaces/services/tokenIssuer.service.js';
 
 export interface LoginCommand {
   readonly email: string;

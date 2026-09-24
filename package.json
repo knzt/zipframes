@@ -4,11 +4,8 @@
   "version": "0.0.0",
   "description": "ZipFrames — sistema de processamento de vídeos da FIAP X",
   "scripts": {
-    "build": "pnpm --dir services/processor-worker build",
-    "test": "pnpm --dir services/processor-worker test",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "typecheck": "pnpm --dir services/processor-worker typecheck",
     "check:layers": "sh validate-layers.sh",
     "format": "prettier --check .",
     "format:write": "prettier --write .",

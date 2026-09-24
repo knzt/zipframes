@@ -8,6 +8,6 @@
 - [ ] Nenhuma violação de arquitetura
 - [ ] Testes unitários cobrem os casos relevantes (incluindo caminhos de erro)
 - [ ] Sem `any` ou supressões de lint
-- [ ] `OpenAPI`, `AsyncAPI` atualizados se a mudança afeta contratos de resposta
+- [ ] Schemas das rotas atualizadas se a mudança afeta o HTTP (o OpenAPI é gerado; não editar um YAML à mão)
 - [ ] `.env.example` atualizado se novas variáveis de ambiente foram adicionadas
 - [ ] `README` do serviço atualizado se o comportamento externo mudou

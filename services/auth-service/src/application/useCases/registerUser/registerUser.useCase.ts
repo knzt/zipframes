@@ -4,7 +4,7 @@ import type { Result } from '@zipframes/core';
 import { userRegisteredFrom } from '../../../domain/events/userRegistered.js';
 import { registerUser } from '../../../domain/entities/user.js';
 import { createPassword } from '../../../domain/valueObjects/password.js';
-import type { OutboxEventWrite } from '../../ports/repositories/user.repository.js';
+import type { OutboxEventWrite } from '../../interfaces/repositories/user.repository.js';
 import type {
   RegisterUserCommand,
   RegisterUserDependencies,

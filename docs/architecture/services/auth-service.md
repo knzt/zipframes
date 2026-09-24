@@ -2,7 +2,7 @@
 
 Clean Architecture aplicada ao contexto de **Identidade** do ZipFrames.
 
-Referências: [dominio.md — Identidade](../../domain/dominio.md), [OpenAPI](../../openapi/auth-service.yaml), [AsyncAPI](../../asyncapi/events.yaml), [modelagem de dados](../../data/modelagem-de-dados.md), [regras de camadas](../layers.md).
+Referências: [dominio.md — Identidade](../../domain/dominio.md), [HTTP e OpenAPI gerado](../http.md), [AsyncAPI](../../asyncapi/events.yaml), [modelagem de dados](../../data/modelagem-de-dados.md), [regras de camadas](../layers.md).
 
 ## Objetivo do serviço
 
@@ -16,14 +16,14 @@ As dependências apontam para dentro.
 Frameworks & Drivers  →  Interface Adapters  →  Use Cases  →  Entities
 ```
 
-| Camada                                    | Pasta                 | O que há aqui                                                                                                      |
-| ----------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Entities                                  | `src/domain/`         | `User`, `Password`, `UserRegistered`, erros de domínio                                                             |
-| Use Cases                                 | `src/application/`    | `registerUser`, `login`, DTOs e portas (`UserRepository`, `PasswordHasher`, `TokenIssuer`, `Clock`, `IdGenerator`) |
-| Interface Adapters + Frameworks & Drivers | `src/infrastructure/` | Prisma, bcrypt, RS256, rotas HTTP, relay do outbox, publisher AMQP                                                 |
-| Composition root                          | `src/main/`           | `compose.ts` monta o grafo; `index.ts` trata sinal e shutdown                                                      |
+| Camada                                    | Pasta                 | O que há aqui                                                                                                          |
+| ----------------------------------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Entities                                  | `src/domain/`         | `User`, `Password`, `UserRegistered`, erros de domínio                                                                 |
+| Use Cases                                 | `src/application/`    | `registerUser`, `login`, DTOs e interfaces (`UserRepository`, `PasswordHasher`, `TokenIssuer`, `Clock`, `IdGenerator`) |
+| Interface Adapters + Frameworks & Drivers | `src/infrastructure/` | Prisma, bcrypt, RS256, rotas HTTP, relay do outbox, publisher AMQP                                                     |
+| Composition root                          | `src/main/`           | `compose.ts` monta o grafo; `index.ts` trata sinal e shutdown                                                          |
 
-Portas moram em `application/ports/`. Implementações espelham a categoria em `infrastructure/` (`repositories/`, `services/`).
+As interfaces são da camada de casos de uso e moram em `application/interfaces/`. Os interface adapters espelham a categoria em `infrastructure/` (`repositories/`, `services/`).
 
 ## Mapa de pastas
 
@@ -39,7 +39,7 @@ auth-service/src/
 │   ├── useCases/
 │   │   ├── registerUser/{registerUser.useCase.ts, registerUser.dto.ts}
 │   │   └── login/{login.useCase.ts, login.dto.ts}
-│   └── ports/
+│   └── interfaces/
 │       ├── repositories/user.repository.ts
 │       └── services/{passwordHasher,tokenIssuer,clock,idGenerator}.service.ts
 ├── infrastructure/
@@ -54,7 +54,7 @@ auth-service/src/
 └── main/{compose.ts,index.ts}
 ```
 
-Não há `ports/gateways/` neste serviço: Postgres é repository; AMQP de saída é orquestrado pelo outbox relay (messaging), não por uma porta de application.
+Não há `interfaces/gateways/` neste serviço: Postgres é repository; AMQP de saída é orquestrado pelo outbox relay (messaging), não por uma interface da camada de casos de uso. O nome `PublishPort` vem do pacote `@zipframes/communication`.
 
 ## Casos de uso
 
@@ -85,8 +85,10 @@ O **caso de uso** decide o que publicar (`user.registered`, versão, payload, `c
 | `GET /health/live`           | Processo de pé (`{ status: "ok" }`)                                |
 | `GET /health/ready`          | 200 com Postgres e AMQP; 503 com `{ status: "not_ready", reason }` |
 | `GET /metrics`               | Texto Prometheus, incluindo `outbox_exhausted_total`               |
+| `GET /docs`                  | Swagger UI gerada das schemas das rotas                            |
+| `GET /docs/json`             | Documento OpenAPI 3.1 gerado                                       |
 
-Tudo na porta `PORT` (padrão 3000). Readiness usa `Pingable` + `createReadinessCheck`.
+Tudo na porta `PORT` (padrão 3000), no Fastify. Readiness usa `Pingable` + `createReadinessCheck`. O contrato está em [http.md](../http.md).
 
 ## Onde o processo sobe
 

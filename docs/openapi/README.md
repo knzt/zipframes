@@ -1,35 +1,16 @@
 # OpenAPI
 
-Contrato das APIs HTTP, um arquivo por serviço, na convenção já usada para os
-eventos (`@zipframes/schemas`): cada serviço é dono do seu próprio contrato.
+A fonte da verdade da API HTTP é a schema da rota no serviço que a implementa. `@fastify/swagger` gera o documento OpenAPI 3.1 a partir dessas schemas, e `@fastify/swagger-ui` publica a interface. Não há um YAML mantido à mão para os serviços que já existem.
 
-| Arquivo                                    | Serviço                                     |
-| ------------------------------------------ | ------------------------------------------- |
-| [`auth-service.yaml`](auth-service.yaml)   | Cadastro, login e JWKS                      |
-| [`video-service.yaml`](video-service.yaml) | Vídeos: upload, status, download e exclusão |
+| Serviço            | Documento gerado                             |
+| ------------------ | -------------------------------------------- |
+| `auth-service`     | `GET /docs` e `GET /docs/json` na porta 3000 |
+| `processor-worker` | `GET /docs` e `GET /docs/json` na porta 8081 |
 
-O resumo em prosa das rotas está em [`docs/domain/dominio.md`](../domain/dominio.md);
-estes arquivos são o contrato completo, com schemas de request e response.
+O padrão de rotas, o corpo de saúde e os probes estão em [`docs/architecture/http.md`](../architecture/http.md).
 
-## Visualizar
+Onde a rota valida com Zod (`@zipframes/schemas`), a schema publicada é `z.toJSONSchema` dessa mesma schema. O handler continua validando com ela, para o status HTTP continuar sendo decisão do caso de uso.
 
-```bash
-npx @redocly/cli preview-docs docs/openapi/video-service.yaml
-```
+## Esboço do video-service
 
-## Validar
-
-```bash
-npx @redocly/cli lint docs/openapi/*.yaml
-```
-
-## Convenções
-
-- **OpenAPI 3.1**, que usa JSON Schema 2020-12 (`type: [string, "null"]` em vez
-  de `nullable: true`).
-- **Erros no formato Problem Details** (RFC 9457), o mesmo `ProblemDetails`
-  descrito em cada arquivo.
-- **Um vídeo de outro usuário responde 404, nunca 403** — a regra está
-  documentada em cada rota que se aplica, não só no domínio.
-- Os endpoints `/health/live`, `/health/ready` e `/metrics` estão descritos
-  para completude, mas são acessíveis apenas dentro do cluster.
+[`video-service.yaml`](video-service.yaml) descreve um serviço que **ainda não existe**. Não é contrato, não entra no CI e será substituído pela geração no Fastify quando o serviço for escrito. Até lá, o comportamento esperado continua em [`docs/domain/dominio.md`](../domain/dominio.md).

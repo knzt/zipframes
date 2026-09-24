@@ -1,3 +1,6 @@
+# Esboço. O video-service ainda não existe.
+# Este arquivo não é a fonte da verdade. O OpenAPI dos serviços implementados
+# é gerado pelo Fastify a partir das schemas das rotas. Ver docs/openapi/README.md.
 openapi: 3.1.0
 info:
   title: ZipFrames — video-service

@@ -8,6 +8,7 @@ import { authService, parseSchema } from '@zipframes/schemas';
 
 import type { makeLogin } from '../../../application/useCases/login/login.useCase.js';
 import type { makeRegisterUser } from '../../../application/useCases/registerUser/registerUser.useCase.js';
+import { jsonSchemaOf } from '../openapi.js';
 
 export interface IdentityRoutesDependencies {
   readonly registerUser: ReturnType<typeof makeRegisterUser>;
@@ -17,6 +18,27 @@ export interface IdentityRoutesDependencies {
 }
 
 const CORRELATION_HEADER = 'x-correlation-id';
+
+const problemDetailsSchema = {
+  type: 'object',
+  required: ['type', 'title', 'status'],
+  properties: {
+    type: { type: 'string' },
+    title: { type: 'string' },
+    status: { type: 'integer' },
+    detail: { type: 'string' },
+    correlationId: { type: 'string' },
+  },
+};
+
+const problemResponse = (description: string): Record<string, unknown> => ({
+  description,
+  content: {
+    'application/problem+json': {
+      schema: problemDetailsSchema,
+    },
+  },
+});
 
 const correlationIdOf = (headerValue: string | string[] | undefined): string => {
   if (typeof headerValue === 'string' && headerValue.length > 0) {
@@ -32,70 +54,113 @@ export const registerIdentityRoutes = (
   app: FastifyInstance,
   deps: IdentityRoutesDependencies,
 ): void => {
-  app.post('/register', async (request, reply) => {
-    const correlationId = correlationIdOf(request.headers[CORRELATION_HEADER]);
+  app.post(
+    '/register',
+    {
+      schema: {
+        tags: ['Identidade'],
+        summary: 'Cadastra um usuário',
+        body: jsonSchemaOf(authService.registerRequestSchema),
+        response: {
+          201: jsonSchemaOf(authService.registerResponseSchema),
+          400: problemResponse('Dados inválidos'),
+          409: problemResponse('E-mail já cadastrado'),
+        },
+      },
+    },
+    async (request, reply) => {
+      const correlationId = correlationIdOf(request.headers[CORRELATION_HEADER]);
 
-    return runWithCorrelationId(correlationId, async () => {
-      const body = parseSchema(authService.registerRequestSchema, request.body);
-      if (!body.ok) {
-        await reply
-          .code(400)
-          .header('content-type', PROBLEM_CONTENT_TYPE)
-          .send(problemDetails(400, 'Invalid request body', body.error.message, correlationId));
-        return;
-      }
+      await runWithCorrelationId(correlationId, async () => {
+        const body = parseSchema(authService.registerRequestSchema, request.body);
+        if (!body.ok) {
+          await reply
+            .code(400)
+            .header('content-type', PROBLEM_CONTENT_TYPE)
+            .send(problemDetails(400, 'Invalid request body', body.error.message, correlationId));
+          return;
+        }
 
-      const result = await deps.registerUser({ ...body.value, correlationId });
+        const result = await deps.registerUser({ ...body.value, correlationId });
 
-      if (!result.ok) {
-        const status = result.error.code === 'EMAIL_TAKEN' ? 409 : 400;
-        const title =
-          result.error.code === 'EMAIL_TAKEN' ? 'Email already registered' : 'Invalid request body';
-        await reply
-          .code(status)
-          .header('content-type', PROBLEM_CONTENT_TYPE)
-          .send(problemDetails(status, title, result.error.message, correlationId));
-        return;
-      }
+        if (!result.ok) {
+          const status = result.error.code === 'EMAIL_TAKEN' ? 409 : 400;
+          const title =
+            result.error.code === 'EMAIL_TAKEN'
+              ? 'Email already registered'
+              : 'Invalid request body';
+          await reply
+            .code(status)
+            .header('content-type', PROBLEM_CONTENT_TYPE)
+            .send(problemDetails(status, title, result.error.message, correlationId));
+          return;
+        }
 
-      const response = authService.registerResponseSchema.parse(result.value);
-      await reply.code(201).send(response);
-    });
-  });
+        const response = authService.registerResponseSchema.parse(result.value);
+        await reply.code(201).send(response);
+      });
+    },
+  );
 
-  app.post('/login', async (request, reply) => {
-    const correlationId = correlationIdOf(request.headers[CORRELATION_HEADER]);
+  app.post(
+    '/login',
+    {
+      schema: {
+        tags: ['Identidade'],
+        summary: 'Autentica e devolve o token de acesso',
+        body: jsonSchemaOf(authService.loginRequestSchema),
+        response: {
+          200: jsonSchemaOf(authService.loginResponseSchema),
+          401: problemResponse('Credenciais inválidas'),
+        },
+      },
+    },
+    async (request, reply) => {
+      const correlationId = correlationIdOf(request.headers[CORRELATION_HEADER]);
 
-    return runWithCorrelationId(correlationId, async () => {
-      const body = parseSchema(authService.loginRequestSchema, request.body);
-      if (!body.ok) {
-        // Same problem, same status as a wrong password: a malformed body
-        // is not a hint about which emails exist any more than a wrong
-        // password is.
-        await reply
-          .code(401)
-          .header('content-type', PROBLEM_CONTENT_TYPE)
-          .send(problemDetails(401, 'Invalid credentials', undefined, correlationId));
-        return;
-      }
+      await runWithCorrelationId(correlationId, async () => {
+        const body = parseSchema(authService.loginRequestSchema, request.body);
+        if (!body.ok) {
+          // Same problem, same status as a wrong password: a malformed body
+          // is not a hint about which emails exist any more than a wrong
+          // password is.
+          await reply
+            .code(401)
+            .header('content-type', PROBLEM_CONTENT_TYPE)
+            .send(problemDetails(401, 'Invalid credentials', undefined, correlationId));
+          return;
+        }
 
-      const result = await deps.login(body.value);
+        const result = await deps.login(body.value);
 
-      if (!result.ok) {
-        await reply
-          .code(401)
-          .header('content-type', PROBLEM_CONTENT_TYPE)
-          .send(problemDetails(401, 'Invalid credentials', undefined, correlationId));
-        return;
-      }
+        if (!result.ok) {
+          await reply
+            .code(401)
+            .header('content-type', PROBLEM_CONTENT_TYPE)
+            .send(problemDetails(401, 'Invalid credentials', undefined, correlationId));
+          return;
+        }
 
-      const response = authService.loginResponseSchema.parse(result.value);
+        const response = authService.loginResponseSchema.parse(result.value);
+        await reply.code(200).send(response);
+      });
+    },
+  );
+
+  app.get(
+    '/.well-known/jwks.json',
+    {
+      schema: {
+        tags: ['Identidade'],
+        summary: 'Chaves públicas para validar tokens',
+        response: {
+          200: jsonSchemaOf(authService.jwksResponseSchema),
+        },
+      },
+    },
+    async (_request, reply) => {
+      const response = authService.jwksResponseSchema.parse({ keys: deps.jwks });
       await reply.code(200).send(response);
-    });
-  });
-
-  app.get('/.well-known/jwks.json', async (_request, reply) => {
-    const response = authService.jwksResponseSchema.parse({ keys: deps.jwks });
-    await reply.code(200).send(response);
-  });
+    },
+  );
 };
