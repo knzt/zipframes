@@ -48,4 +48,4 @@ Cada serviço HTTP expõe:
 | `auth-service`     | `http://localhost:3000/docs` |
 | `processor-worker` | `http://localhost:8081/docs` |
 
-O teste de cada serviço lê `GET /docs/json` e confere que as rotas publicadas saíram das schemas das rotas. Não há passo de CI que trate um YAML escrito à mão como contrato dos serviços que já existem.
+O teste de cada serviço lê `GET /docs/json` e confere que as rotas publicadas saíram das schemas das rotas. O CI não valida um YAML de OpenAPI: o contrato é o documento gerado.
