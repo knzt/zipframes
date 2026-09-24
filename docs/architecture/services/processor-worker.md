@@ -10,7 +10,9 @@ Consumir `video.uploaded`, extrair frames (1 fps, PNG), empacotar em zip (store)
 
 ## Camadas
 
-As dependências apontam para dentro. `application/` junta o que o livro separa: casos de uso e interface adapters.
+As dependências apontam para dentro. `application/` junta o que o livro separa: casos de uso e interface adapters. O caso de uso fica em `application/useCases/` e a interface que ele declara fica em `application/interfaces/`; a classe que implementa essa interface fica em `infrastructure/`. O raciocínio dessa decisão está em [layers.md](../layers.md).
+
+O consumer em `infrastructure/messaging` lê `video.uploaded` e chama `processUploadedVideo`. O caso de uso chama `ObjectStorage`, `FrameExtractor` e `EventPublisher` (`application/interfaces/gateways/`) e `ArchiveBuilder` e `WorkDirectory` (`application/interfaces/services/`). `main/compose.ts` cria as implementações — storage S3, ffmpeg, publisher AMQP, zip e o diretório temporário — e as entrega ao caso de uso. O consumer confirma, agenda nova tentativa ou envia à dead-letter a partir do desfecho. O caso de uso não importa o SDK da AWS, o ffmpeg nem o cliente AMQP.
 
 ```
 infrastructure  →  application  →  domain
@@ -23,15 +25,12 @@ infrastructure  →  application  →  domain
 | `src/infrastructure/` | Implementação e frameworks        | Consumer AMQP, S3/ffmpeg, zip/fs, health HTTP no Fastify            |
 | `src/main/`           | Composition root                  | Wiring na inicialização                                             |
 
-Não há `domain/entities/` nem `interfaces/repositories/`: o contexto não persiste agregado próprio.
+### Gateway e service
 
-### Repository vs gateway vs service
-
-| Categoria       | Neste serviço                                                           |
-| --------------- | ----------------------------------------------------------------------- |
-| `repositories/` | Ausente (stateless)                                                     |
-| `gateways/`     | `ObjectStorage`, `EventPublisher`, `FrameExtractor` (cruzam o processo) |
-| `services/`     | `ArchiveBuilder`, `WorkDirectory` (local)                               |
+| Categoria   | Neste serviço                                                                    |
+| ----------- | -------------------------------------------------------------------------------- |
+| `gateways/` | `ObjectStorage`, `EventPublisher`, `FrameExtractor` (o trabalho sai do processo) |
+| `services/` | `ArchiveBuilder`, `WorkDirectory` (capacidade local, no mesmo processo)          |
 
 `ObjectStorage` não inclui `ping`: readiness usa `Pingable` à parte (`createReadinessCheck`).
 

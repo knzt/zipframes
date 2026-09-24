@@ -10,7 +10,9 @@ Cadastrar usuário, autenticar e emitir JWT RS256. Publicar `user.registered` pe
 
 ## Camadas
 
-As dependências apontam para dentro. `application/` junta o que o livro separa: casos de uso e interface adapters.
+As dependências apontam para dentro. `application/` junta o que o livro separa: casos de uso e interface adapters. O caso de uso fica em `application/useCases/` e a interface que ele declara fica em `application/interfaces/`; a classe que implementa essa interface fica em `infrastructure/`. O raciocínio dessa decisão está em [layers.md](../layers.md).
+
+Neste serviço, a rota Fastify em `infrastructure/http` recebe o pedido, monta o comando e chama `registerUser` ou `login`. O caso de uso só enxerga as interfaces que declara. `main/compose.ts` instancia o repositório Prisma, o hasher bcrypt e o emissor RS256 e entrega esses objetos ao caso de uso. A rota devolve HTTP a partir do resultado. O caso de uso não importa Fastify, Prisma nem bcrypt.
 
 ```
 infrastructure  →  application  →  domain
@@ -22,8 +24,6 @@ infrastructure  →  application  →  domain
 | `src/application/`    | Casos de uso e interface adapters | `registerUser`, `login`, DTOs e interfaces (`UserRepository`, `PasswordHasher`, `TokenIssuer`, `Clock`, `IdGenerator`) |
 | `src/infrastructure/` | Implementação e frameworks        | Prisma, bcrypt, RS256, rotas HTTP, relay do outbox, publisher AMQP                                                     |
 | `src/main/`           | Composition root                  | `compose.ts` monta o grafo; `index.ts` trata sinal e shutdown                                                          |
-
-O caso de uso fica em `application/useCases/`. O interface adapter é a interface em `application/interfaces/`. A classe que implementa essa interface fica em `infrastructure/` (`repositories/`, `services/`).
 
 ## Mapa de pastas
 
@@ -54,7 +54,7 @@ auth-service/src/
 └── main/{compose.ts,index.ts}
 ```
 
-Não há `interfaces/gateways/` neste serviço: Postgres é repository; AMQP de saída é orquestrado pelo outbox relay (messaging), não por uma interface em `application/interfaces/`. O nome `PublishPort` vem do pacote `@zipframes/communication`.
+A persistência é repository: `UserRepository` em `application/interfaces/repositories/` e `PrismaUserRepository` em `infrastructure/repositories/prisma/`. A publicação AMQP não é uma interface que o caso de uso declara. O caso de uso grava o envelope do outbox na mesma transação do usuário, e o relay em `infrastructure/messaging` publica depois.
 
 ## Casos de uso
 

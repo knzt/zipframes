@@ -1,6 +1,6 @@
 # HTTP
 
-Todo processo que escuta HTTP usa **Fastify**. O `processor-worker` não tem API de negócio; a saúde e as métricas sobem no mesmo servidor Fastify que os outros serviços.
+Todo processo que escuta HTTP usa **Fastify**. Saúde, métricas e a documentação gerada sobem nesse mesmo servidor.
 
 A especificação OpenAPI não é um arquivo mantido à mão. `@fastify/swagger` gera o documento a partir das schemas das rotas, e `@fastify/swagger-ui` publica a interface. Onde a rota já valida com Zod (`@zipframes/schemas`), a schema da rota é `z.toJSONSchema` dessa mesma schema. A validação em tempo de execução continua no handler, para preservar o status que o caso de uso escolhe (o login responde 401 para um corpo inválido, não 400).
 
