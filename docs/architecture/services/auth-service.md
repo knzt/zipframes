@@ -1,6 +1,6 @@
 # Arquitetura: auth-service
 
-Clean Architecture aplicada ao contexto de **Identidade** do ZipFrames.
+Arquitetura do contexto de **Identidade** do ZipFrames. A Clean Architecture é a base; o mapa de pastas está em [layers.md](../layers.md).
 
 Referências: [dominio.md — Identidade](../../domain/dominio.md), [HTTP e OpenAPI gerado](../http.md), [AsyncAPI](../../asyncapi/events.yaml), [modelagem de dados](../../data/modelagem-de-dados.md), [regras de camadas](../layers.md).
 
@@ -10,20 +10,20 @@ Cadastrar usuário, autenticar e emitir JWT RS256. Publicar `user.registered` pe
 
 ## Camadas
 
-As dependências apontam para dentro.
+As dependências apontam para dentro. `application/` junta o que o livro separa: casos de uso e interface adapters.
 
 ```
-Frameworks & Drivers  →  Interface Adapters  →  Use Cases  →  Entities
+infrastructure  →  application  →  domain
 ```
 
-| Camada                                    | Pasta                 | O que há aqui                                                                                                          |
-| ----------------------------------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| Entities                                  | `src/domain/`         | `User`, `Password`, `UserRegistered`, erros de domínio                                                                 |
-| Use Cases                                 | `src/application/`    | `registerUser`, `login`, DTOs e interfaces (`UserRepository`, `PasswordHasher`, `TokenIssuer`, `Clock`, `IdGenerator`) |
-| Interface Adapters + Frameworks & Drivers | `src/infrastructure/` | Prisma, bcrypt, RS256, rotas HTTP, relay do outbox, publisher AMQP                                                     |
-| Composition root                          | `src/main/`           | `compose.ts` monta o grafo; `index.ts` trata sinal e shutdown                                                          |
+| Pasta                 | Neste projeto                     | O que há aqui                                                                                                          |
+| --------------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `src/domain/`         | Entidades                         | `User`, `Password`, `UserRegistered`, erros de domínio                                                                 |
+| `src/application/`    | Casos de uso e interface adapters | `registerUser`, `login`, DTOs e interfaces (`UserRepository`, `PasswordHasher`, `TokenIssuer`, `Clock`, `IdGenerator`) |
+| `src/infrastructure/` | Implementação e frameworks        | Prisma, bcrypt, RS256, rotas HTTP, relay do outbox, publisher AMQP                                                     |
+| `src/main/`           | Composition root                  | `compose.ts` monta o grafo; `index.ts` trata sinal e shutdown                                                          |
 
-As interfaces são da camada de casos de uso e moram em `application/interfaces/`. Os interface adapters espelham a categoria em `infrastructure/` (`repositories/`, `services/`).
+O caso de uso fica em `application/useCases/`. O interface adapter é a interface em `application/interfaces/`. A classe que implementa essa interface fica em `infrastructure/` (`repositories/`, `services/`).
 
 ## Mapa de pastas
 
@@ -54,7 +54,7 @@ auth-service/src/
 └── main/{compose.ts,index.ts}
 ```
 
-Não há `interfaces/gateways/` neste serviço: Postgres é repository; AMQP de saída é orquestrado pelo outbox relay (messaging), não por uma interface da camada de casos de uso. O nome `PublishPort` vem do pacote `@zipframes/communication`.
+Não há `interfaces/gateways/` neste serviço: Postgres é repository; AMQP de saída é orquestrado pelo outbox relay (messaging), não por uma interface em `application/interfaces/`. O nome `PublishPort` vem do pacote `@zipframes/communication`.
 
 ## Casos de uso
 

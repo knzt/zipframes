@@ -13,7 +13,7 @@ src/
 ├── domain/                 # User, Password, UserRegistered
 ├── application/
 │   ├── useCases/           # registerUser, login
-│   └── interfaces/         # interfaces da camada de casos de uso
+│   └── interfaces/         # interface adapters declarados pelo caso de uso
 ├── infrastructure/
 │   ├── http/               # Fastify, rotas e OpenAPI gerado
 │   ├── repositories/prisma/

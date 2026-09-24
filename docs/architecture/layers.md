@@ -1,34 +1,36 @@
-# Regras de camadas (Clean Architecture)
+# Regras de camadas
 
 Este documento descreve as regras de dependência entre camadas, verificadas automaticamente pelo [dependency-cruiser](https://github.com/sverweij/dependency-cruiser) no CI e no script `pnpm check:layers`.
 
-Seguimos a **Clean Architecture** de Robert C. Martin (Uncle Bob). A arquitetura interna de cada microsserviço vive em [services/](./services/). O contrato HTTP (saúde e OpenAPI) está em [http.md](./http.md).
+A Clean Architecture de Robert C. Martin é a base: as dependências de código apontam para dentro. Não é uma cópia das quatro camadas do livro. A pasta `application/` junta o que o livro separa: casos de uso e interface adapters. A arquitetura interna de cada microsserviço vive em [services/](./services/). O contrato HTTP (saúde e OpenAPI) está em [http.md](./http.md).
 
 ## A regra de dependência
 
-As dependências de código apontam **sempre para dentro**. Uma camada interna nunca importa uma camada externa.
+As dependências de código apontam **sempre para dentro**. Uma pasta mais interna nunca importa uma mais externa.
 
 ```
-Frameworks & Drivers  →  Interface Adapters  →  Use Cases  →  Entities
-(mais externo)                                              (mais interno)
+infrastructure  →  application  →  domain
+(mais externo)                    (mais interno)
 ```
+
+`main/` é o composition root. Ele conhece as outras pastas só para montar o grafo na inicialização.
 
 ### Layout
 
-A regra é a direção da dependência, não um único mapa de pastas. A interface que o caso de uso precisa é **dele**: mora na camada de Use Cases, em `application/interfaces/`. A classe que a implementa mora em `infrastructure/`, na camada de Interface Adapters (e, quando fala com um SDK, em Frameworks & Drivers). O caso de uso não importa a implementação. A implementação importa a interface. É isso que a regra de dependência exige.
+A regra é a direção da dependência, não o desenho das quatro camadas do livro.
 
-Isso não é a arquitetura hexagonal com o vocabulário de _ports and adapters_. Hexagonal e Clean Architecture invertem a dependência de um jeito parecido, mas não são o mesmo desenho. Aqui o nome da peça é o da Clean Architecture: **interface da camada de casos de uso**, implementada por um **interface adapter**.
+| Pasta                 | Neste projeto                     | Conteúdo                                                                                             |
+| --------------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `src/domain/`         | Entidades                         | Entidades, value objects, eventos de domínio, erros e policies                                       |
+| `src/application/`    | Casos de uso e interface adapters | Casos de uso, DTOs e as interfaces que eles declaram (`interfaces/{repositories,gateways,services}`) |
+| `src/infrastructure/` | Implementação e frameworks        | Classes que implementam essas interfaces, HTTP, messaging, config, observability                     |
+| `src/main/`           | Composition root                  | Wiring na inicialização                                                                              |
 
-| Pasta                 | Camada Uncle Bob                          | Conteúdo                                                                        |
-| --------------------- | ----------------------------------------- | ------------------------------------------------------------------------------- |
-| `src/domain/`         | Entities                                  | Entidades, value objects, eventos de domínio, erros e policies                  |
-| `src/application/`    | Use Cases                                 | Casos de uso, DTOs e interfaces (`interfaces/{repositories,gateways,services}`) |
-| `src/infrastructure/` | Interface Adapters + Frameworks & Drivers | Implementações das interfaces, HTTP, messaging, config, observability           |
-| `src/main/`           | Composition root                          | Wiring na inicialização                                                         |
+O caso de uso fica em `application/useCases/`. O interface adapter é a interface em `application/interfaces/` que o caso de uso declara. A classe que implementa essa interface fica em `infrastructure/`, com o framework. O caso de uso não importa a implementação. A implementação importa a interface.
 
-`infrastructure/` agrupa as duas camadas externas numa pasta só.
+A pasta não se chama `ports/`. O nome daqui é `interfaces/`.
 
-#### Interfaces da camada de casos de uso
+#### Interfaces em `application/interfaces/`
 
 Três categorias em `application/interfaces/`, espelhadas em `infrastructure/`:
 
@@ -40,7 +42,7 @@ Três categorias em `application/interfaces/`, espelhadas em `infrastructure/`:
 
 Pastas vazias não são criadas: a ausência de `interfaces/repositories/` no processor-worker comunica que o contexto é stateless.
 
-`gateway`, neste mapa, é o nome da **interface** que o caso de uso declara para atravessar a fronteira do processo. A classe em `infrastructure/gateways/` é o interface adapter que a implementa. O tipo `PublishPort` de `@zipframes/communication` é contrato daquele pacote, não uma interface desta camada.
+`gateway`, neste mapa, é o nome da **interface** que o caso de uso declara para atravessar a fronteira do processo. A classe em `infrastructure/gateways/` implementa essa interface. O tipo `PublishPort` de `@zipframes/communication` é contrato daquele pacote, não uma interface de `application/`.
 
 #### Nomenclatura
 
@@ -90,7 +92,7 @@ O `main/` é a única exceção que conhece todas as camadas para montar o grafo
 
 - **Serviços não importam outros serviços.** Código compartilhado vem dos pacotes npm `@zipframes/*`, por versão.
 - **Política fica no serviço.** O pacote valida forma (ex.: e-mail); o serviço decide política de negócio.
-- **A interface fica para dentro e a implementação para fora.** O caso de uso não importa SDK. A classe que fala com o SDK implementa a interface da camada de casos de uso e mora em `infrastructure/`.
+- **A interface fica para dentro e a implementação para fora.** O caso de uso não importa SDK. A classe que fala com o SDK implementa a interface declarada em `application/interfaces/` e mora em `infrastructure/`.
 
 ## Regras adicionais
 

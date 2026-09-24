@@ -2,14 +2,14 @@
 
 Worker stateless que consome `video.uploaded`, extrai frames com `ffmpeg` e publica o resultado.
 
-Arquitetura: Clean Architecture (Uncle Bob) — ver [docs/architecture/services/processor-worker.md](../../docs/architecture/services/processor-worker.md).
+Arquitetura: [docs/architecture/services/processor-worker.md](../../docs/architecture/services/processor-worker.md). `application/` junta casos de uso e interface adapters.
 
 ## Camadas
 
 ```
 src/domain/            # Value objects, policies, erros
-src/application/       # Use cases + interfaces (gateways/services)
-src/infrastructure/    # Consumers, interface adapters, health HTTP (Fastify)
+src/application/       # casos de uso e interface adapters (gateways/services)
+src/infrastructure/    # implementações, consumers, saúde HTTP (Fastify)
 src/main/              # Composition root
 ```
 

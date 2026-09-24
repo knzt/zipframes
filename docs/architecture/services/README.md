@@ -1,8 +1,6 @@
 # Arquitetura por serviço
 
-Documentos de arquitetura interna de cada microsserviço, alinhados à **Clean Architecture** de Robert C. Martin (Uncle Bob).
-
-As regras gerais de dependência, a taxonomia das interfaces da camada de casos de uso e a nomenclatura estão em [layers.md](../layers.md). O HTTP comum (saúde e OpenAPI) está em [http.md](../http.md). Cada serviço detalha aqui o mapa de pastas, componentes e fluxos do seu contexto.
+Documentos de arquitetura interna de cada microsserviço. A Clean Architecture é a base; `application/` junta casos de uso e interface adapters. As regras de dependência, a taxonomia das interfaces e a nomenclatura estão em [layers.md](../layers.md). O HTTP comum (saúde e OpenAPI) está em [http.md](../http.md). Cada serviço detalha aqui o mapa de pastas, componentes e fluxos do seu contexto.
 
 | Serviço            | Documento                                    | Persistência         |
 | ------------------ | -------------------------------------------- | -------------------- |

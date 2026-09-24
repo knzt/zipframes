@@ -1,6 +1,6 @@
 # Arquitetura: processor-worker
 
-Clean Architecture aplicada ao contexto de **Processamento** do ZipFrames.
+Arquitetura do contexto de **Processamento** do ZipFrames. A Clean Architecture é a base; o mapa de pastas está em [layers.md](../layers.md).
 
 Referências: [dominio.md — Processamento](../../domain/dominio.md), [HTTP e OpenAPI gerado](../http.md), [AsyncAPI](../../asyncapi/events.yaml), [modelagem de dados](../../data/modelagem-de-dados.md), [regras de camadas](../layers.md).
 
@@ -10,18 +10,18 @@ Consumir `video.uploaded`, extrair frames (1 fps, PNG), empacotar em zip (store)
 
 ## Camadas
 
-As dependências apontam para dentro.
+As dependências apontam para dentro. `application/` junta o que o livro separa: casos de uso e interface adapters.
 
 ```
-Frameworks & Drivers  →  Interface Adapters  →  Use Cases  →  Entities
+infrastructure  →  application  →  domain
 ```
 
-| Camada Clean Arch                         | Pasta                 | Conteúdo                                                                   |
-| ----------------------------------------- | --------------------- | -------------------------------------------------------------------------- |
-| Entities                                  | `src/domain/`         | Value objects, policies e erros (`ProcessingError` com `retryable`)        |
-| Use Cases                                 | `src/application/`    | `processUploadedVideo`, DTOs e interfaces                                  |
-| Interface Adapters + Frameworks & Drivers | `src/infrastructure/` | Consumer AMQP, adapters S3/ffmpeg, services zip/fs, health HTTP no Fastify |
-| Composition root                          | `src/main/`           | Wiring na inicialização                                                    |
+| Pasta                 | Neste projeto                     | Conteúdo                                                            |
+| --------------------- | --------------------------------- | ------------------------------------------------------------------- |
+| `src/domain/`         | Entidades                         | Value objects, policies e erros (`ProcessingError` com `retryable`) |
+| `src/application/`    | Casos de uso e interface adapters | `processUploadedVideo`, DTOs e interfaces                           |
+| `src/infrastructure/` | Implementação e frameworks        | Consumer AMQP, S3/ffmpeg, zip/fs, health HTTP no Fastify            |
+| `src/main/`           | Composition root                  | Wiring na inicialização                                             |
 
 Não há `domain/entities/` nem `interfaces/repositories/`: o contexto não persiste agregado próprio.
 

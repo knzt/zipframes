@@ -1,6 +1,6 @@
 # C4 nível 3: componentes do video-service
 
-Abre o video-service e mostra seus componentes organizados nas camadas da Clean Architecture. Os demais serviços seguem a mesma estrutura.
+Abre o video-service e mostra o caminho de uma requisição. Os nomes das caixas ajudam a ler o fluxo. Não são o mapa de pastas do repositório: nos serviços que já existem, `application/` junta casos de uso e interface adapters, e a implementação fica em `infrastructure/`. O video-service ainda não está implementado.
 
 ```mermaid
 flowchart TB
@@ -90,9 +90,9 @@ flowchart TB
   class video,vos domc
 ```
 
-O diagrama segue o caminho de uma requisição em tempo de execução: entra pelos frameworks, passa pelos interface adapters de entrada, chega aos use cases e às entidades, e sai pelas interfaces que o caso de uso declara até os interface adapters de saída e seus clientes.
+O diagrama segue o caminho de uma requisição em tempo de execução: entra pelos frameworks, passa pelos controllers e consumers, chega aos use cases e às entidades, e sai pelas interfaces que o caso de uso declara até as implementações e seus clientes. A coluna da tabela abaixo repete o nome da caixa do diagrama. Esse nome não é uma pasta do repositório.
 
-No código, a dependência entre use cases e adapters de saída aponta no sentido contrário ao da chamada: os interface adapters importam e implementam as interfaces da camada de casos de uso, e os use cases não importam nenhum adapter. Essa é a regra de dependência da Clean Architecture, e é o que permite ao use case gravar no banco sem conhecer o Prisma. O RabbitMQ aparece duas vezes apenas para separar consumo e publicação. O video-service ainda não está implementado; o desenho usa o mesmo critério dos serviços que já existem (`application/interfaces/`).
+No código dos serviços que já existem, o caso de uso e a interface que ele declara ficam juntos em `application/`. A classe que implementa a interface fica em `infrastructure/` e importa essa interface; o caso de uso não importa a implementação. É isso que permite gravar no banco sem conhecer o Prisma. O diagrama acima separa caixas para ler o fluxo; essa separação não é uma camada a mais no repositório. O RabbitMQ aparece duas vezes apenas para separar consumo e publicação. As interfaces seguem `application/interfaces/`.
 
 ## Componentes
 
@@ -105,7 +105,7 @@ No código, a dependência entre use cases e adapters de saída aponta no sentid
 | Use Cases            | `ListUserVideos` e `GetVideo` | Consultam os vídeos do dono, usando o cache na listagem                                                     |
 | Use Cases            | `GetDownloadUrl`              | Verifica se o vídeo está `DONE` e devolve a URL do zip                                                      |
 | Use Cases            | `ApplyProcessingEvent`        | Aplica os eventos do worker de forma idempotente e invalida o cache                                         |
-| Use Cases            | Interfaces                    | Interfaces que os use cases exigem do mundo externo; a camada de casos de uso é dona delas                  |
+| Use Cases            | Interfaces                    | Interfaces que os use cases declaram; no código ficam em `application/interfaces/`, junto dos casos de uso  |
 | Interface Adapters   | `JwtAuthGuard`                | Extrai e valida o token e disponibiliza o `ownerId`                                                         |
 | Interface Adapters   | `VideoController`             | Converte HTTP em chamadas aos use cases e os resultados em respostas                                        |
 | Interface Adapters   | `ProcessingStatusConsumer`    | Valida as mensagens contra os contratos e chama `ApplyProcessingEvent`                                      |
@@ -113,4 +113,4 @@ No código, a dependência entre use cases e adapters de saída aponta no sentid
 | Interface Adapters   | Repositórios, storage e cache | Implementam as interfaces com Prisma, S3 e Redis, com mappers entre o modelo de domínio e o de persistência |
 | Frameworks & Drivers | Servidor e clientes           | Configuração do Fastify, do Prisma Client, da conexão AMQP e dos clientes S3 e Redis                        |
 
-O composition root (`main/`) não aparece no diagrama: ele lê a configuração, cria os clientes e os interface adapters e os injeta nos use cases e controllers na inicialização.
+O composition root (`main/`) não aparece no diagrama: ele lê a configuração, cria os clientes e as implementações e os injeta nos use cases e controllers na inicialização.
