@@ -1,0 +1,10 @@
+{
+  "name": "zipframes-cloud-agent",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "user": "ubuntu",
+  "install": "pnpm install",
+  "start": "sudo service docker start"
+}

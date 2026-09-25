@@ -24,6 +24,3 @@ Thumbs.db
 .idea
 *.swp
 *.swo
-
-# Cloud Agent tooling (local only — not product)
-.cursor/
