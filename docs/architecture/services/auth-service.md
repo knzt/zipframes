@@ -12,18 +12,18 @@ Cadastrar usuário, autenticar e emitir JWT RS256. Publicar `user.registered` pe
 
 As dependências apontam para dentro. `application/` junta o que o livro separa: casos de uso e interface adapters. O caso de uso fica em `application/useCases/` e a interface que ele declara fica em `application/interfaces/`; a classe que implementa essa interface fica em `infrastructure/`. O raciocínio dessa decisão está em [layers.md](../layers.md).
 
-Neste serviço, a rota Fastify em `infrastructure/http` só liga o framework. O controller em `application/controllers/` recebe o pedido já traduzido, chama `RegisterUserUseCase` ou `LoginUseCase` e devolve status e corpo. O caso de uso só enxerga as interfaces que declara. `main/compose.ts` instancia o repositório Prisma, o hasher bcrypt e o emissor RS256, monta o caso de uso e entrega o controller à rota. O controller não importa Fastify, Prisma nem bcrypt.
+Neste serviço, a rota Fastify em `infrastructure/http` só liga o framework. O controller em `application/controllers/` recebe o pedido já traduzido, chama `RegisterUserUseCase` ou `LoginUseCase` e devolve status e corpo. O caso de uso só enxerga as interfaces que declara. `main/compose.ts` instancia o repositório Prisma, o gateway `PrismaEventOutbox`, o `PrismaUnitOfWork`, o hasher bcrypt e o emissor RS256, monta o caso de uso e entrega o controller à rota. O controller não importa Fastify, Prisma nem bcrypt.
 
 ```
 infrastructure  →  application  →  domain
 ```
 
-| Pasta                 | Neste projeto                     | O que há aqui                                                                                                                                           |
-| --------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/domain/`         | Entidades                         | `User`, `Password`, `UserRegistered`, erros de domínio                                                                                                  |
-| `src/application/`    | Casos de uso e interface adapters | `RegisterUserUseCase`, `LoginUseCase`, controllers HTTP, tipos e interfaces (`UserRepository`, `PasswordHasher`, `TokenIssuer`, `Clock`, `IdGenerator`) |
-| `src/infrastructure/` | Implementação e frameworks        | Prisma, bcrypt, RS256, rotas HTTP, relay do outbox, publisher AMQP                                                                                      |
-| `src/main/`           | Composition root                  | `compose.ts` monta o grafo; `index.ts` trata sinal e shutdown                                                                                           |
+| Pasta                 | Neste projeto                     | O que há aqui                                                                                                                                                                        |
+| --------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `src/domain/`         | Entidades                         | `User`, `Password`, `UserRegistered`, erros de domínio                                                                                                                               |
+| `src/application/`    | Casos de uso e interface adapters | `RegisterUserUseCase`, `LoginUseCase`, controllers HTTP, tipos e interfaces (`UserRepository`, `EventOutbox`, `UnitOfWork`, `PasswordHasher`, `TokenIssuer`, `Clock`, `IdGenerator`) |
+| `src/infrastructure/` | Implementação e frameworks        | Prisma, gateway do outbox, bcrypt, RS256, rotas HTTP, relay do outbox, publisher AMQP                                                                                                |
+| `src/main/`           | Composition root                  | `compose.ts` monta o grafo; `index.ts` trata sinal e shutdown                                                                                                                        |
 
 ## Mapa de pastas
 
@@ -42,13 +42,15 @@ auth-service/src/
 │   │   └── login/{LoginUseCase.ts, login.types.ts}
 │   └── interfaces/
 │       ├── repositories/UserRepository.ts
-│       └── services/{PasswordHasher,TokenIssuer,Clock,IdGenerator}.ts
+│       ├── gateways/EventOutbox.ts
+│       └── services/{PasswordHasher,TokenIssuer,Clock,IdGenerator,UnitOfWork}.ts
 ├── infrastructure/
 │   ├── http/
 │   │   ├── httpReply.ts
 │   │   ├── routes/{identity,health}.routes.ts
 │   │   └── server.ts
-│   ├── repositories/prisma/{schema.prisma,migrations/,client.ts,user.repository.ts}
+│   ├── gateways/prismaEventOutbox.gateway.ts
+│   ├── repositories/prisma/{schema.prisma,migrations/,client.ts,user.repository.ts,prismaTransaction.ts,prismaUnitOfWork.ts,outboxRelayPersistence.ts}
 │   ├── services/crypto/{bcryptPasswordHasher,rs256TokenIssuer,rsaKeys}.ts
 │   ├── messaging/{amqpConnection,amqpPublisher,outboxEnvelope,outboxRelay}.ts
 │   ├── observability/outboxMetrics.ts
@@ -56,20 +58,22 @@ auth-service/src/
 └── main/{compose.ts,index.ts}
 ```
 
-A persistência é repository: `UserRepository` em `application/interfaces/repositories/` e `PrismaUserRepository` em `infrastructure/repositories/prisma/`. A publicação AMQP não é uma interface que o caso de uso declara. O caso de uso grava o envelope do outbox na mesma transação do usuário, e o relay em `infrastructure/messaging` publica depois.
+A persistência do agregado é repository: `UserRepository` em `application/interfaces/repositories/` e `PrismaUserRepository` em `infrastructure/repositories/prisma/`. O evento de integração ainda não publicado é gateway: `EventOutbox` em `application/interfaces/gateways/` e `PrismaEventOutbox` em `infrastructure/gateways/`. O caso de uso envolve `users.save` e `eventOutbox.record` num `UnitOfWork` (`prisma.$transaction` com client compartilhado). A publicação AMQP não é uma interface que o caso de uso declara. O relay em `infrastructure/messaging` só orquestra envelope e broker; o SQL de claim/mark fica em `infrastructure/repositories/prisma/outboxRelayPersistence.ts`. Login não chama o gateway nem abre essa transação de escrita.
 
 ## Casos de uso
 
-| Caso de uso           | O que faz                                                                                                                                                        |
-| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `RegisterUserUseCase` | Valida a senha, pede o hash, monta o `User`, monta o envelope de outbox (`id`, `version`, `correlationId`, payload) e persiste user + outbox na mesma transação. |
-| `LoginUseCase`        | Normaliza o e-mail, busca o usuário e compara a senha. E-mail desconhecido responde `INVALID_CREDENTIALS` sem comparar hash. Emite o token.                      |
+| Caso de uso           | O que faz                                                                                                                                                               |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `RegisterUserUseCase` | Valida a senha, pede o hash, monta o `User` e o `UserRegistered`, e dentro de `uow.run` chama `users.save(user)` e `eventOutbox.record(userRegistered, correlationId)`. |
+| `LoginUseCase`        | Normaliza o e-mail, busca o usuário e compara a senha. E-mail desconhecido responde `INVALID_CREDENTIALS` sem comparar hash. Emite o token. Não grava outbox.           |
 
 Falha de login é sempre `INVALID_CREDENTIALS`. Erros de aplicação usam `Result` de `@zipframes/core`. Erros HTTP usam Problem Details (RFC 9457) via `@zipframes/core`.
 
 ## Outbox
 
-O **caso de uso** decide o que publicar (`user.registered`, versão, payload, `correlationId` vindo do comando HTTP, id via `IdGenerator`). O repositório só persiste a linha de `outbox` na mesma transação do usuário.
+O **caso de uso** decide _que_ o cadastro gera `UserRegistered` e passa o `correlationId` do comando HTTP. Ele não conhece colunas da tabela (`aggregateType`, `published_at`, versão, payload). O gateway `EventOutbox` grava o evento ainda não publicado; `PrismaEventOutbox` mapeia o evento para a linha de `outbox` (id via `IdGenerator`) e faz o `INSERT`. `UserRepository.save` só persiste o `User`. Os dois writes entram no mesmo `UnitOfWork`.
+
+O **relay** é processo de infraestrutura, não porta de application: lê pendentes, publica no broker e marca. O SQL (`FOR UPDATE SKIP LOCKED`, mark com `::uuid`) vive na persistência Prisma. `infrastructure/messaging` só monta o envelope e chama o publisher, ainda dentro da transação de claim/mark.
 
 - Intervalo: `OUTBOX_INTERVAL_MS` (padrão 2s).
 - Teto: `OUTBOX_MAX_ATTEMPTS` (padrão 30).
@@ -100,7 +104,7 @@ No cluster, o Argo CD aplica [`infra/k8s/auth-service`](../../../infra/k8s/auth-
 
 ## Testes
 
-| Pasta               | O que prova                                                       |
-| ------------------- | ----------------------------------------------------------------- |
-| `tests/unit`        | Domínio, casos de uso, HTTP, crypto, config, envelope — com fakes |
-| `tests/integration` | HTTP de register e login contra Postgres real                     |
+| Pasta               | O que prova                                                                                        |
+| ------------------- | -------------------------------------------------------------------------------------------------- |
+| `tests/unit`        | Domínio, casos de uso, HTTP, crypto, config, envelope, mapeamento do gateway — com fakes in-memory |
+| `tests/integration` | HTTP de register e login, transação user+outbox no Postgres, relay claim/publish/`::uuid`          |

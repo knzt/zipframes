@@ -51,10 +51,10 @@ Três categorias em `application/interfaces/`, espelhadas em `infrastructure/`:
 | Categoria       | Critério                                                          | Exemplos                                                                  |
 | --------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------- |
 | `repositories/` | Devolve e recebe **objetos de domínio**                           | `UserRepository`                                                          |
-| `gateways/`     | Cruza a fronteira do processo sem falar em termos de domínio      | `ObjectStorage`, `EventPublisher`, `FrameExtractor`                       |
+| `gateways/`     | Cruza a fronteira do processo sem falar em termos de domínio      | `ObjectStorage`, `EventPublisher`, `FrameExtractor`, `EventOutbox`        |
 | `services/`     | Capacidade técnica **local** (mesmo processo; sem estado externo) | `PasswordHasher`, `TokenIssuer`, `Clock`, `IdGenerator`, `ArchiveBuilder` |
 
-`gateway`, neste mapa, é a interface que o caso de uso declara quando o trabalho sai do processo: object storage, publicação de evento, extração de frames por um programa que não é o processo Node. A interface fica em `application/interfaces/gateways/`. A classe que a implementa fica em `infrastructure/gateways/` e é ela que segura o SDK. O `processor-worker` usa essa pasta. No `auth-service`, a persistência é repository e a saída AMQP é o relay do outbox em `infrastructure/messaging`: o caso de uso grava o envelope na mesma transação do usuário, e o relay publica depois. Essa saída não é uma interface em `application/interfaces/gateways/`.
+`gateway`, neste mapa, é a interface que o caso de uso declara quando o trabalho sai do processo: object storage, publicação de evento, extração de frames por um programa que não é o processo Node, ou a gravação de um evento de integração ainda não publicado. A interface fica em `application/interfaces/gateways/`. A classe que a implementa fica em `infrastructure/gateways/` e é ela que segura o SDK. O `processor-worker` usa essa pasta (`EventPublisher`, `ObjectStorage`, `FrameExtractor`). No `auth-service`, `EventOutbox` é o gateway: o caso de uso chama `record(userRegistered, correlationId)` e `PrismaEventOutbox` faz o `INSERT` na tabela `outbox`. A publicação AMQP continua no relay em `infrastructure/messaging`, que não é uma interface de `application/`. O caso de uso delimita a transação com `UnitOfWork`; login não chama o gateway nem abre essa transação de escrita.
 
 #### Nomenclatura
 
@@ -67,7 +67,7 @@ Pastas em **camelCase**. Arquivos de classe e de interface usam o nome do tipo. 
 | Controller  | `application/controllers/RegisterUserController.ts` (declara `RegisterUserControllerRequest` e `RegisterUserControllerResponse`)      |
 | HTTP        | `infrastructure/http/httpReply.ts` (formato que a rota Fastify envia)                                                                 |
 | Repository  | `application/interfaces/repositories/UserRepository.ts`                                                                               |
-| Gateway     | `application/interfaces/gateways/ObjectStorage.ts`                                                                                    |
+| Gateway     | `application/interfaces/gateways/ObjectStorage.ts`, `application/interfaces/gateways/EventOutbox.ts`                                  |
 | Service     | `application/interfaces/services/PasswordHasher.ts`                                                                                   |
 
 Cada subpasta pública de `domain/` e `application/` expõe um `index.ts` (barrel).

@@ -49,6 +49,7 @@ describe('POST /login against Postgres', () => {
       audience: 'zipframes',
     });
     expect(verified.payload.sub).toBe(registered.userId);
+    expect(await app.prisma.outboxEvent.count()).toBe(1);
 
     const rejected = await fetch(`${app.baseUrl}/login`, {
       method: 'POST',

@@ -6,26 +6,21 @@ export interface UserRepositoryEmailTakenError {
   readonly code: 'EMAIL_TAKEN';
 }
 
-export interface UserRepositoryOutboxEventWrite {
-  readonly id: string;
-  readonly aggregateType: string;
-  readonly aggregateId: string;
-  readonly eventType: string;
-  readonly version: number;
-  readonly payload: Record<string, unknown>;
-  readonly correlationId: string;
-  readonly occurredAt: Date;
+/**
+ * Thrown by the Prisma adapter when `users.email` collides inside an
+ * interactive transaction. Returning `Result` there would try to commit an
+ * already-aborted transaction; the use case maps this back to `EMAIL_TAKEN`.
+ */
+export class UserEmailTakenError extends Error implements UserRepositoryEmailTakenError {
+  readonly code = 'EMAIL_TAKEN' as const;
+
+  constructor() {
+    super('email is already registered');
+    this.name = 'UserEmailTakenError';
+  }
 }
 
 export interface UserRepository {
   findByEmail: (email: string) => Promise<User | null>;
-  /**
-   * Persists the user and the outbox row together, in one transaction.
-   * A registration is never recorded without its user, and a user is never
-   * stored without the fact that they registered.
-   */
-  save: (
-    user: User,
-    outbox: UserRepositoryOutboxEventWrite,
-  ) => Promise<Result<void, UserRepositoryEmailTakenError>>;
+  save: (user: User) => Promise<Result<void, UserRepositoryEmailTakenError>>;
 }

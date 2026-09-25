@@ -1,17 +1,31 @@
-import { Prisma, type PrismaClient } from '@prisma/client';
-
 import type { Publisher } from '@zipframes/communication';
 import { EVENT_EXCHANGE } from '@zipframes/schemas';
 
 import { toEventEnvelope } from './outboxEnvelope.js';
 import type { OutboxRow } from './outboxEnvelope.js';
 
-export type ClaimedOutboxRow = OutboxRow & {
+export type ClaimedOutboxRow = Omit<OutboxRow, 'payload'> & {
+  readonly payload: unknown;
   readonly attempts: number;
 };
 
+export type OutboxRelayHandleOutcome = 'published' | 'failed';
+
+/**
+ * Persistence the relay needs: claim unpublished rows, run the publish
+ * callback while the row locks are held, then mark published or attempted.
+ * Implemented in `repositories/prisma`; this module must not import Prisma.
+ */
+export interface OutboxRelayPersistence {
+  readonly processPending: (input: {
+    readonly maxAttempts: number;
+    readonly batchSize: number;
+    readonly handle: (row: ClaimedOutboxRow) => Promise<OutboxRelayHandleOutcome>;
+  }) => Promise<{ publishedCount: number; exhausted: ClaimedOutboxRow[] }>;
+}
+
 export interface OutboxRelayOptions {
-  readonly prisma: PrismaClient;
+  readonly persistence: OutboxRelayPersistence;
   readonly publisher: Publisher;
   /** Stop selecting a row once it has been tried this many times. */
   readonly maxAttempts: number;
@@ -25,10 +39,6 @@ export interface OutboxRelayOptions {
 
 const DEFAULT_BATCH_SIZE = 20;
 
-// Prisma binds a string[] as text[]. id is uuid, and Postgres has no uuid = text.
-const uuidIn = (ids: readonly string[]): Prisma.Sql =>
-  Prisma.join(ids.map((id) => Prisma.sql`${id}::uuid`));
-
 const asPayload = (value: unknown): Record<string, unknown> => {
   if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
     return value as Record<string, unknown>;
@@ -41,8 +51,8 @@ const asPayload = (value: unknown): Record<string, unknown> => {
  * schedule (a `setInterval` in `main/`, wired to graceful shutdown).
  *
  * The claim (`FOR UPDATE SKIP LOCKED`) and the mark-as-published both
- * happen inside the same transaction as the publish call, so that two
- * replicas of this service never publish the same row twice. The
+ * happen inside the same database transaction as the publish call, so that
+ * two replicas of this service never publish the same row twice. The
  * transaction stays open for as long as the broker round-trip takes.
  * `batchSize` bounds how many rows share that risk at once.
  *
@@ -57,85 +67,25 @@ export const createOutboxRelay = (
   const batchSize = options.batchSize ?? DEFAULT_BATCH_SIZE;
 
   const runOnce = async (): Promise<number> => {
-    const exhausted: ClaimedOutboxRow[] = [];
-
-    const publishedCount = await options.prisma.$transaction(
-      async (tx: Prisma.TransactionClient) => {
-        const rows = await tx.$queryRaw<
-          {
-            id: string;
-            eventType: string;
-            version: number;
-            payload: unknown;
-            correlationId: string;
-            occurredAt: Date;
-            attempts: number;
-          }[]
-        >`
-        SELECT
-          id,
-          event_type   AS "eventType",
-          version,
-          payload,
-          correlation_id AS "correlationId",
-          occurred_at    AS "occurredAt",
-          attempts
-        FROM outbox
-        WHERE published_at IS NULL
-          AND attempts < ${options.maxAttempts}
-        ORDER BY occurred_at
-        LIMIT ${batchSize}
-        FOR UPDATE SKIP LOCKED
-      `;
-
-        const publishedIds: string[] = [];
-        const failedIds: string[] = [];
-
-        for (const raw of rows) {
-          const row: ClaimedOutboxRow = {
-            id: raw.id,
-            eventType: raw.eventType,
-            version: raw.version,
-            payload: {},
-            correlationId: raw.correlationId,
-            occurredAt: raw.occurredAt,
-            attempts: raw.attempts,
-          };
-          try {
-            const claimed: ClaimedOutboxRow = { ...row, payload: asPayload(raw.payload) };
-            const envelope = toEventEnvelope(claimed);
-            // Rows must publish in order, and the transaction they share
-            // makes concurrent publishing pointless here anyway.
-            await options.publisher.publish(envelope, {
-              exchange: EVENT_EXCHANGE,
-              routingKey: row.eventType,
-            });
-            publishedIds.push(row.id);
-          } catch (error) {
-            options.onPublishError?.(row, error);
-            failedIds.push(row.id);
-            if (row.attempts + 1 >= options.maxAttempts) {
-              exhausted.push(row);
-            }
-          }
+    const { publishedCount, exhausted } = await options.persistence.processPending({
+      maxAttempts: options.maxAttempts,
+      batchSize,
+      handle: async (row) => {
+        try {
+          const envelope = toEventEnvelope({ ...row, payload: asPayload(row.payload) });
+          // Rows must publish in order, and the transaction they share
+          // makes concurrent publishing pointless here anyway.
+          await options.publisher.publish(envelope, {
+            exchange: EVENT_EXCHANGE,
+            routingKey: row.eventType,
+          });
+          return 'published';
+        } catch (error) {
+          options.onPublishError?.(row, error);
+          return 'failed';
         }
-
-        if (publishedIds.length > 0) {
-          const ids = uuidIn(publishedIds);
-          await tx.$executeRaw`
-          UPDATE outbox SET published_at = now() WHERE id IN (${ids})
-        `;
-        }
-        if (failedIds.length > 0) {
-          const ids = uuidIn(failedIds);
-          await tx.$executeRaw`
-          UPDATE outbox SET attempts = attempts + 1 WHERE id IN (${ids})
-        `;
-        }
-
-        return publishedIds.length;
       },
-    );
+    });
 
     for (const row of exhausted) {
       options.onExhausted?.(row);

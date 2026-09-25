@@ -37,8 +37,19 @@ describe('POST /register against Postgres', () => {
     const user = await app.prisma.user.findUnique({ where: { email: payload.email } });
     expect(user?.id).toBe(body.userId);
     const outbox = await app.prisma.outboxEvent.findFirst({ where: { aggregateId: body.userId } });
-    expect(outbox?.eventType).toBe('user.registered');
-    expect(outbox?.correlationId).toBe('33333333-3333-4333-8333-333333333333');
+    expect(outbox).toMatchObject({
+      aggregateType: 'User',
+      aggregateId: body.userId,
+      eventType: 'user.registered',
+      version: 1,
+      correlationId: '33333333-3333-4333-8333-333333333333',
+      payload: {
+        userId: body.userId,
+        name: payload.name,
+        email: payload.email,
+      },
+    });
+    expect(outbox?.publishedAt).toBeNull();
 
     const duplicate = await fetch(`${app.baseUrl}/register`, {
       method: 'POST',

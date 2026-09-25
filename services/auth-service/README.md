@@ -14,12 +14,13 @@ src/
 ├── application/
 │   ├── controllers/        # LoginController, RegisterUserController
 │   ├── useCases/           # LoginUseCase, RegisterUserUseCase
-│   └── interfaces/         # interface adapters declarados pelo caso de uso
+│   └── interfaces/         # repositories, gateways (EventOutbox), services (UnitOfWork, hasher, ...)
 ├── infrastructure/
 │   ├── http/               # Fastify, rotas, OpenAPI gerado e HttpReply
+│   ├── gateways/           # PrismaEventOutbox
 │   ├── repositories/prisma/
 │   ├── services/crypto/
-│   ├── messaging/
+│   ├── messaging/          # envelope, publisher, orquestração do relay
 │   └── observability/
 └── main/                   # composition root
 ```

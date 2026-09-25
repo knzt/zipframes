@@ -1,15 +1,17 @@
 import { err, ok } from '@zipframes/core';
 import type { Result } from '@zipframes/core';
 
+import type { EventOutbox } from '../../src/application/interfaces/gateways/EventOutbox.js';
 import type {
   UserRepository,
   UserRepositoryEmailTakenError,
-  UserRepositoryOutboxEventWrite,
 } from '../../src/application/interfaces/repositories/UserRepository.js';
 import type { Clock } from '../../src/application/interfaces/services/Clock.js';
 import type { IdGenerator } from '../../src/application/interfaces/services/IdGenerator.js';
 import type { PasswordHasher } from '../../src/application/interfaces/services/PasswordHasher.js';
 import type { TokenIssuer } from '../../src/application/interfaces/services/TokenIssuer.js';
+import type { UnitOfWork } from '../../src/application/interfaces/services/UnitOfWork.js';
+import type { UserRegistered } from '../../src/domain/events/userRegistered.js';
 import type { User, UserId } from '../../src/domain/entities/user.js';
 import type { PasswordHash } from '../../src/domain/valueObjects/password.js';
 
@@ -19,22 +21,35 @@ import type { PasswordHash } from '../../src/domain/valueObjects/password.js';
  */
 export class InMemoryUserRepository implements UserRepository {
   readonly users = new Map<string, User>();
-  readonly events: UserRepositoryOutboxEventWrite[] = [];
 
   findByEmail(email: string): Promise<User | null> {
     return Promise.resolve(this.users.get(email) ?? null);
   }
 
-  save(
-    user: User,
-    outbox: UserRepositoryOutboxEventWrite,
-  ): Promise<Result<void, UserRepositoryEmailTakenError>> {
+  save(user: User): Promise<Result<void, UserRepositoryEmailTakenError>> {
     if (this.users.has(user.email)) {
       return Promise.resolve(err({ code: 'EMAIL_TAKEN' as const }));
     }
     this.users.set(user.email, user);
-    this.events.push(outbox);
     return Promise.resolve(ok(undefined));
+  }
+}
+
+export class InMemoryEventOutbox implements EventOutbox {
+  readonly recorded: { readonly event: UserRegistered; readonly correlationId: string }[] = [];
+
+  record(event: UserRegistered, correlationId: string): Promise<void> {
+    this.recorded.push({ event, correlationId });
+    return Promise.resolve();
+  }
+}
+
+export class InMemoryUnitOfWork implements UnitOfWork {
+  runCount = 0;
+
+  run<T>(work: () => Promise<T>): Promise<T> {
+    this.runCount += 1;
+    return work();
   }
 }
 

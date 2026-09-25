@@ -1,20 +1,37 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import type { Result } from '@zipframes/core';
+
+import type { EventOutbox } from '../../../../../src/application/interfaces/gateways/EventOutbox.js';
+import {
+  UserEmailTakenError,
+  type UserRepository,
+  type UserRepositoryEmailTakenError,
+} from '../../../../../src/application/interfaces/repositories/UserRepository.js';
 import { RegisterUserUseCase } from '../../../../../src/application/useCases/registerUser/RegisterUserUseCase.js';
+import type { User } from '../../../../../src/domain/entities/user.js';
 import {
   FakeHasher,
   FixedClock,
+  InMemoryEventOutbox,
+  InMemoryUnitOfWork,
   InMemoryUserRepository,
   SequentialIds,
 } from '../../../../support/in-memory.js';
 
 let users: InMemoryUserRepository;
+let events: InMemoryEventOutbox;
+let uow: InMemoryUnitOfWork;
 let registerUser: RegisterUserUseCase;
 
 beforeEach(() => {
   users = new InMemoryUserRepository();
+  events = new InMemoryEventOutbox();
+  uow = new InMemoryUnitOfWork();
   registerUser = new RegisterUserUseCase(
     users,
+    events,
+    uow,
     new FakeHasher(),
     new SequentialIds(),
     new FixedClock(),
@@ -50,24 +67,19 @@ describe('a successful registration', () => {
     expect(stored?.passwordHash).not.toBe('senha1234');
   });
 
-  it('asks the repository to store the user and the registration together', async () => {
+  it('saves the user and records UserRegistered inside one unit of work', async () => {
     await registerUser.execute(validInput);
 
+    expect(uow.runCount).toBe(1);
     expect(users.users.size).toBe(1);
-    expect(users.events).toEqual([
+    expect(events.recorded).toEqual([
       {
-        id: '0194f3a0-0000-7000-8000-000000000002',
-        aggregateType: 'User',
-        aggregateId: '0194f3a0-0000-7000-8000-000000000001',
-        eventType: 'user.registered',
-        version: 1,
-        payload: {
+        event: {
           userId: '0194f3a0-0000-7000-8000-000000000001',
           name: 'Hellen Santos',
           email: 'hellen@example.com',
         },
         correlationId: '0194f3a0-0000-7000-8000-000000000099',
-        occurredAt: new Date('2026-01-01T12:00:00.000Z'),
       },
     ]);
   });
@@ -75,7 +87,7 @@ describe('a successful registration', () => {
   it('does not put the password hash in the registration fact', async () => {
     await registerUser.execute(validInput);
 
-    expect(JSON.stringify(users.events[0])).not.toContain('hashed:');
+    expect(JSON.stringify(events.recorded[0])).not.toContain('hashed:');
   });
 });
 
@@ -85,13 +97,14 @@ describe('invalid input', () => {
 
     expect(result).toMatchObject({ ok: false, error: { code: 'INVALID_INPUT' } });
     expect(users.users.size).toBe(0);
+    expect(uow.runCount).toBe(0);
   });
 
   it('rejects an invalid email', async () => {
     const result = await registerUser.execute({ ...validInput, email: 'not-an-email' });
 
     expect(result).toMatchObject({ ok: false, error: { code: 'INVALID_INPUT' } });
-    expect(users.events).toHaveLength(0);
+    expect(events.recorded).toHaveLength(0);
   });
 
   it('rejects an invalid name', async () => {
@@ -104,7 +117,7 @@ describe('invalid input', () => {
     const result = await registerUser.execute({ ...validInput, password: 'x' });
 
     expect(result.ok).toBe(false);
-    expect(users.events).toHaveLength(0);
+    expect(events.recorded).toHaveLength(0);
   });
 });
 
@@ -116,6 +129,7 @@ describe('duplicate email', () => {
 
     expect(result).toMatchObject({ ok: false, error: { code: 'EMAIL_TAKEN' } });
     expect(users.users.size).toBe(1);
+    expect(events.recorded).toHaveLength(1);
   });
 
   it('treats addresses differing only by case as the same', async () => {
@@ -124,5 +138,47 @@ describe('duplicate email', () => {
     const result = await registerUser.execute({ ...validInput, email: 'HELLEN@EXAMPLE.COM' });
 
     expect(result).toMatchObject({ ok: false, error: { code: 'EMAIL_TAKEN' } });
+  });
+
+  it('maps a unique-violation thrown inside the transaction to EMAIL_TAKEN', async () => {
+    const throwingUsers: UserRepository = {
+      findByEmail: () => Promise.resolve(null),
+      save: (_user: User): Promise<Result<void, UserRepositoryEmailTakenError>> => {
+        throw new UserEmailTakenError();
+      },
+    };
+    const silentEvents: EventOutbox = {
+      record: () => Promise.resolve(),
+    };
+    const useCase = new RegisterUserUseCase(
+      throwingUsers,
+      silentEvents,
+      new InMemoryUnitOfWork(),
+      new FakeHasher(),
+      new SequentialIds(),
+      new FixedClock(),
+    );
+
+    const result = await useCase.execute(validInput);
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'EMAIL_TAKEN' } });
+  });
+
+  it('propagates unexpected persistence failures', async () => {
+    const explodingUsers: UserRepository = {
+      findByEmail: () => Promise.resolve(null),
+      save: () => Promise.reject(new Error('disk full')),
+    };
+    const useCase = new RegisterUserUseCase(
+      explodingUsers,
+      events,
+      new InMemoryUnitOfWork(),
+      new FakeHasher(),
+      new SequentialIds(),
+      new FixedClock(),
+    );
+
+    await expect(useCase.execute(validInput)).rejects.toThrow('disk full');
+    expect(events.recorded).toHaveLength(0);
   });
 });

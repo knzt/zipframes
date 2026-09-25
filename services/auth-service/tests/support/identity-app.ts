@@ -14,13 +14,15 @@ import { LoginController } from '../../src/application/controllers/LoginControll
 import { RegisterUserController } from '../../src/application/controllers/RegisterUserController.js';
 import { LoginUseCase } from '../../src/application/useCases/login/LoginUseCase.js';
 import { RegisterUserUseCase } from '../../src/application/useCases/registerUser/RegisterUserUseCase.js';
+import { PrismaEventOutbox } from '../../src/infrastructure/gateways/prismaEventOutbox.gateway.js';
 import { createHttpServer } from '../../src/infrastructure/http/server.js';
-import { silentLogger } from './silent-logger.js';
 import { registerIdentityRoutes } from '../../src/infrastructure/http/routes/identity.routes.js';
+import { PrismaUnitOfWork } from '../../src/infrastructure/repositories/prisma/prismaUnitOfWork.js';
 import { PrismaUserRepository } from '../../src/infrastructure/repositories/prisma/user.repository.js';
 import { BcryptPasswordHasher } from '../../src/infrastructure/services/crypto/bcryptPasswordHasher.js';
 import { deriveRsaKeyMaterial } from '../../src/infrastructure/services/crypto/rsaKeys.js';
 import { Rs256TokenIssuer } from '../../src/infrastructure/services/crypto/rs256TokenIssuer.js';
+import { silentLogger } from './silent-logger.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -45,10 +47,13 @@ export const startIdentityApp = async (): Promise<IdentityApp> => {
   const prisma = new PrismaClient({ datasources: { db: { url: postgres.connectionUri } } });
   const { privateKey } = await generateKeyPair('RS256');
   const keys = await deriveRsaKeyMaterial(await exportPKCS8(privateKey), 'key-1');
+  const ids = { next: () => randomUUID() };
+  const clock = { now: () => new Date() };
   const users = new PrismaUserRepository(prisma);
+  const eventOutbox = new PrismaEventOutbox(prisma, ids, clock);
   const hasher = new BcryptPasswordHasher();
   const registerUserController = new RegisterUserController(
-    new RegisterUserUseCase(users, hasher, { next: () => randomUUID() }, { now: () => new Date() }),
+    new RegisterUserUseCase(users, eventOutbox, new PrismaUnitOfWork(prisma), hasher, ids, clock),
   );
   const loginController = new LoginController(
     new LoginUseCase(

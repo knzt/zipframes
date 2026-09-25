@@ -6,6 +6,8 @@ import {
   FakeHasher,
   FakeTokenIssuer,
   FixedClock,
+  InMemoryEventOutbox,
+  InMemoryUnitOfWork,
   InMemoryUserRepository,
   SequentialIds,
 } from '../../../../support/in-memory.js';
@@ -20,7 +22,14 @@ beforeEach(async () => {
   tokens = new FakeTokenIssuer();
   hasher = new FakeHasher();
 
-  await new RegisterUserUseCase(users, hasher, new SequentialIds(), new FixedClock()).execute({
+  await new RegisterUserUseCase(
+    users,
+    new InMemoryEventOutbox(),
+    new InMemoryUnitOfWork(),
+    hasher,
+    new SequentialIds(),
+    new FixedClock(),
+  ).execute({
     name: 'Hellen Santos',
     email: 'hellen@example.com',
     password: 'senha1234',

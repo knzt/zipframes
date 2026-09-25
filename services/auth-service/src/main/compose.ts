@@ -11,6 +11,7 @@ import { RegisterUserController } from '../application/controllers/RegisterUserC
 import { LoginUseCase } from '../application/useCases/login/LoginUseCase.js';
 import { RegisterUserUseCase } from '../application/useCases/registerUser/RegisterUserUseCase.js';
 import { loadConfig } from '../infrastructure/config.js';
+import { PrismaEventOutbox } from '../infrastructure/gateways/prismaEventOutbox.gateway.js';
 import { createHttpServer } from '../infrastructure/http/server.js';
 import { registerHealthRoutes } from '../infrastructure/http/routes/health.routes.js';
 import { registerIdentityRoutes } from '../infrastructure/http/routes/identity.routes.js';
@@ -19,6 +20,8 @@ import { createAmqpPublishPort } from '../infrastructure/messaging/amqpPublisher
 import { createOutboxRelay } from '../infrastructure/messaging/outboxRelay.js';
 import { createOutboxMetrics } from '../infrastructure/observability/outboxMetrics.js';
 import { createPrismaClient, pingDatabase } from '../infrastructure/repositories/prisma/client.js';
+import { createPrismaOutboxRelayPersistence } from '../infrastructure/repositories/prisma/outboxRelayPersistence.js';
+import { PrismaUnitOfWork } from '../infrastructure/repositories/prisma/prismaUnitOfWork.js';
 import { PrismaUserRepository } from '../infrastructure/repositories/prisma/user.repository.js';
 import { BcryptPasswordHasher } from '../infrastructure/services/crypto/bcryptPasswordHasher.js';
 import { deriveRsaKeyMaterial } from '../infrastructure/services/crypto/rsaKeys.js';
@@ -42,7 +45,11 @@ export const startAuthService = async (): Promise<{ stop: () => Promise<void> }>
   const amqp = await connectAmqp(config.amqpUrl);
   const publisher = createPublisher(createAmqpPublishPort(amqp.channel));
 
+  const ids = { next: () => randomUUID() };
+  const clock = { now: () => new Date() };
   const users = new PrismaUserRepository(prisma);
+  const eventOutbox = new PrismaEventOutbox(prisma, ids, clock);
+  const uow = new PrismaUnitOfWork(prisma);
   const hasher = new BcryptPasswordHasher();
   const tokens = new Rs256TokenIssuer({
     keys,
@@ -51,12 +58,12 @@ export const startAuthService = async (): Promise<{ stop: () => Promise<void> }>
   });
 
   const registerUserController = new RegisterUserController(
-    new RegisterUserUseCase(users, hasher, { next: () => randomUUID() }, { now: () => new Date() }),
+    new RegisterUserUseCase(users, eventOutbox, uow, hasher, ids, clock),
   );
   const loginController = new LoginController(new LoginUseCase(users, hasher, tokens));
 
   const relay = createOutboxRelay({
-    prisma,
+    persistence: createPrismaOutboxRelayPersistence(prisma),
     publisher,
     maxAttempts: config.outboxMaxAttempts,
     onPublishError: (row, error) => {

@@ -10,6 +10,7 @@ import { startPostgres } from '@zipframes/test-toolkit';
 import type { PostgresHandle } from '@zipframes/test-toolkit';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { createPrismaOutboxRelayPersistence } from '../../src/infrastructure/repositories/prisma/outboxRelayPersistence.js';
 import { createOutboxRelay } from '../../src/infrastructure/messaging/outboxRelay.js';
 
 const execFileAsync = promisify(execFile);
@@ -63,7 +64,11 @@ describe('outbox relay', () => {
       },
     };
 
-    const relay = createOutboxRelay({ prisma, publisher, maxAttempts: 5 });
+    const relay = createOutboxRelay({
+      persistence: createPrismaOutboxRelayPersistence(prisma),
+      publisher,
+      maxAttempts: 5,
+    });
 
     await expect(relay.runOnce()).resolves.toBe(1);
     await expect(relay.runOnce()).resolves.toBe(0);
@@ -89,7 +94,7 @@ describe('outbox relay', () => {
     };
 
     const relay = createOutboxRelay({
-      prisma,
+      persistence: createPrismaOutboxRelayPersistence(prisma),
       publisher,
       maxAttempts: 1,
       onExhausted: (row) => {
