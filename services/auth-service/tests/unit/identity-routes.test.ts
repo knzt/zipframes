@@ -214,6 +214,32 @@ describe('health and metrics', () => {
     expect(response.json()).toEqual({ status: 'not_ready', reason: 'database down' });
   });
 
+  it('answers 503 with unknown when a dependency is down and gives no reason', async () => {
+    const app = await buildApp({
+      isReady: async () => ({ ready: false }),
+    });
+
+    const response = await app.inject({ method: 'GET', url: '/health/ready' });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toEqual({ status: 'not_ready', reason: 'unknown' });
+  });
+
+  it('answers 503 with unknown when the readiness check throws a non-error', async () => {
+    const app = await buildApp({
+      isReady: async () => {
+        // Exercises the branch where the failure is not an Error.
+        // eslint-disable-next-line @typescript-eslint/only-throw-error
+        throw 'offline';
+      },
+    });
+
+    const response = await app.inject({ method: 'GET', url: '/health/ready' });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toEqual({ status: 'not_ready', reason: 'unknown' });
+  });
+
   it('returns the prometheus text from the metrics registry', async () => {
     const app = await buildApp();
 
@@ -267,6 +293,26 @@ describe('OpenAPI', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.headers['content-type']).toContain('text/html');
+  });
+
+  it('keeps text unquoted and json-encodes objects', async () => {
+    const app = await buildApp();
+    app.get(
+      '/serialized',
+      {
+        schema: { response: { 200: { type: 'string' } } },
+      },
+      async (_request, reply) => {
+        expect(reply.serialize('plain-text')).toBe('plain-text');
+        expect(reply.serialize({ ok: true })).toBe('{"ok":true}');
+        return 'plain-text';
+      },
+    );
+
+    const response = await app.inject({ method: 'GET', url: '/serialized' });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toBe('plain-text');
   });
 });
 
