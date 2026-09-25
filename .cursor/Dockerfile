@@ -1,15 +1,47 @@
 # Cloud Agent base image with Docker-in-Docker support.
 FROM ubuntu:24.04
 
-ENV DEBIAN_FRONTEND=noninteractive
+ENV DEBIAN_FRONTEND=noninteractive \
+    COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
     gnupg \
+    git \
+    python3 \
+    build-essential \
     iptables \
     sudo \
     && rm -rf /var/lib/apt/lists/*
+
+########################################################
+# NODE.JS 26 + PNPM
+########################################################
+
+RUN install -m 0755 -d /usr/share/keyrings && \
+    curl --retry 3 --retry-delay 5 -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
+      | gpg --dearmor -o /usr/share/keyrings/nodesource.gpg && \
+    chmod 644 /usr/share/keyrings/nodesource.gpg && \
+    printf '%s\n' \
+      'Types: deb' \
+      'URIs: https://deb.nodesource.com/node_26.x' \
+      'Suites: nodistro' \
+      'Components: main' \
+      "Architectures: $(dpkg --print-architecture)" \
+      'Signed-By: /usr/share/keyrings/nodesource.gpg' \
+      > /etc/apt/sources.list.d/nodesource.sources && \
+    printf '%s\n' \
+      'Package: nodejs' \
+      'Pin: origin deb.nodesource.com' \
+      'Pin-Priority: 600' \
+      > /etc/apt/preferences.d/nodejs && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends nodejs=26.10.0-1nodesource1 && \
+    rm -rf /var/lib/apt/lists/* && \
+    npm install -g corepack@0.34.6 && \
+    corepack enable && \
+    corepack prepare pnpm@12.6.0 --activate
 
 ########################################################
 # DOCKER INSTALLATION
@@ -41,7 +73,8 @@ RUN update-alternatives --set iptables /usr/sbin/iptables-legacy && \
 # CONFIG UBUNTU USER
 ########################################################
 
-RUN echo 'PasswordAuthentication no\nChallengeResponseAuthentication no\nUsePAM no' > /etc/ssh/sshd_config.d/disable_password_auth.conf
+RUN mkdir -p /etc/ssh/sshd_config.d && \
+    echo 'PasswordAuthentication no\nChallengeResponseAuthentication no\nUsePAM no' > /etc/ssh/sshd_config.d/disable_password_auth.conf
 
 RUN id -u ubuntu &>/dev/null || useradd -m -s /bin/bash ubuntu
 RUN groupadd -f docker && usermod -aG docker ubuntu
