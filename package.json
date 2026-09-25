@@ -11,9 +11,10 @@
     "format:write": "prettier --write .",
     "prepare": "husky",
     "infra:up": "docker compose -f infra/docker-compose/docker-compose.yml up -d",
-    "infra:down": "docker compose -f infra/docker-compose/docker-compose.yml down",
-    "infra:logs": "docker compose -f infra/docker-compose/docker-compose.yml logs -f",
-    "infra:reset": "docker compose -f infra/docker-compose/docker-compose.yml down -v && docker compose -f infra/docker-compose/docker-compose.yml up -d"
+    "infra:apps": "docker compose -f infra/docker-compose/docker-compose.yml --profile apps up -d --build",
+    "infra:down": "docker compose -f infra/docker-compose/docker-compose.yml --profile apps down",
+    "infra:logs": "docker compose -f infra/docker-compose/docker-compose.yml --profile apps logs -f",
+    "infra:reset": "docker compose -f infra/docker-compose/docker-compose.yml --profile apps down -v && docker compose -f infra/docker-compose/docker-compose.yml up -d"
   },
   "devDependencies": {
     "@commitlint/cli": "^19.8.1",

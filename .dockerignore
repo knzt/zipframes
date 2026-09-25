@@ -1,7 +1,9 @@
 .git
 **/.git
 **/node_modules
-coverage
+**/dist
+**/coverage
+**/.runtime
 **/.env
 **/.env.*
 !**/.env.example
