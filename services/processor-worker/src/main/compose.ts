@@ -5,6 +5,7 @@ import { createLogger } from '@zipframes/logger';
 import { createMetrics } from '@zipframes/telemetry';
 import { randomUUID } from 'node:crypto';
 
+import { makeProcessUploadedVideoController } from '../application/controllers/processUploadedVideo.controller.js';
 import { createProcessUploadedVideo } from '../application/useCases/processUploadedVideo/processUploadedVideo.useCase.js';
 import { loadConfig } from '../infrastructure/config.js';
 import { createAmqpEventPublisher } from '../infrastructure/gateways/amqpEventPublisher.gateway.js';
@@ -70,7 +71,7 @@ export const startWorker = async (): Promise<{ stop: () => Promise<void> }> => {
   });
 
   const consumer = createVideoUploadedConsumer({
-    processUploadedVideo,
+    handleUploadedVideo: makeProcessUploadedVideoController({ processUploadedVideo }),
     events,
     retry: {
       maxAttempts: config.maxAttempts,

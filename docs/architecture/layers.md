@@ -6,15 +6,15 @@ A Clean Architecture de Robert C. Martin é a base. A regra que fica do livro é
 
 A pasta `application/` junta o que o livro separa: casos de uso e interface adapters. Os dois ficam juntos porque a interface só existe para o caso de uso chamar alguma coisa fora dele sem nomear a tecnologia. O caso de uso mora em `application/useCases/`. Ele recebe um comando e conduz a regra da aplicação: cadastrar um usuário, autenticar, processar um vídeo que chegou. Quando precisa de persistência, de um programa externo ou de um relógio, chama uma interface que ele mesmo declara em `application/interfaces/`.
 
-Neste repositório, interface adapter é essa interface. Não é um controller e não é a classe do SDK. Ela descreve a capacidade nos termos do caso de uso: guardar e buscar um `User`, extrair frames, publicar um evento, calcular um hash. A classe que implementa a interface fica em `infrastructure/`, ao lado do framework que ela usa — Prisma, bcrypt, o cliente de object storage, o ffmpeg, o Fastify. O caso de uso não importa essa classe. A classe importa a interface. A seta fica para dentro: `infrastructure` depende de `application`, e `application` depende de `domain`.
+O controller em `application/controllers/` é o interface adapter da borda. Ele recebe o pedido já traduzido, chama o caso de uso e devolve status e corpo. Não importa Fastify, Prisma nem AMQP. A rota HTTP e o consumer AMQP só ligam o framework a esse resultado. As interfaces em `application/interfaces/` continuam sendo o que o caso de uso declara: guardar um `User`, extrair frames, publicar um evento, calcular um hash. A classe que implementa essa interface fica em `infrastructure/`, ao lado do framework que ela usa. O caso de uso não importa essa classe. A classe importa a interface. A seta fica para dentro: `infrastructure` depende de `application`, e `application` depende de `domain`.
 
 A interface fica ao lado do caso de uso, e não ao lado da classe do Prisma, para o caso de uso não precisar importar `infrastructure` só para enxergar o tipo. A regra da aplicação permanece estável quando o driver muda. Um teste do caso de uso entrega um fake. Um driver novo é uma classe nova em `infrastructure/` e a linha em `main/` que a instancia.
 
 `main/` é o composition root. É o único código que conhece todas as pastas, e só na inicialização. Ele constrói os objetos de infraestrutura e entrega essas implementações ao caso de uso. Depois disso, um pedido não procura a infraestrutura: ela já foi injetada.
 
-No `auth-service`, o Fastify recebe o HTTP em `infrastructure/http`. A rota lê o corpo, monta o comando e chama o caso de uso que `main/` montou. O caso de uso chama `UserRepository`, `PasswordHasher`, `TokenIssuer` e as outras interfaces que declarou. Essas chamadas caem nos objetos injetados — `PrismaUserRepository`, `BcryptPasswordHasher`, `Rs256TokenIssuer` — e são eles que falam com o Postgres, o bcrypt e a chave RS256. A rota transforma o resultado em resposta HTTP. O caso de uso não importa Fastify nem Prisma.
+No `auth-service`, o Fastify recebe o HTTP em `infrastructure/http`. A rota lê o corpo e o correlation id e chama o controller em `application/controllers/`. O controller valida o pedido, chama `registerUser` ou `login` e devolve status e corpo. O caso de uso chama `UserRepository`, `PasswordHasher`, `TokenIssuer` e as outras interfaces que declarou. Essas chamadas caem nos objetos injetados — `PrismaUserRepository`, `BcryptPasswordHasher`, `Rs256TokenIssuer` — e são eles que falam com o Postgres, o bcrypt e a chave RS256. A rota só escreve a resposta que o controller devolveu. O controller e o caso de uso não importam Fastify nem Prisma.
 
-No `processor-worker`, o consumer AMQP em `infrastructure/messaging` lê `video.uploaded` e chama `processUploadedVideo`. O caso de uso chama `ObjectStorage`, `FrameExtractor`, `EventPublisher`, `ArchiveBuilder` e `WorkDirectory`. As implementações — storage S3, ffmpeg, o publisher AMQP, o zip e o diretório temporário — foram criadas em `main/` e ficam em `infrastructure/gateways/` e `infrastructure/services/`. O consumer decide confirmar, tentar de novo ou enviar à dead-letter a partir do desfecho. O caso de uso não importa o SDK da AWS nem o cliente AMQP.
+No `processor-worker`, o consumer AMQP em `infrastructure/messaging` decodifica `video.uploaded` e chama o controller. O controller entrega o envelope já decodificado a `processUploadedVideo`. O caso de uso chama `ObjectStorage`, `FrameExtractor`, `EventPublisher`, `ArchiveBuilder` e `WorkDirectory`. As implementações — storage S3, ffmpeg, o publisher AMQP, o zip e o diretório temporário — foram criadas em `main/` e ficam em `infrastructure/gateways/` e `infrastructure/services/`. O consumer confirma, tenta de novo ou envia à dead-letter a partir do desfecho. O controller e o caso de uso não importam o SDK da AWS nem o cliente AMQP.
 
 `domain/` fica no centro: entidades, value objects, eventos de domínio, erros e policies. Não conhece HTTP, banco, fila nem ffmpeg.
 
@@ -33,14 +33,14 @@ infrastructure  →  application  →  domain
 
 ### Layout
 
-| Pasta                 | Neste projeto                     | Conteúdo                                                                                             |
-| --------------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `src/domain/`         | Entidades                         | Entidades, value objects, eventos de domínio, erros e policies                                       |
-| `src/application/`    | Casos de uso e interface adapters | Casos de uso, DTOs e as interfaces que eles declaram (`interfaces/{repositories,gateways,services}`) |
-| `src/infrastructure/` | Implementação e frameworks        | Classes que implementam essas interfaces, HTTP, messaging, config, observability                     |
-| `src/main/`           | Composition root                  | Wiring na inicialização                                                                              |
+| Pasta                 | Neste projeto                     | Conteúdo                                                                                                                              |
+| --------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/domain/`         | Entidades                         | Entidades, value objects, eventos de domínio, erros e policies                                                                        |
+| `src/application/`    | Casos de uso e interface adapters | Casos de uso, controllers da borda, DTOs e as interfaces que os casos de uso declaram (`interfaces/{repositories,gateways,services}`) |
+| `src/infrastructure/` | Implementação e frameworks        | Classes que implementam essas interfaces, HTTP, messaging, config, observability                                                      |
+| `src/main/`           | Composition root                  | Wiring na inicialização                                                                                                               |
 
-O caso de uso fica em `application/useCases/`. O interface adapter é a interface em `application/interfaces/` que o caso de uso declara. A classe que implementa essa interface fica em `infrastructure/`, com o framework. O caso de uso não importa a implementação. A implementação importa a interface.
+O caso de uso fica em `application/useCases/`. O controller da borda fica em `application/controllers/`. A interface que o caso de uso declara fica em `application/interfaces/`. A classe que implementa essa interface fica em `infrastructure/`, com o framework. O caso de uso não importa a implementação. A implementação importa a interface.
 
 A pasta não se chama `ports/`. O nome daqui é `interfaces/`.
 

@@ -216,14 +216,11 @@ importers:
         specifier: ^3.2.4
         version: 3.2.7(supports-color@7.2.0)(vitest@3.2.7(@types/node@26.6.2)(supports-color@7.2.0)(tsx@4.23.15)(yaml@2.9.1))
       '@zipframes/test-toolkit':
-        specifier: ^0.1.0
-        version: 0.1.1(supports-color@7.2.0)
+        specifier: 0.2.1-pr33-20260925031024
+        version: 0.2.1-pr33-20260925031024(supports-color@7.2.0)
       ffmpeg-static:
         specifier: ^5.3.0
         version: 5.3.0(supports-color@7.2.0)
-      testcontainers:
-        specifier: ^10.28.0
-        version: 10.28.0(supports-color@7.2.0)
       tsx:
         specifier: ^4.19.0
         version: 4.23.15
@@ -966,8 +963,8 @@ packages:
   '@zipframes/telemetry@0.1.1':
     resolution: {integrity: sha512-AgmBLGu0OVX/0hHHohZOSlS3lWI9Uv0+QD6xo8WzEl4yduQpoCXq1UXTEZMDqoOLNKsSMn9Y1IFrbt7R+KDCxg==, tarball: https://npm.pkg.github.com/download/@zipframes/telemetry/0.1.1/6f5587b747770486af379f79dae7ec4c15d6f863}
 
-  '@zipframes/test-toolkit@0.1.1':
-    resolution: {integrity: sha512-l/rfH/605UWS+M7ctv5iicfQhn+88MnMeWJfdZafxKhkN8iggcuetDMLH4OjowCX6uvfZdFbYLn+q+RKDBr0ww==, tarball: https://npm.pkg.github.com/download/@zipframes/test-toolkit/0.1.1/28255c32384c5da80da83dc339e051715be07d64}
+  '@zipframes/test-toolkit@0.2.1-pr33-20260925031024':
+    resolution: {integrity: sha512-jMZhZInhlcP4ivnjrok2DGRVV3fBYMKpTjyWmQ2HowgATbVl5OC68tYzxUoKD32asZ/FA+nHLrTPcfXGOJqAjw==, tarball: https://npm.pkg.github.com/download/@zipframes/test-toolkit/0.2.1-pr33-20260925031024/b29912e5beaeb8faa9db5ddf6add7de5574cf60b}
 
   abort-controller@3.0.0:
     resolution: {integrity: sha512-h8lQ8tacZYnR3vNQTgibj+tODHI5/+l06Au2Pcriv/Gmet0eaj4TwWH41sO9wnHDiQsEj19q0drzdWdeAHtweg==}
@@ -2804,14 +2801,11 @@ snapshots:
       '@zipframes/core': 0.2.0
       prom-client: 15.1.3
 
-  '@zipframes/test-toolkit@0.1.1(supports-color@7.2.0)':
+  '@zipframes/test-toolkit@0.2.1-pr33-20260925031024(supports-color@7.2.0)':
     dependencies:
       '@testcontainers/postgresql': 10.28.0(supports-color@7.2.0)
       '@testcontainers/rabbitmq': 10.28.0(supports-color@7.2.0)
       '@testcontainers/redis': 10.28.0(supports-color@7.2.0)
-      '@zipframes/communication': 0.1.1
-      '@zipframes/core': 0.2.0
-      '@zipframes/schemas': 0.1.1
       testcontainers: 10.28.0(supports-color@7.2.0)
     transitivePeerDependencies:
       - bare-abort-controller

@@ -12,18 +12,18 @@ Cadastrar usuário, autenticar e emitir JWT RS256. Publicar `user.registered` pe
 
 As dependências apontam para dentro. `application/` junta o que o livro separa: casos de uso e interface adapters. O caso de uso fica em `application/useCases/` e a interface que ele declara fica em `application/interfaces/`; a classe que implementa essa interface fica em `infrastructure/`. O raciocínio dessa decisão está em [layers.md](../layers.md).
 
-Neste serviço, a rota Fastify em `infrastructure/http` recebe o pedido, monta o comando e chama `registerUser` ou `login`. O caso de uso só enxerga as interfaces que declara. `main/compose.ts` instancia o repositório Prisma, o hasher bcrypt e o emissor RS256 e entrega esses objetos ao caso de uso. A rota devolve HTTP a partir do resultado. O caso de uso não importa Fastify, Prisma nem bcrypt.
+Neste serviço, a rota Fastify em `infrastructure/http` só liga o framework. O controller em `application/controllers/` recebe o pedido já traduzido, chama `registerUser` ou `login` e devolve status e corpo. O caso de uso só enxerga as interfaces que declara. `main/compose.ts` instancia o repositório Prisma, o hasher bcrypt e o emissor RS256, monta o caso de uso e entrega o controller à rota. O controller não importa Fastify, Prisma nem bcrypt.
 
 ```
 infrastructure  →  application  →  domain
 ```
 
-| Pasta                 | Neste projeto                     | O que há aqui                                                                                                          |
-| --------------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `src/domain/`         | Entidades                         | `User`, `Password`, `UserRegistered`, erros de domínio                                                                 |
-| `src/application/`    | Casos de uso e interface adapters | `registerUser`, `login`, DTOs e interfaces (`UserRepository`, `PasswordHasher`, `TokenIssuer`, `Clock`, `IdGenerator`) |
-| `src/infrastructure/` | Implementação e frameworks        | Prisma, bcrypt, RS256, rotas HTTP, relay do outbox, publisher AMQP                                                     |
-| `src/main/`           | Composition root                  | `compose.ts` monta o grafo; `index.ts` trata sinal e shutdown                                                          |
+| Pasta                 | Neste projeto                     | O que há aqui                                                                                                                            |
+| --------------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/domain/`         | Entidades                         | `User`, `Password`, `UserRegistered`, erros de domínio                                                                                   |
+| `src/application/`    | Casos de uso e interface adapters | `registerUser`, `login`, controllers HTTP, DTOs e interfaces (`UserRepository`, `PasswordHasher`, `TokenIssuer`, `Clock`, `IdGenerator`) |
+| `src/infrastructure/` | Implementação e frameworks        | Prisma, bcrypt, RS256, rotas HTTP, relay do outbox, publisher AMQP                                                                       |
+| `src/main/`           | Composition root                  | `compose.ts` monta o grafo; `index.ts` trata sinal e shutdown                                                                            |
 
 ## Mapa de pastas
 
@@ -36,6 +36,7 @@ auth-service/src/
 │   ├── errors/userErrors.ts
 │   └── index.ts
 ├── application/
+│   ├── controllers/{registerUser,login}.controller.ts
 │   ├── useCases/
 │   │   ├── registerUser/{registerUser.useCase.ts, registerUser.dto.ts}
 │   │   └── login/{login.useCase.ts, login.dto.ts}
@@ -98,7 +99,7 @@ No cluster, o Argo CD aplica [`infra/k8s/auth-service`](../../../infra/k8s/auth-
 
 ## Testes
 
-| Pasta        | O que prova                                                            |
-| ------------ | ---------------------------------------------------------------------- |
-| `tests/unit` | Domínio, casos de uso, HTTP, crypto, config, envelope — com fakes      |
-| `tests/int`  | Prisma + outbox e AMQP contra Postgres/RabbitMQ reais (Testcontainers) |
+| Pasta               | O que prova                                                       |
+| ------------------- | ----------------------------------------------------------------- |
+| `tests/unit`        | Domínio, casos de uso, HTTP, crypto, config, envelope — com fakes |
+| `tests/integration` | HTTP de register e login contra Postgres real                     |

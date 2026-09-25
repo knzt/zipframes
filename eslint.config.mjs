@@ -8,7 +8,7 @@ export default [
       '**/dist/**',
       '**/node_modules/**',
       '**/coverage/**',
-      '**/vitest.config.ts',
+      '**/vitest*.config.ts',
       '**/.dependency-cruiser.mjs',
     ],
   },
@@ -53,6 +53,30 @@ export default [
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
       ],
       '@typescript-eslint/no-explicit-any': 'error',
+    },
+  },
+  {
+    files: ['**/tests/integration/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: 'vitest',
+              importNames: ['vi'],
+              message: 'Integration tests do not import vi. Exercise the real adapter.',
+            },
+          ],
+          patterns: [
+            {
+              regex: String.raw`^\.\.\/\.\.\/services/`,
+              message:
+                'Serviços não podem importar outros serviços. Use os pacotes @zipframes/* para código compartilhado.',
+            },
+          ],
+        },
+      ],
     },
   },
   {
