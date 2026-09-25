@@ -98,7 +98,7 @@ No cluster, o Argo CD aplica [`infra/k8s/auth-service`](../../../infra/k8s/auth-
 
 ## Testes
 
-| Pasta        | O que prova                                                            |
-| ------------ | ---------------------------------------------------------------------- |
-| `tests/unit` | Domínio, casos de uso, HTTP, crypto, config, envelope — com fakes      |
-| `tests/int`  | Prisma + outbox e AMQP contra Postgres/RabbitMQ reais (Testcontainers) |
+| Pasta               | O que prova                                                       |
+| ------------------- | ----------------------------------------------------------------- |
+| `tests/unit`        | Domínio, casos de uso, HTTP, crypto, config, envelope — com fakes |
+| `tests/integration` | Prisma e outbox contra Postgres real                              |

@@ -25,11 +25,11 @@ src/main/              # Composition root
 ## Testes
 
 ```
-tests/unit   # contratos e regras; dependências substituídas
-tests/int    # filesystem, HTTP, ffmpeg, RabbitMQ e S3 reais (sem mock)
+tests/unit          # contratos e regras; dependências substituídas
+tests/integration   # filesystem, ffmpeg, RabbitMQ e S3 reais (sem mock)
 ```
 
-`pnpm test` roda os dois. Integração sobe RabbitMQ e SeaweedFS via Testcontainers (Docker) e usa o binário do `ffmpeg-static`.
+`pnpm test` roda os dois. Integração sobe RabbitMQ e S3 com `@zipframes/test-toolkit` (Docker) e usa o binário do `ffmpeg-static`.
 
 ## Rodar local
 

@@ -123,10 +123,10 @@ Réplicas: KEDA pelo tamanho da fila. No cluster, Argo CD aplica [`infra/k8s/pro
 
 ## Testes
 
-| Pasta        | O que prova                                             |
-| ------------ | ------------------------------------------------------- |
-| `tests/unit` | Regras e contratos com dependências substituídas        |
-| `tests/int`  | Filesystem, zip, HTTP, ffmpeg, RabbitMQ e S3 de verdade |
+| Pasta               | O que prova                                       |
+| ------------------- | ------------------------------------------------- |
+| `tests/unit`        | Regras e contratos com dependências substituídas  |
+| `tests/integration` | Filesystem, zip, ffmpeg, RabbitMQ e S3 de verdade |
 
 Cobertura mínima no `src/` executável: 80%.
 

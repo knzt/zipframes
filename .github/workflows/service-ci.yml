@@ -90,7 +90,7 @@ jobs:
       - name: Test
         if: ${{ !inputs.coverage }}
         working-directory: services/${{ inputs.service }}
-        run: pnpm test
+        run: pnpm test:unit
 
       - name: Test with coverage
         if: ${{ inputs.coverage }}
@@ -117,3 +117,43 @@ jobs:
           else
             docker build --tag "${{ inputs.image }}" "services/${{ inputs.service }}"
           fi
+
+  integration:
+    name: Integration
+    runs-on: ubuntu-latest
+    environment: Actions
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            services/${{ inputs.service }}/pnpm-lock.yaml
+          registry-url: https://npm.pkg.github.com
+          scope: '@zipframes'
+
+      - name: Docker
+        run: docker info
+
+      - name: Install root tooling
+        run: pnpm install --frozen-lockfile
+
+      - name: Install the service
+        working-directory: services/${{ inputs.service }}
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate the Prisma client
+        if: ${{ inputs.prisma }}
+        working-directory: services/${{ inputs.service }}
+        run: pnpm db:generate
+
+      - name: Integration tests
+        working-directory: services/${{ inputs.service }}
+        run: pnpm test:integration

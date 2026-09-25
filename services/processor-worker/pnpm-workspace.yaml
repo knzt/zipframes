@@ -6,3 +6,5 @@ allowBuilds:
   ffmpeg-static: true
   protobufjs: true
   ssh2: true
+minimumReleaseAgeExclude:
+  - '@zipframes/test-toolkit@0.2.0'
