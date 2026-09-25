@@ -6,6 +6,7 @@ import {
   FakeHasher,
   FakeTokenIssuer,
   FixedClock,
+  InMemoryEventPublisher,
   InMemoryUserRepository,
   SequentialIds,
 } from '../../../../support/in-memory.js';
@@ -13,14 +14,22 @@ import {
 let users: InMemoryUserRepository;
 let tokens: FakeTokenIssuer;
 let hasher: FakeHasher;
+let events: InMemoryEventPublisher;
 let login: LoginUseCase;
 
 beforeEach(async () => {
   users = new InMemoryUserRepository();
   tokens = new FakeTokenIssuer();
   hasher = new FakeHasher();
+  events = new InMemoryEventPublisher();
 
-  await new RegisterUserUseCase(users, hasher, new SequentialIds(), new FixedClock()).execute({
+  await new RegisterUserUseCase(
+    users,
+    hasher,
+    new SequentialIds(),
+    new FixedClock(),
+    events,
+  ).execute({
     name: 'Hellen Santos',
     email: 'hellen@example.com',
     password: 'senha1234',
@@ -43,6 +52,7 @@ describe('a successful login', () => {
       expiresIn: 900,
     });
     expect(tokens.issuedFor).toEqual(['0194f3a0-0000-7000-8000-000000000001']);
+    expect(events.published).toHaveLength(1);
   });
 
   it('accepts the email in any case, since it is normalized', async () => {

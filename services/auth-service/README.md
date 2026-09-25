@@ -18,16 +18,16 @@ src/
 ├── infrastructure/
 │   ├── http/               # Fastify, rotas, OpenAPI gerado e HttpReply
 │   ├── repositories/prisma/
+│   ├── gateways/           # EventPublisher AMQP
 │   ├── services/crypto/
-│   ├── messaging/
-│   └── observability/
+│   └── messaging/          # conexão e PublishPort
 └── main/                   # composition root
 ```
 
 ```
 tests/
 ├── unit/
-├── integration/            # Postgres real, via test-toolkit
+├── integration/            # Postgres e RabbitMQ reais, via test-toolkit
 └── support/                # fakes das interfaces
 ```
 

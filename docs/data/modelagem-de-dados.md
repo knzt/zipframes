@@ -6,18 +6,18 @@ Os schemas são criados por migrations do Prisma. O SQL desta página é a refer
 
 ## Decisões comuns a todos os bancos
 
-| Decisão                                                                   | Motivo                                                                                                                           |
-| ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| Chaves primárias em `uuid` v7                                             | Identificadores únicos entre serviços, gerados pela aplicação, e ordenáveis por tempo, o que mantém a localidade nos índices     |
-| Todos os horários em `timestamptz`, gravados em UTC                       | Evita ambiguidade entre fusos e horário de verão                                                                                 |
-| Status como `enum` do PostgreSQL                                          | Restringe os valores no banco e é mapeado diretamente pelo Prisma                                                                |
-| `created_at` e `updated_at` em toda tabela mutável                        | Auditoria mínima                                                                                                                 |
-| Sem exclusão física dos metadados de vídeos e notificações                | O histórico é parte da funcionalidade. Os arquivos, esses sim, são apagados no prazo definido                                    |
-| Marcas de eliminação (`*_purged_at`) em vez de simplesmente limpar campos | Permite comprovar quando cada arquivo foi apagado, sem guardar o conteúdo                                                        |
-| Tabela `outbox` em todo serviço que publica eventos                       | Publicação confiável: o evento é gravado na mesma transação da mudança do agregado                                               |
-| Idempotência garantida por chaves de negócio, sem tabela de deduplicação  | As restrições que já existem (upsert por chave primária, unicidade e o próprio status do agregado) tornam a reentrega inofensiva |
+| Decisão                                                                   | Motivo                                                                                                                                                           |
+| ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Chaves primárias em `uuid` v7                                             | Identificadores únicos entre serviços, gerados pela aplicação, e ordenáveis por tempo, o que mantém a localidade nos índices                                     |
+| Todos os horários em `timestamptz`, gravados em UTC                       | Evita ambiguidade entre fusos e horário de verão                                                                                                                 |
+| Status como `enum` do PostgreSQL                                          | Restringe os valores no banco e é mapeado diretamente pelo Prisma                                                                                                |
+| `created_at` e `updated_at` em toda tabela mutável                        | Auditoria mínima                                                                                                                                                 |
+| Sem exclusão física dos metadados de vídeos e notificações                | O histórico é parte da funcionalidade. Os arquivos, esses sim, são apagados no prazo definido                                                                    |
+| Marcas de eliminação (`*_purged_at`) em vez de simplesmente limpar campos | Permite comprovar quando cada arquivo foi apagado, sem guardar o conteúdo                                                                                        |
+| Publicação direta no broker depois do commit (dual-write)                 | O serviço grava o agregado e depois publica o evento. Sem tabela `outbox`. Se o processo cair entre o commit e o ack do Rabbit, o fato existe e o recado não sai |
+| Idempotência garantida por chaves de negócio, sem tabela de deduplicação  | As restrições que já existem (upsert por chave primária, unicidade e o próprio status do agregado) tornam a reentrega inofensiva                                 |
 
-A tabela **`outbox`** tem a mesma estrutura em todos os serviços que publicam eventos: o evento é gravado na mesma transação da mudança do agregado e publicado depois pelo relay. Ela cresce sem parar e é limpa por rotina periódica, que remove as linhas publicadas há mais de sete dias.
+Não existe tabela `outbox`. A publicação é dual-write de propósito: o caso de uso persiste o agregado e em seguida chama `EventPublisher`. `/health/ready` exige AMQP. O consumidor continua idempotente. Se o publish falhar com o agregado já gravado, o HTTP ainda responde sucesso (no cadastro, um retry cairia em e-mail duplicado); o erro de publish vai para o log.
 
 Não existe tabela de deduplicação de eventos. A entrega é "pelo menos uma vez", e cada consumidor é idempotente por uma chave que o próprio domínio já impõe:
 
@@ -41,19 +41,6 @@ erDiagram
     timestamptz created_at
     timestamptz updated_at
   }
-  OUTBOX {
-    uuid id PK
-    varchar aggregate_type
-    uuid aggregate_id
-    varchar event_type
-    smallint version
-    jsonb payload
-    uuid correlation_id
-    timestamptz occurred_at
-    timestamptz published_at
-    smallint attempts
-  }
-  USERS ||..o{ OUTBOX : "aggregate_id (sem FK)"
 ```
 
 ### `users`
@@ -69,26 +56,7 @@ erDiagram
 
 O índice único de `email` atende tanto à regra de unicidade quanto à busca do login, que consulta o valor já normalizado pelo value object.
 
-### `outbox`
-
-| Coluna           | Tipo           | Restrições                | Observação                                             |
-| ---------------- | -------------- | ------------------------- | ------------------------------------------------------ |
-| `id`             | `uuid`         | PK                        |                                                        |
-| `aggregate_type` | `varchar(50)`  | not null                  | `User`                                                 |
-| `aggregate_id`   | `uuid`         | not null                  | Sem FK, para que a limpeza do outbox seja independente |
-| `event_type`     | `varchar(100)` | not null                  | `user.registered`                                      |
-| `version`        | `smallint`     | not null, default 1       | Versão do contrato do evento                           |
-| `payload`        | `jsonb`        | not null                  | Já no formato publicado                                |
-| `correlation_id` | `uuid`         |                           | Propagado para rastreamento                            |
-| `occurred_at`    | `timestamptz`  | not null, default `now()` |                                                        |
-| `published_at`   | `timestamptz`  |                           | Nulo enquanto pendente                                 |
-| `attempts`       | `smallint`     | not null, default 0       | Tentativas de publicação                               |
-
-O relay busca as linhas pendentes mais antigas primeiro. Como a maioria das linhas fica publicada, o índice é parcial:
-
-```sql
-CREATE INDEX idx_outbox_pendentes ON outbox (occurred_at) WHERE published_at IS NULL;
-```
+O `auth-db` só tem `users`. Depois do `INSERT`, o auth-service publica `user.registered` pelo `EventPublisher`. Dual-write é decisão explícita: se o processo cair entre o commit e o ack do Rabbit, o usuário existe e o evento não sai.
 
 ### DDL
 
@@ -101,21 +69,6 @@ CREATE TABLE users (
   created_at    timestamptz  NOT NULL DEFAULT now(),
   updated_at    timestamptz  NOT NULL DEFAULT now()
 );
-
-CREATE TABLE outbox (
-  id             uuid         PRIMARY KEY,
-  aggregate_type varchar(50)  NOT NULL,
-  aggregate_id   uuid         NOT NULL,
-  event_type     varchar(100) NOT NULL,
-  version        smallint     NOT NULL DEFAULT 1,
-  payload        jsonb        NOT NULL,
-  correlation_id uuid,
-  occurred_at    timestamptz  NOT NULL DEFAULT now(),
-  published_at   timestamptz,
-  attempts       smallint     NOT NULL DEFAULT 0
-);
-
-CREATE INDEX idx_outbox_pendentes ON outbox (occurred_at) WHERE published_at IS NULL;
 ```
 
 ## video-db
@@ -141,19 +94,6 @@ erDiagram
     timestamptz updated_at
     integer version
   }
-  OUTBOX {
-    uuid id PK
-    varchar aggregate_type
-    uuid aggregate_id
-    varchar event_type
-    smallint version
-    jsonb payload
-    uuid correlation_id
-    timestamptz occurred_at
-    timestamptz published_at
-    smallint attempts
-  }
-  VIDEOS ||..o{ OUTBOX : "aggregate_id (sem FK)"
 ```
 
 ### `videos`
@@ -240,22 +180,9 @@ CREATE INDEX idx_videos_em_andamento ON videos (status, created_at)
 
 CREATE INDEX idx_videos_a_expirar ON videos (expires_at)
   WHERE status = 'DONE';
-
-CREATE TABLE outbox (
-  id             uuid         PRIMARY KEY,
-  aggregate_type varchar(50)  NOT NULL,
-  aggregate_id   uuid         NOT NULL,
-  event_type     varchar(100) NOT NULL,
-  version        smallint     NOT NULL DEFAULT 1,
-  payload        jsonb        NOT NULL,
-  correlation_id uuid,
-  occurred_at    timestamptz  NOT NULL DEFAULT now(),
-  published_at   timestamptz,
-  attempts       smallint     NOT NULL DEFAULT 0
-);
-
-CREATE INDEX idx_outbox_pendentes ON outbox (occurred_at) WHERE published_at IS NULL;
 ```
+
+Quando o video-service existir, ele publica do mesmo jeito que o auth: persiste no repositório e chama `EventPublisher`. Sem tabela `outbox`.
 
 ## notification-db
 
@@ -396,13 +323,12 @@ CREATE INDEX idx_notifications_user ON notifications (user_id, created_at DESC);
 
 Os arquivos ficam no storage apenas enquanto são necessários (ver a seção de retenção em `docs/domain/dominio.md`). O banco guarda somente metadados e as marcas de quando cada arquivo foi eliminado.
 
-| Dado                          | Prazo                           | Efeito no banco                                                         |
-| ----------------------------- | ------------------------------- | ----------------------------------------------------------------------- |
-| Vídeo original                | Apagado ao fim do processamento | `source_purged_at` preenchido                                           |
-| Pacote de frames              | 24 horas após a conclusão       | `result_key` nulo, `result_purged_at` preenchido, `status` em `EXPIRED` |
-| Exclusão a pedido do dono     | Imediata                        | Arquivos apagados, `status` em `DELETED`                                |
-| Exclusão da conta             | Ao consumir `user.deleted`      | Vídeos e contato do usuário removidos                                   |
-| Linhas de `outbox` publicadas | 7 dias                          | Removidas pela rotina de limpeza                                        |
+| Dado                      | Prazo                           | Efeito no banco                                                         |
+| ------------------------- | ------------------------------- | ----------------------------------------------------------------------- |
+| Vídeo original            | Apagado ao fim do processamento | `source_purged_at` preenchido                                           |
+| Pacote de frames          | 24 horas após a conclusão       | `result_key` nulo, `result_purged_at` preenchido, `status` em `EXPIRED` |
+| Exclusão a pedido do dono | Imediata                        | Arquivos apagados, `status` em `DELETED`                                |
+| Exclusão da conta         | Ao consumir `user.deleted`      | Vídeos e contato do usuário removidos                                   |
 
 A rotina de expiração busca o que venceu usando o índice parcial `idx_videos_a_expirar`:
 

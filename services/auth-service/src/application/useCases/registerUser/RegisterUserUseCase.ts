@@ -4,10 +4,8 @@ import type { Result } from '@zipframes/core';
 import { userRegisteredFrom } from '../../../domain/events/userRegistered.js';
 import { registerUser } from '../../../domain/entities/user.js';
 import { createPassword } from '../../../domain/valueObjects/password.js';
-import type {
-  UserRepository,
-  UserRepositoryOutboxEventWrite,
-} from '../../interfaces/repositories/UserRepository.js';
+import type { EventPublisher } from '../../interfaces/gateways/EventPublisher.js';
+import type { UserRepository } from '../../interfaces/repositories/UserRepository.js';
 import type { Clock } from '../../interfaces/services/Clock.js';
 import type { IdGenerator } from '../../interfaces/services/IdGenerator.js';
 import type { PasswordHasher } from '../../interfaces/services/PasswordHasher.js';
@@ -23,6 +21,11 @@ export class RegisterUserUseCase {
     private readonly hasher: PasswordHasher,
     private readonly ids: IdGenerator,
     private readonly clock: Clock,
+    private readonly events: EventPublisher,
+    private readonly onPublishFailed?: (
+      error: unknown,
+      details: { readonly userId: string; readonly correlationId: string },
+    ) => void,
   ) {}
 
   async execute(
@@ -47,21 +50,22 @@ export class RegisterUserUseCase {
       return err({ code: 'INVALID_INPUT' as const, message: user.error.message });
     }
 
-    const registered = userRegisteredFrom(user.value);
-    const outbox: UserRepositoryOutboxEventWrite = {
-      id: this.ids.next(),
-      aggregateType: 'User',
-      aggregateId: user.value.id,
-      eventType: 'user.registered',
-      version: 1,
-      payload: { ...registered },
-      correlationId: input.correlationId,
-      occurredAt: user.value.createdAt,
-    };
-
-    const saved = await this.users.save(user.value, outbox);
+    const saved = await this.users.save(user.value);
     if (!saved.ok) {
       return err({ code: 'EMAIL_TAKEN' as const, message: 'email is already registered' });
+    }
+
+    try {
+      await this.events.publish({
+        eventType: 'user.registered',
+        correlationId: input.correlationId,
+        payload: userRegisteredFrom(user.value),
+      });
+    } catch (error) {
+      this.onPublishFailed?.(error, {
+        userId: user.value.id,
+        correlationId: input.correlationId,
+      });
     }
 
     return ok({

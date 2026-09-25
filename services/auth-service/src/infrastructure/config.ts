@@ -22,8 +22,6 @@ const configSchema = z.object({
   jwtKid: z.string().min(1),
   jwtIssuer: z.string().min(1),
   jwtAudience: z.string().min(1),
-  outboxIntervalMs: positiveIntFromEnv,
-  outboxMaxAttempts: positiveIntFromEnv,
   logLevel: z.enum(LOG_LEVELS as unknown as [LogLevel, ...LogLevel[]]),
   serviceVersion: z.string().min(1),
 });
@@ -58,15 +56,11 @@ const formatZodError = (error: z.ZodError): Error => {
               ? 'JWT_ISSUER'
               : path === 'jwtAudience'
                 ? 'JWT_AUDIENCE'
-                : path === 'outboxMaxAttempts'
-                  ? 'OUTBOX_MAX_ATTEMPTS'
-                  : path === 'outboxIntervalMs'
-                    ? 'OUTBOX_INTERVAL_MS'
-                    : path === 'port'
-                      ? 'PORT'
-                      : path === 'logLevel'
-                        ? 'LOG_LEVEL'
-                        : String(path);
+                : path === 'port'
+                  ? 'PORT'
+                  : path === 'logLevel'
+                    ? 'LOG_LEVEL'
+                    : String(path);
   return new Error(`invalid environment variable: ${field}`);
 };
 
@@ -81,8 +75,6 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): Config => {
       jwtKid: env.JWT_KID,
       jwtIssuer: env.JWT_ISSUER,
       jwtAudience: env.JWT_AUDIENCE,
-      outboxIntervalMs: emptyToUndefined(env.OUTBOX_INTERVAL_MS) ?? '2000',
-      outboxMaxAttempts: emptyToUndefined(env.OUTBOX_MAX_ATTEMPTS) ?? '30',
       logLevel: emptyToUndefined(env.LOG_LEVEL) ?? 'info',
       serviceVersion: emptyToUndefined(env.SERVICE_VERSION) ?? '0.1.0',
     });

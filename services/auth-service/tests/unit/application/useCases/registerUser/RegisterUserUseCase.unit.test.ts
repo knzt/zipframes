@@ -1,23 +1,30 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { RegisterUserUseCase } from '../../../../../src/application/useCases/registerUser/RegisterUserUseCase.js';
 import {
   FakeHasher,
   FixedClock,
+  InMemoryEventPublisher,
   InMemoryUserRepository,
   SequentialIds,
 } from '../../../../support/in-memory.js';
 
 let users: InMemoryUserRepository;
+let events: InMemoryEventPublisher;
 let registerUser: RegisterUserUseCase;
+let onPublishFailed: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   users = new InMemoryUserRepository();
+  events = new InMemoryEventPublisher();
+  onPublishFailed = vi.fn();
   registerUser = new RegisterUserUseCase(
     users,
     new FakeHasher(),
     new SequentialIds(),
     new FixedClock(),
+    events,
+    onPublishFailed,
   );
 });
 
@@ -50,24 +57,19 @@ describe('a successful registration', () => {
     expect(stored?.passwordHash).not.toBe('senha1234');
   });
 
-  it('asks the repository to store the user and the registration together', async () => {
+  it('saves the user and then publishes user.registered', async () => {
     await registerUser.execute(validInput);
 
     expect(users.users.size).toBe(1);
-    expect(users.events).toEqual([
+    expect(events.published).toEqual([
       {
-        id: '0194f3a0-0000-7000-8000-000000000002',
-        aggregateType: 'User',
-        aggregateId: '0194f3a0-0000-7000-8000-000000000001',
         eventType: 'user.registered',
-        version: 1,
+        correlationId: '0194f3a0-0000-7000-8000-000000000099',
         payload: {
           userId: '0194f3a0-0000-7000-8000-000000000001',
           name: 'Hellen Santos',
           email: 'hellen@example.com',
         },
-        correlationId: '0194f3a0-0000-7000-8000-000000000099',
-        occurredAt: new Date('2026-01-01T12:00:00.000Z'),
       },
     ]);
   });
@@ -75,7 +77,7 @@ describe('a successful registration', () => {
   it('does not put the password hash in the registration fact', async () => {
     await registerUser.execute(validInput);
 
-    expect(JSON.stringify(users.events[0])).not.toContain('hashed:');
+    expect(JSON.stringify(events.published[0])).not.toContain('hashed:');
   });
 });
 
@@ -85,13 +87,14 @@ describe('invalid input', () => {
 
     expect(result).toMatchObject({ ok: false, error: { code: 'INVALID_INPUT' } });
     expect(users.users.size).toBe(0);
+    expect(events.published).toHaveLength(0);
   });
 
   it('rejects an invalid email', async () => {
     const result = await registerUser.execute({ ...validInput, email: 'not-an-email' });
 
     expect(result).toMatchObject({ ok: false, error: { code: 'INVALID_INPUT' } });
-    expect(users.events).toHaveLength(0);
+    expect(events.published).toHaveLength(0);
   });
 
   it('rejects an invalid name', async () => {
@@ -104,7 +107,7 @@ describe('invalid input', () => {
     const result = await registerUser.execute({ ...validInput, password: 'x' });
 
     expect(result.ok).toBe(false);
-    expect(users.events).toHaveLength(0);
+    expect(events.published).toHaveLength(0);
   });
 });
 
@@ -116,6 +119,7 @@ describe('duplicate email', () => {
 
     expect(result).toMatchObject({ ok: false, error: { code: 'EMAIL_TAKEN' } });
     expect(users.users.size).toBe(1);
+    expect(events.published).toHaveLength(1);
   });
 
   it('treats addresses differing only by case as the same', async () => {
@@ -124,5 +128,47 @@ describe('duplicate email', () => {
     const result = await registerUser.execute({ ...validInput, email: 'HELLEN@EXAMPLE.COM' });
 
     expect(result).toMatchObject({ ok: false, error: { code: 'EMAIL_TAKEN' } });
+  });
+});
+
+describe('publish after save', () => {
+  it('still returns registration success when publish fails', async () => {
+    events.failWith = new Error('broker down');
+
+    const result = await registerUser.execute(validInput);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.email).toBe('hellen@example.com');
+    expect(users.users.size).toBe(1);
+    expect(onPublishFailed).toHaveBeenCalledOnce();
+    expect(onPublishFailed).toHaveBeenCalledWith(events.failWith, {
+      userId: '0194f3a0-0000-7000-8000-000000000001',
+      correlationId: validInput.correlationId,
+    });
+  });
+
+  it('does not turn a publish failure into EMAIL_TAKEN', async () => {
+    events.failWith = new Error('broker down');
+
+    const result = await registerUser.execute(validInput);
+
+    expect(result).not.toMatchObject({ ok: false, error: { code: 'EMAIL_TAKEN' } });
+  });
+
+  it('still succeeds when publish fails and no failure handler is provided', async () => {
+    const publisher = new InMemoryEventPublisher();
+    publisher.failWith = new Error('broker down');
+    const useCase = new RegisterUserUseCase(
+      new InMemoryUserRepository(),
+      new FakeHasher(),
+      new SequentialIds(),
+      new FixedClock(),
+      publisher,
+    );
+
+    const result = await useCase.execute(validInput);
+
+    expect(result.ok).toBe(true);
   });
 });

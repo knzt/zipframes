@@ -4,6 +4,7 @@ import { createPublisher } from '@zipframes/communication';
 import { createReadinessCheck } from '@zipframes/core';
 import type { Pingable } from '@zipframes/core';
 import { createLogger } from '@zipframes/logger';
+import { EVENT_EXCHANGE } from '@zipframes/schemas/shared';
 import { createMetrics } from '@zipframes/telemetry';
 
 import { LoginController } from '../application/controllers/LoginController.js';
@@ -11,13 +12,12 @@ import { RegisterUserController } from '../application/controllers/RegisterUserC
 import { LoginUseCase } from '../application/useCases/login/LoginUseCase.js';
 import { RegisterUserUseCase } from '../application/useCases/registerUser/RegisterUserUseCase.js';
 import { loadConfig } from '../infrastructure/config.js';
+import { createAmqpEventPublisher } from '../infrastructure/gateways/amqpEventPublisher.gateway.js';
 import { createHttpServer } from '../infrastructure/http/server.js';
 import { registerHealthRoutes } from '../infrastructure/http/routes/health.routes.js';
 import { registerIdentityRoutes } from '../infrastructure/http/routes/identity.routes.js';
 import { connectAmqp } from '../infrastructure/messaging/amqpConnection.js';
 import { createAmqpPublishPort } from '../infrastructure/messaging/amqpPublisher.js';
-import { createOutboxRelay } from '../infrastructure/messaging/outboxRelay.js';
-import { createOutboxMetrics } from '../infrastructure/observability/outboxMetrics.js';
 import { createPrismaClient, pingDatabase } from '../infrastructure/repositories/prisma/client.js';
 import { PrismaUserRepository } from '../infrastructure/repositories/prisma/user.repository.js';
 import { BcryptPasswordHasher } from '../infrastructure/services/crypto/bcryptPasswordHasher.js';
@@ -35,12 +35,16 @@ export const startAuthService = async (): Promise<{ stop: () => Promise<void> }>
     service: 'auth-service',
     version: config.serviceVersion,
   });
-  const outboxMetrics = createOutboxMetrics(technicalMetrics.registry);
 
   const prisma = createPrismaClient();
   const keys = await deriveRsaKeyMaterial(config.jwtPrivateKeyPem, config.jwtKid);
   const amqp = await connectAmqp(config.amqpUrl);
+  await amqp.channel.assertExchange(EVENT_EXCHANGE, 'topic', { durable: true });
+
+  const createId = (): string => randomUUID();
+  const now = (): Date => new Date();
   const publisher = createPublisher(createAmqpPublishPort(amqp.channel));
+  const events = createAmqpEventPublisher({ publisher, createId, now });
 
   const users = new PrismaUserRepository(prisma);
   const hasher = new BcryptPasswordHasher();
@@ -51,38 +55,22 @@ export const startAuthService = async (): Promise<{ stop: () => Promise<void> }>
   });
 
   const registerUserController = new RegisterUserController(
-    new RegisterUserUseCase(users, hasher, { next: () => randomUUID() }, { now: () => new Date() }),
+    new RegisterUserUseCase(
+      users,
+      hasher,
+      { next: createId },
+      { now },
+      events,
+      (error, details) => {
+        logger.error('failed to publish user.registered', {
+          err: error,
+          userId: details.userId,
+          correlationId: details.correlationId,
+        });
+      },
+    ),
   );
   const loginController = new LoginController(new LoginUseCase(users, hasher, tokens));
-
-  const relay = createOutboxRelay({
-    prisma,
-    publisher,
-    maxAttempts: config.outboxMaxAttempts,
-    onPublishError: (row, error) => {
-      logger.error('failed to publish outbox row', {
-        outboxId: row.id,
-        eventType: row.eventType,
-        attempts: row.attempts,
-        err: error,
-      });
-    },
-    onExhausted: (row) => {
-      logger.error('outbox publish exhausted', {
-        outboxId: row.id,
-        eventType: row.eventType,
-        attempts: row.attempts + 1,
-        correlationId: row.correlationId,
-      });
-      outboxMetrics.recordExhausted();
-    },
-  });
-
-  const relayTimer = setInterval(() => {
-    relay.runOnce().catch((error: unknown) => {
-      logger.error('outbox relay run failed', { err: error });
-    });
-  }, config.outboxIntervalMs);
 
   const prismaPing: Pingable = {
     ping: () => pingDatabase(prisma),
@@ -111,7 +99,6 @@ export const startAuthService = async (): Promise<{ stop: () => Promise<void> }>
   try {
     await app.listen({ port: config.port, host: '0.0.0.0' });
   } catch (error) {
-    clearInterval(relayTimer);
     await amqp.close();
     await prisma.$disconnect();
     throw error;
@@ -121,7 +108,6 @@ export const startAuthService = async (): Promise<{ stop: () => Promise<void> }>
 
   return {
     stop: async () => {
-      clearInterval(relayTimer);
       await app.close();
       await amqp.close();
       await prisma.$disconnect();

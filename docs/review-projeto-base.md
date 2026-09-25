@@ -76,7 +76,7 @@ sequenceDiagram
 | Requisito                                 | Projeto base                                          | Nova arquitetura                                                                                         |
 | ----------------------------------------- | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | Processar mais de um vídeo ao mesmo tempo | Concorrência descontrolada, com corrida entre uploads | Worker sem estado, com prefetch controlado e escala horizontal pelo tamanho da fila (KEDA)               |
-| Não perder requisições em picos           | Picos saturam a CPU e derrubam requisições            | Upload direto no storage, confirmação rápida, outbox e fila durável com retry e DLQ                      |
+| Não perder requisições em picos           | Picos saturam a CPU e derrubam requisições            | Upload direto no storage, confirmação rápida, publicação no broker e fila durável com retry e DLQ        |
 | Proteção por usuário e senha              | Inexistente                                           | auth-service com senha em hash e JWT RS256 validado por cada serviço                                     |
 | Listagem de status por usuário            | Varredura de pasta, sem status nem dono               | Tabela de vídeos com máquina de estados, filtrada pelo dono, com cache                                   |
 | Notificação em caso de erro               | Inexistente                                           | notification-service consumindo `video.failed` e enviando e-mail                                         |

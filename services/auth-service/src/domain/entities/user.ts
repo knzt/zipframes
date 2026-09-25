@@ -31,7 +31,7 @@ export interface RegisterUserInput {
  * Builds a user from already-hashed credentials.
  *
  * The plaintext password never reaches this function: hashing happens in
- * the use case, through a port, because it is infrastructure. What the
+ * the use case, through PasswordHasher, because it is infrastructure. What the
  * entity guarantees is that a user always has a valid name and a valid,
  * normalized email.
  */

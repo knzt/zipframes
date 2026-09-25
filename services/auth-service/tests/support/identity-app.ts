@@ -12,6 +12,7 @@ import type { JWK } from 'jose';
 
 import { LoginController } from '../../src/application/controllers/LoginController.js';
 import { RegisterUserController } from '../../src/application/controllers/RegisterUserController.js';
+import type { EventPublisher } from '../../src/application/interfaces/gateways/EventPublisher.js';
 import { LoginUseCase } from '../../src/application/useCases/login/LoginUseCase.js';
 import { RegisterUserUseCase } from '../../src/application/useCases/registerUser/RegisterUserUseCase.js';
 import { createHttpServer } from '../../src/infrastructure/http/server.js';
@@ -34,7 +35,11 @@ export interface IdentityApp {
   readonly stop: () => Promise<void>;
 }
 
-export const startIdentityApp = async (): Promise<IdentityApp> => {
+export interface IdentityAppOptions {
+  readonly events?: EventPublisher;
+}
+
+export const startIdentityApp = async (options?: IdentityAppOptions): Promise<IdentityApp> => {
   const postgres: PostgresHandle = await startPostgres();
   const serviceRoot = path.resolve(import.meta.dirname, '../../');
   await execFileAsync('pnpm', ['exec', 'prisma', 'migrate', 'deploy'], {
@@ -47,8 +52,15 @@ export const startIdentityApp = async (): Promise<IdentityApp> => {
   const keys = await deriveRsaKeyMaterial(await exportPKCS8(privateKey), 'key-1');
   const users = new PrismaUserRepository(prisma);
   const hasher = new BcryptPasswordHasher();
+  const events: EventPublisher = options?.events ?? { publish: () => Promise.resolve() };
   const registerUserController = new RegisterUserController(
-    new RegisterUserUseCase(users, hasher, { next: () => randomUUID() }, { now: () => new Date() }),
+    new RegisterUserUseCase(
+      users,
+      hasher,
+      { next: () => randomUUID() },
+      { now: () => new Date() },
+      events,
+    ),
   );
   const loginController = new LoginController(
     new LoginUseCase(
