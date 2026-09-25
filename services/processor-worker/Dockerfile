@@ -6,10 +6,10 @@ RUN apt-get update \
 
 WORKDIR /app
 
-COPY services/processor-worker/package.json ./
-COPY services/processor-worker/dist ./dist
+COPY package.json ./
+COPY dist ./dist
 # Copies the production modules staged by `pnpm stage-runtime`.
-COPY services/processor-worker/.runtime/node_modules ./node_modules
+COPY .runtime/node_modules ./node_modules
 
 ENV NODE_ENV=production
 CMD ["node", "dist/main/index.js"]

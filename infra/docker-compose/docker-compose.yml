@@ -193,8 +193,8 @@ services:
   # ─── Processamento ──────────────────────────────────────────
   processor-worker:
     build:
-      context: ../..
-      dockerfile: services/processor-worker/Dockerfile
+      context: ../../services/processor-worker
+      dockerfile: Dockerfile
     image: zipframes-processor-worker
     container_name: zipframes-processor-worker
     depends_on:

@@ -1,9 +1,6 @@
 .git
 **/.git
 **/node_modules
-!services/processor-worker/.runtime
-!services/processor-worker/.runtime/node_modules
-!services/processor-worker/.runtime/node_modules/**
 coverage
 **/.env
 **/.env.*
