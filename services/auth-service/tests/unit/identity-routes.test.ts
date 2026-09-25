@@ -16,14 +16,14 @@ import {
   SequentialIds,
 } from '../support/in-memory.js';
 
-const buildApp = (overrides?: {
+const buildApp = async (overrides?: {
   isReady?: () => Promise<{ ready: boolean; reason?: string }>;
   renderMetrics?: () => Promise<string>;
-}): FastifyInstance => {
+}): Promise<FastifyInstance> => {
   const users = new InMemoryUserRepository();
   const hasher = new FakeHasher();
   const tokens = new FakeTokenIssuer();
-  const app = createHttpServer({ corsOrigin: '*' });
+  const app = await createHttpServer({ corsOrigin: '*' });
 
   registerIdentityRoutes(app, {
     registerUser: makeRegisterUser({
@@ -46,7 +46,7 @@ const buildApp = (overrides?: {
 
 describe('POST /register', () => {
   it('returns 201 with the shape registerResponseSchema expects', async () => {
-    const app = buildApp();
+    const app = await buildApp();
 
     const response = await app.inject({
       method: 'POST',
@@ -63,7 +63,7 @@ describe('POST /register', () => {
   });
 
   it('returns 400 Problem Details for an invalid body', async () => {
-    const app = buildApp();
+    const app = await buildApp();
 
     const response = await app.inject({
       method: 'POST',
@@ -77,7 +77,7 @@ describe('POST /register', () => {
   });
 
   it('returns 409 when the email is already registered', async () => {
-    const app = buildApp();
+    const app = await buildApp();
     const payload = { name: 'Hellen Santos', email: 'hellen@example.com', password: 'senha1234' };
 
     await app.inject({ method: 'POST', url: '/register', payload });
@@ -87,7 +87,7 @@ describe('POST /register', () => {
   });
 
   it('mints a correlation id when the header is empty', async () => {
-    const app = buildApp();
+    const app = await buildApp();
 
     const response = await app.inject({
       method: 'POST',
@@ -101,7 +101,7 @@ describe('POST /register', () => {
   });
 
   it('echoes the incoming correlation id in the problem response', async () => {
-    const app = buildApp();
+    const app = await buildApp();
 
     const response = await app.inject({
       method: 'POST',
@@ -116,7 +116,7 @@ describe('POST /register', () => {
 
 describe('POST /login', () => {
   it('returns 200 with the shape loginResponseSchema expects', async () => {
-    const app = buildApp();
+    const app = await buildApp();
     await app.inject({
       method: 'POST',
       url: '/register',
@@ -134,7 +134,7 @@ describe('POST /login', () => {
   });
 
   it('returns 401 for a malformed body, same as wrong credentials', async () => {
-    const app = buildApp();
+    const app = await buildApp();
 
     const response = await app.inject({
       method: 'POST',
@@ -146,7 +146,7 @@ describe('POST /login', () => {
   });
 
   it('returns 401 for wrong credentials', async () => {
-    const app = buildApp();
+    const app = await buildApp();
 
     const response = await app.inject({
       method: 'POST',
@@ -160,7 +160,7 @@ describe('POST /login', () => {
 
 describe('GET /.well-known/jwks.json', () => {
   it('returns the configured keys in the shape jwksResponseSchema expects', async () => {
-    const app = buildApp();
+    const app = await buildApp();
 
     const response = await app.inject({ method: 'GET', url: '/.well-known/jwks.json' });
 
@@ -173,7 +173,7 @@ describe('GET /.well-known/jwks.json', () => {
 
 describe('health and metrics', () => {
   it('answers 200 on the liveness probe', async () => {
-    const app = buildApp();
+    const app = await buildApp();
 
     const response = await app.inject({ method: 'GET', url: '/health/live' });
 
@@ -182,7 +182,7 @@ describe('health and metrics', () => {
   });
 
   it('answers 200 when the process can reach its dependencies', async () => {
-    const app = buildApp();
+    const app = await buildApp();
 
     const response = await app.inject({ method: 'GET', url: '/health/ready' });
 
@@ -191,7 +191,9 @@ describe('health and metrics', () => {
   });
 
   it('answers 503 when a dependency is down', async () => {
-    const app = buildApp({ isReady: async () => ({ ready: false, reason: 'amqp disconnected' }) });
+    const app = await buildApp({
+      isReady: async () => ({ ready: false, reason: 'amqp disconnected' }),
+    });
 
     const response = await app.inject({ method: 'GET', url: '/health/ready' });
 
@@ -200,7 +202,7 @@ describe('health and metrics', () => {
   });
 
   it('answers 503 when the readiness check throws', async () => {
-    const app = buildApp({
+    const app = await buildApp({
       isReady: async () => {
         throw new Error('database down');
       },
@@ -212,8 +214,34 @@ describe('health and metrics', () => {
     expect(response.json()).toEqual({ status: 'not_ready', reason: 'database down' });
   });
 
+  it('answers 503 with unknown when a dependency is down and gives no reason', async () => {
+    const app = await buildApp({
+      isReady: async () => ({ ready: false }),
+    });
+
+    const response = await app.inject({ method: 'GET', url: '/health/ready' });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toEqual({ status: 'not_ready', reason: 'unknown' });
+  });
+
+  it('answers 503 with unknown when the readiness check throws a non-error', async () => {
+    const app = await buildApp({
+      isReady: async () => {
+        // Exercises the branch where the failure is not an Error.
+        // eslint-disable-next-line @typescript-eslint/only-throw-error
+        throw 'offline';
+      },
+    });
+
+    const response = await app.inject({ method: 'GET', url: '/health/ready' });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toEqual({ status: 'not_ready', reason: 'unknown' });
+  });
+
   it('returns the prometheus text from the metrics registry', async () => {
-    const app = buildApp();
+    const app = await buildApp();
 
     const response = await app.inject({ method: 'GET', url: '/metrics' });
 
@@ -223,9 +251,74 @@ describe('health and metrics', () => {
   });
 });
 
+describe('OpenAPI', () => {
+  it('serves a document generated from the route schemas', async () => {
+    const app = await buildApp();
+
+    const response = await app.inject({ method: 'GET', url: '/docs/json' });
+
+    expect(response.statusCode).toBe(200);
+    const document: { openapi: string; paths: Record<string, unknown> } = response.json();
+    expect(document.openapi).toMatch(/^3\./);
+    expect(document.paths['/health/live']).toBeDefined();
+    expect(document.paths['/health/ready']).toBeDefined();
+    expect(document.paths['/metrics']).toBeDefined();
+    expect(document.paths['/.well-known/jwks.json']).toBeDefined();
+
+    const register = document.paths['/register'] as {
+      post: {
+        requestBody: {
+          content: {
+            'application/json': {
+              schema: {
+                properties: {
+                  email: { format?: string };
+                  password: { minLength?: number };
+                };
+              };
+            };
+          };
+        };
+      };
+    };
+    const bodySchema = register.post.requestBody.content['application/json'].schema;
+    expect(bodySchema.properties.email.format).toBe('email');
+    expect(bodySchema.properties.password.minLength).toBe(8);
+  });
+
+  it('serves the Swagger UI', async () => {
+    const app = await buildApp();
+
+    const response = await app.inject({ method: 'GET', url: '/docs' });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['content-type']).toContain('text/html');
+  });
+
+  it('keeps text unquoted and json-encodes objects', async () => {
+    const app = await buildApp();
+    app.get(
+      '/serialized',
+      {
+        schema: { response: { 200: { type: 'string' } } },
+      },
+      async (_request, reply) => {
+        expect(reply.serialize('plain-text')).toBe('plain-text');
+        expect(reply.serialize({ ok: true })).toBe('{"ok":true}');
+        return 'plain-text';
+      },
+    );
+
+    const response = await app.inject({ method: 'GET', url: '/serialized' });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toBe('plain-text');
+  });
+});
+
 describe('register: use case validation beyond what the schema catches', () => {
   it('returns 400 when the password passes the schema but fails the domain policy', async () => {
-    const app = buildApp();
+    const app = await buildApp();
 
     const response = await app.inject({
       method: 'POST',

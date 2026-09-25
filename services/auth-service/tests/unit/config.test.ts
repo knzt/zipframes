@@ -126,6 +126,40 @@ describe('loadConfig', () => {
     expect(() => loadConfig()).toThrow('OUTBOX_MAX_ATTEMPTS');
   });
 
+  it('rejects a non-positive outbox interval', () => {
+    process.env.OUTBOX_INTERVAL_MS = '0';
+
+    expect(() => loadConfig()).toThrow('OUTBOX_INTERVAL_MS');
+  });
+
+  it('rejects an empty private key file', () => {
+    delete process.env.JWT_PRIVATE_KEY_PEM;
+    const directory = mkdtempSync(path.join(tmpdir(), 'auth-jwt-'));
+    const file = path.join(directory, 'key.pem');
+    writeFileSync(file, '');
+    process.env.JWT_PRIVATE_KEY_FILE = file;
+
+    expect(() => loadConfig()).toThrow('JWT_PRIVATE_KEY_PEM');
+  });
+
+  it('coerces a numeric port', () => {
+    const config = loadConfig({
+      ...process.env,
+      PORT: 4100 as unknown as string,
+    });
+
+    expect(config.port).toBe(4100);
+  });
+
+  it('names an unexpected field when the value is not a string', () => {
+    expect(() =>
+      loadConfig({
+        ...process.env,
+        SERVICE_VERSION: { length: 1 } as unknown as string,
+      }),
+    ).toThrow('serviceVersion');
+  });
+
   it('rejects a non-numeric port', () => {
     process.env.PORT = 'abc';
 

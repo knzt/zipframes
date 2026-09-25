@@ -2,14 +2,14 @@
 
 Worker stateless que consome `video.uploaded`, extrai frames com `ffmpeg` e publica o resultado.
 
-Arquitetura: Clean Architecture (Uncle Bob) — ver [docs/architecture/services/processor-worker.md](../../docs/architecture/services/processor-worker.md).
+Arquitetura: [docs/architecture/services/processor-worker.md](../../docs/architecture/services/processor-worker.md). `application/` junta casos de uso e interface adapters.
 
 ## Camadas
 
 ```
 src/domain/            # Value objects, policies, erros
-src/application/       # Use cases + ports (gateways/services)
-src/infrastructure/    # Consumers, gateways, services, health HTTP
+src/application/       # casos de uso e interface adapters (gateways/services)
+src/infrastructure/    # implementações, consumers, saúde HTTP (Fastify)
 src/main/              # Composition root
 ```
 
@@ -19,7 +19,7 @@ src/main/              # Composition root
 - baixa o original do storage (stream), extrai 1 frame/s em PNG e gera um zip (store)
 - publica `video.processing.started`, `video.processed` ou `video.failed`
 - apaga o original ao terminar (sucesso ou falha permanente); falha no delete vira log/métrica
-- health unificado na mesma porta: `GET /health/live`, `GET /health/ready`, `GET /metrics`
+- saúde no Fastify, na mesma porta: `GET /health/live`, `GET /health/ready`, `GET /metrics`, `GET /docs`
 - **sem banco próprio**
 
 ## Testes
@@ -53,6 +53,6 @@ pnpm install
 pnpm dev
 ```
 
-O lockfile deste serviço é `services/processor-worker/pnpm-lock.yaml`. `pnpm install` precisa de `NODE_AUTH_TOKEN` para os pacotes `@zipframes/*` (exceto `@zipframes/core`, linkado via `file:`).
+O lockfile deste serviço é `services/processor-worker/pnpm-lock.yaml`. `pnpm install` precisa de `NODE_AUTH_TOKEN` para os pacotes `@zipframes/*`. O pnpm 12 só expande esse token num `.npmrc` de usuário (`//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}`), não no arquivo versionado.
 
 No cluster, o Argo CD aplica `infra/k8s/processor-worker`. O Secret de exemplo não entra nesse apply.

@@ -1,7 +1,8 @@
 /** @type {import("dependency-cruiser").IConfiguration} */
 export default {
-  // Clean Architecture (Uncle Bob):
-  // Frameworks & Drivers / Interface Adapters → Use Cases → Entities
+  // Clean Architecture is the base (dependencies point inward), not a
+  // one-to-one copy of the four book layers. application/ holds use cases
+  // and interface adapters together.
   // Folder layout: infrastructure → application → domain (+ main as composition root)
   forbidden: [
     {
@@ -38,7 +39,7 @@ export default {
     {
       name: 'application-não-importa-infrastructure',
       comment:
-        'Use Cases só podem importar domain/ e as interfaces definidas lá ou na própria application/. ' +
+        'application/ (casos de uso e interface adapters) só pode importar domain/ e as interfaces definidas lá ou na própria application/. ' +
         'Implementações ficam em infrastructure/ e são injetadas pelo main/.',
       severity: 'error',
       from: { path: '/src/application/' },
@@ -49,8 +50,8 @@ export default {
     {
       name: 'application-não-importa-libs-de-infra',
       comment:
-        'Use Cases não podem importar Prisma, amqplib, ioredis, @aws-sdk, nodemailer, fastify… ' +
-        'A interface fica em application/ports/; a implementação fica em infrastructure/.',
+        'application/ não pode importar Prisma, amqplib, ioredis, @aws-sdk, nodemailer, fastify… ' +
+        'A interface fica em application/interfaces/; a implementação fica em infrastructure/.',
       severity: 'error',
       from: { path: '/src/application/' },
       to: {

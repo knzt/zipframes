@@ -1,25 +1,32 @@
-FROM node:22-bookworm-slim AS build
+FROM node:26-bookworm-slim AS build
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends openssl ca-certificates \
   && rm -rf /var/lib/apt/lists/* \
-  && corepack enable \
-  && corepack prepare pnpm@9.15.9 --activate
+  && npm install -g pnpm@12.6.0 --allow-scripts=pnpm
 
-WORKDIR /app
+# Context is the repository root so tsconfig.base.json is available.
+# The install uses only this service's lockfile.
+WORKDIR /src
+COPY tsconfig.base.json ./tsconfig.base.json
+COPY services/auth-service/package.json services/auth-service/pnpm-lock.yaml services/auth-service/pnpm-workspace.yaml services/auth-service/.npmrc services/auth-service/
 
-COPY package.json pnpm-lock.yaml .npmrc ./
+# pnpm 12 ignores ${NODE_AUTH_TOKEN} in a committed .npmrc. The secret is
+# written only for this command and removed in the same layer.
 RUN --mount=type=secret,id=node_auth_token \
-    NODE_AUTH_TOKEN="$(cat /run/secrets/node_auth_token)" \
-    pnpm install --frozen-lockfile
+    printf '%s\n' "//npm.pkg.github.com/:_authToken=$(cat /run/secrets/node_auth_token)" > /root/.npmrc \
+    && pnpm --dir services/auth-service install --frozen-lockfile \
+    && rm -f /root/.npmrc
 
-COPY tsconfig.json tsconfig.build.json ./
-COPY src ./src
+COPY services/auth-service/tsconfig.json services/auth-service/tsconfig.build.json services/auth-service/
+COPY services/auth-service/src services/auth-service/src
+
+WORKDIR /src/services/auth-service
 RUN pnpm exec prisma generate \
   && pnpm exec tsc -p tsconfig.build.json \
   && pnpm prune --prod
 
-FROM node:22-bookworm-slim
+FROM node:26-bookworm-slim
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends openssl ca-certificates \
@@ -28,10 +35,10 @@ RUN apt-get update \
 WORKDIR /app
 ENV NODE_ENV=production
 
-COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/dist ./dist
-COPY --from=build /app/src/infrastructure/repositories/prisma/schema.prisma ./src/infrastructure/repositories/prisma/schema.prisma
-COPY --from=build /app/src/infrastructure/repositories/prisma/migrations ./src/infrastructure/repositories/prisma/migrations
-COPY --from=build /app/package.json ./
+COPY --from=build /src/services/auth-service/node_modules ./node_modules
+COPY --from=build /src/services/auth-service/dist ./dist
+COPY --from=build /src/services/auth-service/src/infrastructure/repositories/prisma/schema.prisma ./src/infrastructure/repositories/prisma/schema.prisma
+COPY --from=build /src/services/auth-service/src/infrastructure/repositories/prisma/migrations ./src/infrastructure/repositories/prisma/migrations
+COPY --from=build /src/services/auth-service/package.json ./
 
 CMD ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy && node dist/main/index.js"]

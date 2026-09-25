@@ -66,7 +66,7 @@ const formatZodError = (error: z.ZodError): Error => {
                       ? 'PORT'
                       : path === 'logLevel'
                         ? 'LOG_LEVEL'
-                        : String(path ?? 'config');
+                        : String(path);
   return new Error(`invalid environment variable: ${field}`);
 };
 

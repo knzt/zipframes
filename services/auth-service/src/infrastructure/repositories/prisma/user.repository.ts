@@ -7,7 +7,7 @@ import type {
   EmailTakenError,
   OutboxEventWrite,
   UserRepository,
-} from '../../../application/ports/repositories/user.repository.js';
+} from '../../../application/interfaces/repositories/user.repository.js';
 import { asUserId } from '../../../domain/entities/user.js';
 import type { User } from '../../../domain/entities/user.js';
 import { asPasswordHash } from '../../../domain/valueObjects/password.js';

@@ -7,7 +7,8 @@ import type { EventEnvelope } from '@zipframes/schemas';
  * Implements @zipframes/communication's PublishPort over an amqplib
  * confirm channel: `publish` only resolves once the broker has
  * acknowledged the message, rather than once it has merely been written
- * to the socket.
+ * to the socket. The name comes from that package type. It is not an
+ * interface declared in application/.
  */
 export const createAmqpPublishPort = (channel: ConfirmChannel): PublishPort => ({
   publish: (envelope: EventEnvelope<unknown>, options: PublishOptions) =>

@@ -149,8 +149,8 @@ services:
   # ─── Identidade ─────────────────────────────────────────────
   auth-service:
     build:
-      context: ../../services/auth-service
-      dockerfile: Dockerfile
+      context: ../..
+      dockerfile: services/auth-service/Dockerfile
       secrets:
         - node_auth_token
     image: zipframes-auth-service

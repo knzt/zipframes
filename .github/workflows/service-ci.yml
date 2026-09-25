@@ -1,0 +1,119 @@
+# Reusable checks for one service: install, test, and a local image.
+# Callers filter by path. Nothing here pushes an image or deploys.
+name: service-ci
+
+on:
+  workflow_call:
+    inputs:
+      service:
+        description: Directory name under services/
+        required: true
+        type: string
+      image:
+        description: Local image tag. The image is not pushed.
+        required: true
+        type: string
+      prisma:
+        description: Generate the Prisma client before typecheck and tests
+        type: boolean
+        default: false
+      coverage:
+        description: Run vitest with coverage
+        type: boolean
+        default: false
+      stage_runtime:
+        description: Stage production node_modules before the image build
+        type: boolean
+        default: false
+      docker_secret:
+        description: Pass NODE_AUTH_TOKEN into the image build as a BuildKit secret
+        type: boolean
+        default: false
+    secrets:
+      NODE_AUTH_TOKEN:
+        required: true
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  verify:
+    name: Test and image
+    runs-on: ubuntu-latest
+    # NODE_AUTH_TOKEN is a secret on the Actions environment. A reusable
+    # job uses that environment secret instead of the value passed by the caller.
+    environment: Actions
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            services/${{ inputs.service }}/pnpm-lock.yaml
+          # pnpm 12 does not expand ${NODE_AUTH_TOKEN} in a committed .npmrc.
+          # setup-node writes that credential to a user-level file instead.
+          registry-url: https://npm.pkg.github.com
+          scope: '@zipframes'
+
+      # The root lockfile is repo tooling only. The service install below
+      # uses services/<service>/pnpm-lock.yaml.
+      - name: Install root tooling
+        run: pnpm install --frozen-lockfile
+
+      - name: Install the service
+        working-directory: services/${{ inputs.service }}
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate the Prisma client
+        if: ${{ inputs.prisma }}
+        working-directory: services/${{ inputs.service }}
+        run: pnpm db:generate
+
+      - name: Typecheck
+        working-directory: services/${{ inputs.service }}
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm exec eslint services/${{ inputs.service }}
+
+      - name: Layer rules
+        run: pnpm exec depcruise --config .dependency-cruiser.mjs services/${{ inputs.service }}/src
+
+      - name: Test
+        if: ${{ !inputs.coverage }}
+        working-directory: services/${{ inputs.service }}
+        run: pnpm test
+
+      - name: Test with coverage
+        if: ${{ inputs.coverage }}
+        working-directory: services/${{ inputs.service }}
+        run: pnpm test:coverage
+
+      - name: Build
+        working-directory: services/${{ inputs.service }}
+        run: pnpm build
+
+      - name: Stage the production runtime
+        if: ${{ inputs.stage_runtime }}
+        working-directory: services/${{ inputs.service }}
+        run: pnpm stage-runtime
+
+      - name: Build the local image
+        run: |
+          if [ "${{ inputs.docker_secret }}" = "true" ]; then
+            docker build \
+              --secret id=node_auth_token,env=NODE_AUTH_TOKEN \
+              --file "services/${{ inputs.service }}/Dockerfile" \
+              --tag "${{ inputs.image }}" \
+              .
+          else
+            docker build --tag "${{ inputs.image }}" "services/${{ inputs.service }}"
+          fi

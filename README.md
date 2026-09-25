@@ -25,7 +25,7 @@ zipframes/
 └── tests/             # testes e2e e de carga
 ```
 
-Cada serviço tem `package.json`, `pnpm-lock.yaml`, `Dockerfile`, migrations e testes próprios. **Nenhum serviço importa código de outro serviço.** Não há pnpm workspace: a raiz só tem o tooling do repositório (lint, format, hooks); cada serviço instala e trava as próprias dependências.
+Cada serviço tem `package.json`, `pnpm-lock.yaml`, `Dockerfile`, migrations e testes próprios. **Nenhum serviço importa código de outro serviço.** Não há um lockfile compartilhado: a raiz só trava o tooling do repositório (lint, format, hooks); cada serviço instala e trava as próprias dependências. As dependências `@zipframes/*` vêm do registro, não de `file:`.
 
 O código compartilhado não vive aqui: ele é publicado como pacotes npm (`@zipframes/*`) a partir de um repositório próprio, e cada serviço declara a versão que usa. Assim um serviço só adota uma mudança quando escolhe subir de versão, em vez de ser afetado no mesmo instante.
 
@@ -42,8 +42,8 @@ Os pacotes trazem **forma**, nunca **política**: validam o que é universal (um
 
 ## Pré-requisitos
 
-- Node.js 22+
-- pnpm 9+
+- Node.js 26+
+- pnpm 12+
 - Docker e Docker Compose
 
 ## Desenvolvimento local
@@ -53,8 +53,10 @@ Os pacotes trazem **forma**, nunca **política**: validam o que é universal (um
 pnpm install
 
 # cada serviço tem o próprio lockfile — instale dentro dele
+# O pnpm 12 não expande ${NODE_AUTH_TOKEN} no .npmrc versionado.
+# No ~/.npmrc: //npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}
 cd services/processor-worker
-pnpm install   # precisa de NODE_AUTH_TOKEN para @zipframes/* no GitHub Packages
+pnpm install
 
 # subir a infraestrutura (Postgres, RabbitMQ, Redis, SeaweedFS, Mailpit)
 pnpm infra:up
@@ -70,22 +72,26 @@ pnpm --dir services/processor-worker test
 - **Lint:** ESLint com typescript-eslint em modo strict, com a regra de camadas da Clean Architecture verificada no CI.
 - **Branches:** `feat/`, `fix/`, `docs/`, `chore/`, `ci/`, `test/`, `refactor/` saindo da `main`.
 
+## CI
+
+Cada serviço é construído, testado e empacotado no próprio workflow (`.github/workflows/auth-service.yml` e `processor-worker.yml`), com filtro de caminho. Os dois chamam `.github/workflows/service-ci.yml`. O workflow da raiz só formata o repositório e valida o AsyncAPI. A imagem fica com a tag local já usada nos manifests (`zipframes-auth-service:local`, `zipframes-processor-worker:local`) e não é publicada.
+
 ## Stack
 
-| Camada           | Tecnologia                                    |
-| ---------------- | --------------------------------------------- |
-| Linguagem        | Node.js 22 + TypeScript 5 (strict)            |
-| HTTP             | Fastify                                       |
-| Validação        | Zod                                           |
-| ORM / migrations | Prisma                                        |
-| Mensageria       | RabbitMQ + amqplib                            |
-| Object storage   | SeaweedFS (API S3)                            |
-| Cache            | Redis + ioredis                               |
-| E-mail           | Nodemailer                                    |
-| Banco de dados   | PostgreSQL (uma instância por serviço)        |
-| Testes           | Vitest + Testcontainers                       |
-| Monorepo         | um `pnpm-lock.yaml` por serviço               |
-| Containers       | Docker + Kubernetes (kind)                    |
-| Escala           | KEDA (worker escala pelo tamanho da fila)     |
-| CD               | Argo CD (GitOps)                              |
-| Observabilidade  | OpenTelemetry + Prometheus + Grafana + Jaeger |
+| Camada           | Tecnologia                                            |
+| ---------------- | ----------------------------------------------------- |
+| Linguagem        | Node.js 26 + TypeScript 5 (strict)                    |
+| HTTP             | Fastify (API e saúde, em todo serviço)                |
+| Validação        | Zod                                                   |
+| ORM / migrations | Prisma                                                |
+| Mensageria       | RabbitMQ + amqplib                                    |
+| Object storage   | SeaweedFS (API S3)                                    |
+| Cache            | Redis + ioredis                                       |
+| E-mail           | Nodemailer                                            |
+| Banco de dados   | PostgreSQL (uma instância por serviço)                |
+| Testes           | Vitest + Testcontainers                               |
+| Monorepo         | um `pnpm-lock.yaml` por serviço                       |
+| Containers       | Docker + Kubernetes (kind)                            |
+| Escala           | KEDA (worker escala pelo tamanho da fila)             |
+| CD               | Argo CD (GitOps), imagens locais, sem deploy em nuvem |
+| Observabilidade  | OpenTelemetry + Prometheus + Grafana + Jaeger         |

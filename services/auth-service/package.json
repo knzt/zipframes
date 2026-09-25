@@ -20,6 +20,8 @@
   },
   "dependencies": {
     "@fastify/cors": "^10.0.2",
+    "@fastify/swagger": "^9.8.1",
+    "@fastify/swagger-ui": "^5.2.3",
     "@prisma/client": "^6.2.1",
     "@zipframes/communication": "^0.1.0",
     "@zipframes/core": "^0.2.0",
@@ -38,7 +40,7 @@
   "devDependencies": {
     "@types/amqplib": "^0.10.7",
     "@types/bcryptjs": "^2.4.6",
-    "@types/node": "^22.10.2",
+    "@types/node": "^26.0.0",
     "@vitest/coverage-v8": "^3.2.4",
     "@zipframes/authenticator": "^0.1.0",
     "@zipframes/test-toolkit": "^0.1.0",
@@ -49,10 +51,10 @@
     "vitest": "^3.2.4"
   },
   "engines": {
-    "node": ">=22.0.0",
-    "pnpm": ">=9.0.0"
+    "node": ">=26.0.0",
+    "pnpm": ">=12.0.0"
   },
-  "packageManager": "pnpm@9.15.9",
+  "packageManager": "pnpm@12.6.0",
   "prisma": {
     "schema": "src/infrastructure/repositories/prisma/schema.prisma"
   }

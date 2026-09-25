@@ -1,6 +1,6 @@
 import bcrypt from 'bcryptjs';
 
-import type { PasswordHasher } from '../../../application/ports/services/passwordHasher.service.js';
+import type { PasswordHasher } from '../../../application/interfaces/services/passwordHasher.service.js';
 import { asPasswordHash } from '../../../domain/valueObjects/password.js';
 import type { Password, PasswordHash } from '../../../domain/valueObjects/password.js';
 

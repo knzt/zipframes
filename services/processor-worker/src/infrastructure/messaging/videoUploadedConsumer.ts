@@ -5,7 +5,7 @@ import { runWithCorrelationId } from '@zipframes/logger';
 import { parseSchema } from '@zipframes/schemas';
 import { videoUploadedEventSchema } from '@zipframes/schemas/video-service';
 
-import type { EventPublisher } from '../../application/ports/gateways/eventPublisher.gateway.js';
+import type { EventPublisher } from '../../application/interfaces/gateways/eventPublisher.gateway.js';
 import type { ProcessUploadedVideo } from '../../application/useCases/processUploadedVideo/processUploadedVideo.dto.js';
 import { isProcessingError } from '../../domain/errors/processingError.js';
 

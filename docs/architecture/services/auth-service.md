@@ -1,8 +1,8 @@
 # Arquitetura: auth-service
 
-Clean Architecture aplicada ao contexto de **Identidade** do ZipFrames.
+Arquitetura do contexto de **Identidade** do ZipFrames. A Clean Architecture é a base; o mapa de pastas está em [layers.md](../layers.md).
 
-Referências: [dominio.md — Identidade](../../domain/dominio.md), [OpenAPI](../../openapi/auth-service.yaml), [AsyncAPI](../../asyncapi/events.yaml), [modelagem de dados](../../data/modelagem-de-dados.md), [regras de camadas](../layers.md).
+Referências: [dominio.md — Identidade](../../domain/dominio.md), [HTTP e OpenAPI gerado](../http.md), [AsyncAPI](../../asyncapi/events.yaml), [modelagem de dados](../../data/modelagem-de-dados.md), [regras de camadas](../layers.md).
 
 ## Objetivo do serviço
 
@@ -10,20 +10,20 @@ Cadastrar usuário, autenticar e emitir JWT RS256. Publicar `user.registered` pe
 
 ## Camadas
 
-As dependências apontam para dentro.
+As dependências apontam para dentro. `application/` junta o que o livro separa: casos de uso e interface adapters. O caso de uso fica em `application/useCases/` e a interface que ele declara fica em `application/interfaces/`; a classe que implementa essa interface fica em `infrastructure/`. O raciocínio dessa decisão está em [layers.md](../layers.md).
+
+Neste serviço, a rota Fastify em `infrastructure/http` recebe o pedido, monta o comando e chama `registerUser` ou `login`. O caso de uso só enxerga as interfaces que declara. `main/compose.ts` instancia o repositório Prisma, o hasher bcrypt e o emissor RS256 e entrega esses objetos ao caso de uso. A rota devolve HTTP a partir do resultado. O caso de uso não importa Fastify, Prisma nem bcrypt.
 
 ```
-Frameworks & Drivers  →  Interface Adapters  →  Use Cases  →  Entities
+infrastructure  →  application  →  domain
 ```
 
-| Camada                                    | Pasta                 | O que há aqui                                                                                                      |
-| ----------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Entities                                  | `src/domain/`         | `User`, `Password`, `UserRegistered`, erros de domínio                                                             |
-| Use Cases                                 | `src/application/`    | `registerUser`, `login`, DTOs e portas (`UserRepository`, `PasswordHasher`, `TokenIssuer`, `Clock`, `IdGenerator`) |
-| Interface Adapters + Frameworks & Drivers | `src/infrastructure/` | Prisma, bcrypt, RS256, rotas HTTP, relay do outbox, publisher AMQP                                                 |
-| Composition root                          | `src/main/`           | `compose.ts` monta o grafo; `index.ts` trata sinal e shutdown                                                      |
-
-Portas moram em `application/ports/`. Implementações espelham a categoria em `infrastructure/` (`repositories/`, `services/`).
+| Pasta                 | Neste projeto                     | O que há aqui                                                                                                          |
+| --------------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `src/domain/`         | Entidades                         | `User`, `Password`, `UserRegistered`, erros de domínio                                                                 |
+| `src/application/`    | Casos de uso e interface adapters | `registerUser`, `login`, DTOs e interfaces (`UserRepository`, `PasswordHasher`, `TokenIssuer`, `Clock`, `IdGenerator`) |
+| `src/infrastructure/` | Implementação e frameworks        | Prisma, bcrypt, RS256, rotas HTTP, relay do outbox, publisher AMQP                                                     |
+| `src/main/`           | Composition root                  | `compose.ts` monta o grafo; `index.ts` trata sinal e shutdown                                                          |
 
 ## Mapa de pastas
 
@@ -39,7 +39,7 @@ auth-service/src/
 │   ├── useCases/
 │   │   ├── registerUser/{registerUser.useCase.ts, registerUser.dto.ts}
 │   │   └── login/{login.useCase.ts, login.dto.ts}
-│   └── ports/
+│   └── interfaces/
 │       ├── repositories/user.repository.ts
 │       └── services/{passwordHasher,tokenIssuer,clock,idGenerator}.service.ts
 ├── infrastructure/
@@ -54,7 +54,7 @@ auth-service/src/
 └── main/{compose.ts,index.ts}
 ```
 
-Não há `ports/gateways/` neste serviço: Postgres é repository; AMQP de saída é orquestrado pelo outbox relay (messaging), não por uma porta de application.
+A persistência é repository: `UserRepository` em `application/interfaces/repositories/` e `PrismaUserRepository` em `infrastructure/repositories/prisma/`. A publicação AMQP não é uma interface que o caso de uso declara. O caso de uso grava o envelope do outbox na mesma transação do usuário, e o relay em `infrastructure/messaging` publica depois.
 
 ## Casos de uso
 
@@ -85,8 +85,10 @@ O **caso de uso** decide o que publicar (`user.registered`, versão, payload, `c
 | `GET /health/live`           | Processo de pé (`{ status: "ok" }`)                                |
 | `GET /health/ready`          | 200 com Postgres e AMQP; 503 com `{ status: "not_ready", reason }` |
 | `GET /metrics`               | Texto Prometheus, incluindo `outbox_exhausted_total`               |
+| `GET /docs`                  | Swagger UI gerada das schemas das rotas                            |
+| `GET /docs/json`             | Documento OpenAPI 3.1 gerado                                       |
 
-Tudo na porta `PORT` (padrão 3000). Readiness usa `Pingable` + `createReadinessCheck`.
+Tudo na porta `PORT` (padrão 3000), no Fastify. Readiness usa `Pingable` + `createReadinessCheck`. O contrato está em [http.md](../http.md).
 
 ## Onde o processo sobe
 

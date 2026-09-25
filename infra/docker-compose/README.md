@@ -56,7 +56,7 @@ pnpm --dir services/processor-worker stage-runtime
 
 `stage-runtime` monta os `node_modules` de produção já instalados. O build da imagem não baixa `@zipframes/*` de novo. Com RabbitMQ e o bucket saudáveis, `GET /health/ready` responde 200.
 
-O `auth-service` também sobe junto. A imagem instala as dependências durante o build, então `NODE_AUTH_TOKEN` precisa estar exportado. A chave RS256 de desenvolvimento está em `infra/docker-compose/auth/jwt-dev.pem` e só vale para esta máquina. O processo aplica as migrations e então escuta; `GET /health/ready` responde 200 com o Postgres e o RabbitMQ alcançáveis.
+O `auth-service` também sobe junto. A imagem instala o lockfile do próprio serviço (`services/auth-service/pnpm-lock.yaml`). O contexto do build é a raiz para o `tsconfig.base.json` entrar na imagem, então `NODE_AUTH_TOKEN` precisa estar exportado. A chave RS256 de desenvolvimento está em `infra/docker-compose/auth/jwt-dev.pem` e só vale para esta máquina. O processo aplica as migrations e então escuta; `GET /health/ready` responde 200 com o Postgres e o RabbitMQ alcançáveis.
 
 ## Zerar tudo
 

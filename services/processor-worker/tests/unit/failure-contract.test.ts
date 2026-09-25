@@ -3,7 +3,7 @@ import { createLogger } from '@zipframes/logger';
 import { getCorrelationId } from '@zipframes/logger';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { EventPublisher } from '../../src/application/ports/gateways/eventPublisher.gateway.js';
+import type { EventPublisher } from '../../src/application/interfaces/gateways/eventPublisher.gateway.js';
 import { ProcessingError } from '../../src/domain/errors/processingError.js';
 import { planAmqpSettle } from '../../src/infrastructure/messaging/amqpSettle.js';
 import { UPLOADED_RETRY_QUEUE } from '../../src/infrastructure/messaging/topology.js';

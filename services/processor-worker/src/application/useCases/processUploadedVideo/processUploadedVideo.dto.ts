@@ -1,8 +1,8 @@
-import type { ArchiveBuilder } from '../../ports/services/archiveBuilder.service.js';
-import type { EventPublisher } from '../../ports/gateways/eventPublisher.gateway.js';
-import type { FrameExtractor } from '../../ports/gateways/frameExtractor.gateway.js';
-import type { ObjectStorage } from '../../ports/gateways/objectStorage.gateway.js';
-import type { WorkDirectory } from '../../ports/services/workDirectory.service.js';
+import type { ArchiveBuilder } from '../../interfaces/services/archiveBuilder.service.js';
+import type { EventPublisher } from '../../interfaces/gateways/eventPublisher.gateway.js';
+import type { FrameExtractor } from '../../interfaces/gateways/frameExtractor.gateway.js';
+import type { ObjectStorage } from '../../interfaces/gateways/objectStorage.gateway.js';
+import type { WorkDirectory } from '../../interfaces/services/workDirectory.service.js';
 import type { ProcessingJob } from '../../../domain/valueObjects/processingJob.js';
 import type { ProcessingResult } from '../../../domain/valueObjects/processingResult.js';
 

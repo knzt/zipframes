@@ -1,7 +1,7 @@
-import type { UserRepository } from '../../ports/repositories/user.repository.js';
-import type { Clock } from '../../ports/services/clock.service.js';
-import type { IdGenerator } from '../../ports/services/idGenerator.service.js';
-import type { PasswordHasher } from '../../ports/services/passwordHasher.service.js';
+import type { UserRepository } from '../../interfaces/repositories/user.repository.js';
+import type { Clock } from '../../interfaces/services/clock.service.js';
+import type { IdGenerator } from '../../interfaces/services/idGenerator.service.js';
+import type { PasswordHasher } from '../../interfaces/services/passwordHasher.service.js';
 
 export interface RegisterUserCommand {
   readonly name: string;

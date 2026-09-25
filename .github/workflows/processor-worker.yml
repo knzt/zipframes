@@ -1,46 +1,45 @@
-# Checks scoped to the auth-service.
+# Checks scoped to the processor-worker.
 #
 # Triggered by path, so a change to another service does not run this suite.
-name: auth-service
+# The image build uses the staged runtime; it does not download packages again.
+name: processor-worker
 
 on:
   pull_request:
     branches: [main]
     paths:
-      - 'services/auth-service/**'
+      - 'services/processor-worker/**'
       - 'package.json'
       - 'pnpm-lock.yaml'
       - '.npmrc'
       - 'tsconfig.base.json'
       - 'eslint.config.mjs'
       - '.dependency-cruiser.mjs'
-      - '.github/workflows/auth-service.yml'
+      - '.github/workflows/processor-worker.yml'
       - '.github/workflows/service-ci.yml'
   push:
     branches: [main]
     paths:
-      - 'services/auth-service/**'
+      - 'services/processor-worker/**'
       - 'package.json'
       - 'pnpm-lock.yaml'
       - '.npmrc'
       - 'tsconfig.base.json'
       - 'eslint.config.mjs'
       - '.dependency-cruiser.mjs'
-      - '.github/workflows/auth-service.yml'
+      - '.github/workflows/processor-worker.yml'
       - '.github/workflows/service-ci.yml'
 
 concurrency:
-  group: auth-service-${{ github.ref }}
+  group: processor-worker-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   verify:
     uses: ./.github/workflows/service-ci.yml
     with:
-      service: auth-service
-      image: zipframes-auth-service:local
-      prisma: true
-      coverage: true
-      docker_secret: true
+      service: processor-worker
+      image: zipframes-processor-worker:local
+      stage_runtime: true
     secrets:
       NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
