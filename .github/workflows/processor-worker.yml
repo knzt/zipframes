@@ -42,4 +42,4 @@ jobs:
       image: zipframes-processor-worker:local
       stage_runtime: true
     secrets:
-      NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
