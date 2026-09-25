@@ -38,9 +38,11 @@ describe('LoginController', () => {
     });
 
     expect(execute).not.toHaveBeenCalled();
-    expect(response.status).toBe(401);
-    expect(response.contentType).toBe('application/problem+json');
-    expect(response.body).toMatchObject({ title: 'Invalid credentials', correlationId });
+    expect(response).toMatchObject({
+      status: 401,
+      contentType: 'application/problem+json',
+      body: { title: 'Invalid credentials', correlationId },
+    });
     expect(response.body).not.toHaveProperty('detail');
   });
 

@@ -3,7 +3,7 @@ import { EVENT_EXCHANGE } from '@zipframes/schemas/shared';
 
 import type {
   EventPublisher,
-  ProcessingPublication,
+  EventPublisherInput,
 } from '../../application/interfaces/gateways/EventPublisher.js';
 
 export const createAmqpEventPublisher = (deps: {
@@ -11,17 +11,17 @@ export const createAmqpEventPublisher = (deps: {
   readonly createId: () => string;
   readonly now: () => Date;
 }): EventPublisher => ({
-  publish: async (event: ProcessingPublication) => {
+  publish: async (input: EventPublisherInput) => {
     await deps.publisher.publish(
       {
         eventId: deps.createId(),
-        eventType: event.eventType,
+        eventType: input.eventType,
         version: 1,
         occurredAt: deps.now().toISOString(),
-        correlationId: event.correlationId,
-        payload: event.payload,
+        correlationId: input.correlationId,
+        payload: input.payload,
       },
-      { exchange: EVENT_EXCHANGE, routingKey: event.eventType },
+      { exchange: EVENT_EXCHANGE, routingKey: input.eventType },
     );
   },
 });

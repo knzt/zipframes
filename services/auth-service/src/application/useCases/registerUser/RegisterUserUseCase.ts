@@ -5,16 +5,16 @@ import { userRegisteredFrom } from '../../../domain/events/userRegistered.js';
 import { registerUser } from '../../../domain/entities/user.js';
 import { createPassword } from '../../../domain/valueObjects/password.js';
 import type {
-  OutboxEventWrite,
   UserRepository,
+  UserRepositoryOutboxEventWrite,
 } from '../../interfaces/repositories/UserRepository.js';
 import type { Clock } from '../../interfaces/services/Clock.js';
 import type { IdGenerator } from '../../interfaces/services/IdGenerator.js';
 import type { PasswordHasher } from '../../interfaces/services/PasswordHasher.js';
 import type {
-  RegisterUserCommand,
-  RegisterUserError,
-  RegisterUserResult,
+  RegisterUserUseCaseError,
+  RegisterUserUseCaseInput,
+  RegisterUserUseCaseOutput,
 } from './registerUser.types.js';
 
 export class RegisterUserUseCase {
@@ -26,9 +26,9 @@ export class RegisterUserUseCase {
   ) {}
 
   async execute(
-    command: RegisterUserCommand,
-  ): Promise<Result<RegisterUserResult, RegisterUserError>> {
-    const password = createPassword(command.password);
+    input: RegisterUserUseCaseInput,
+  ): Promise<Result<RegisterUserUseCaseOutput, RegisterUserUseCaseError>> {
+    const password = createPassword(input.password);
     if (!password.ok) {
       return err({ code: 'INVALID_INPUT' as const, message: password.error.message });
     }
@@ -38,8 +38,8 @@ export class RegisterUserUseCase {
 
     const user = registerUser({
       id: this.ids.next(),
-      name: command.name,
-      email: command.email,
+      name: input.name,
+      email: input.email,
       passwordHash,
       now,
     });
@@ -48,14 +48,14 @@ export class RegisterUserUseCase {
     }
 
     const registered = userRegisteredFrom(user.value);
-    const outbox: OutboxEventWrite = {
+    const outbox: UserRepositoryOutboxEventWrite = {
       id: this.ids.next(),
       aggregateType: 'User',
       aggregateId: user.value.id,
       eventType: 'user.registered',
       version: 1,
       payload: { ...registered },
-      correlationId: command.correlationId,
+      correlationId: input.correlationId,
       occurredAt: user.value.createdAt,
     };
 

@@ -1,9 +1,29 @@
-import { PROBLEM_CONTENT_TYPE, problemDetails } from '@zipframes/core';
+import { PROBLEM_CONTENT_TYPE, problemDetails, type ProblemDetails } from '@zipframes/core';
 import { authService, parseSchema } from '@zipframes/schemas';
+import type { z } from 'zod';
 
-import type { ControllerResponse } from '../http/controllerResponse.types.js';
 import type { RegisterUserUseCase } from '../useCases/registerUser/RegisterUserUseCase.js';
-import type { RegisterUserRequest } from './registerUser.types.js';
+
+export interface RegisterUserControllerRequest {
+  readonly body: unknown;
+  readonly correlationId: string;
+}
+
+export type RegisterUserControllerResponse =
+  | {
+      readonly status: 201;
+      readonly body: z.infer<typeof authService.registerResponseSchema>;
+    }
+  | {
+      readonly status: 400;
+      readonly contentType: typeof PROBLEM_CONTENT_TYPE;
+      readonly body: ProblemDetails;
+    }
+  | {
+      readonly status: 409;
+      readonly contentType: typeof PROBLEM_CONTENT_TYPE;
+      readonly body: ProblemDetails;
+    };
 
 /**
  * Turns an already decoded register request into a status and a body.
@@ -12,7 +32,7 @@ import type { RegisterUserRequest } from './registerUser.types.js';
 export class RegisterUserController {
   constructor(private readonly registerUserUseCase: RegisterUserUseCase) {}
 
-  async handle(request: RegisterUserRequest): Promise<ControllerResponse> {
+  async handle(request: RegisterUserControllerRequest): Promise<RegisterUserControllerResponse> {
     const body = parseSchema(authService.registerRequestSchema, request.body);
     if (!body.ok) {
       return {
@@ -32,13 +52,27 @@ export class RegisterUserController {
       correlationId: request.correlationId,
     });
     if (!result.ok) {
-      const status = result.error.code === 'EMAIL_TAKEN' ? 409 : 400;
-      const title =
-        result.error.code === 'EMAIL_TAKEN' ? 'Email already registered' : 'Invalid request body';
+      if (result.error.code === 'EMAIL_TAKEN') {
+        return {
+          status: 409,
+          contentType: PROBLEM_CONTENT_TYPE,
+          body: problemDetails(
+            409,
+            'Email already registered',
+            result.error.message,
+            request.correlationId,
+          ),
+        };
+      }
       return {
-        status,
+        status: 400,
         contentType: PROBLEM_CONTENT_TYPE,
-        body: problemDetails(status, title, result.error.message, request.correlationId),
+        body: problemDetails(
+          400,
+          'Invalid request body',
+          result.error.message,
+          request.correlationId,
+        ),
       };
     }
 

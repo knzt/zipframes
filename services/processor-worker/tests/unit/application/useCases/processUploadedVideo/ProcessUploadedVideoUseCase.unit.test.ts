@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type {
   EventPublisher,
-  ProcessingPublication,
+  EventPublisherInput,
 } from '../../../../../src/application/interfaces/gateways/EventPublisher.js';
 import { ProcessUploadedVideoUseCase } from '../../../../../src/application/useCases/processUploadedVideo/ProcessUploadedVideoUseCase.js';
 import { ProcessingError } from '../../../../../src/domain/errors/processingError.js';
@@ -22,13 +22,13 @@ const job = {
 };
 
 const eventsDouble = (): EventPublisher & { readonly publish: ReturnType<typeof vi.fn> } => {
-  const publish = vi.fn(async (_event: ProcessingPublication) => undefined);
+  const publish = vi.fn(async (_input: EventPublisherInput) => undefined);
   return { publish };
 };
 
 const publishedTypes = (events: { readonly publish: ReturnType<typeof vi.fn> }): string[] =>
   events.publish.mock.calls.map((call) => {
-    const event = call[0] as ProcessingPublication;
+    const event = call[0] as EventPublisherInput;
     return event.eventType;
   });
 

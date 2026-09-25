@@ -5,14 +5,14 @@ import { Email } from '@zipframes/value-objects';
 import type { UserRepository } from '../../interfaces/repositories/UserRepository.js';
 import type { PasswordHasher } from '../../interfaces/services/PasswordHasher.js';
 import type { TokenIssuer } from '../../interfaces/services/TokenIssuer.js';
-import type { LoginCommand, LoginError, LoginResult } from './login.types.js';
+import type { LoginUseCaseError, LoginUseCaseInput, LoginUseCaseOutput } from './login.types.js';
 
 /**
  * The same error for every failure, on purpose: telling "no such email"
  * apart from "wrong password" would let anyone enumerate which addresses
  * are registered.
  */
-const invalidCredentials: LoginError = {
+const invalidCredentials: LoginUseCaseError = {
   code: 'INVALID_CREDENTIALS',
   message: 'invalid email or password',
 };
@@ -24,8 +24,8 @@ export class LoginUseCase {
     private readonly tokens: TokenIssuer,
   ) {}
 
-  async execute(command: LoginCommand): Promise<Result<LoginResult, LoginError>> {
-    const email = Email.create(command.email);
+  async execute(input: LoginUseCaseInput): Promise<Result<LoginUseCaseOutput, LoginUseCaseError>> {
+    const email = Email.create(input.email);
     if (!email.ok) {
       return err(invalidCredentials);
     }
@@ -35,7 +35,7 @@ export class LoginUseCase {
       return err(invalidCredentials);
     }
 
-    const matches = await this.hasher.verify(command.password, user.passwordHash);
+    const matches = await this.hasher.verify(input.password, user.passwordHash);
     if (!matches) {
       return err(invalidCredentials);
     }

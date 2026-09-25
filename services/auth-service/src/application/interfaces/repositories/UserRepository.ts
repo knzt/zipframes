@@ -2,11 +2,11 @@ import type { Result } from '@zipframes/core';
 
 import type { User } from '../../../domain/entities/user.js';
 
-export interface EmailTakenError {
+export interface UserRepositoryEmailTakenError {
   readonly code: 'EMAIL_TAKEN';
 }
 
-export interface OutboxEventWrite {
+export interface UserRepositoryOutboxEventWrite {
   readonly id: string;
   readonly aggregateType: string;
   readonly aggregateId: string;
@@ -24,5 +24,8 @@ export interface UserRepository {
    * A registration is never recorded without its user, and a user is never
    * stored without the fact that they registered.
    */
-  save: (user: User, outbox: OutboxEventWrite) => Promise<Result<void, EmailTakenError>>;
+  save: (
+    user: User,
+    outbox: UserRepositoryOutboxEventWrite,
+  ) => Promise<Result<void, UserRepositoryEmailTakenError>>;
 }

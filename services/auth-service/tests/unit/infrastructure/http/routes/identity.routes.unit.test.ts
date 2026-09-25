@@ -1,18 +1,26 @@
 import type { FastifyInstance } from 'fastify';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { LoginController } from '../../../../../src/application/controllers/LoginController.js';
-import type { RegisterUserController } from '../../../../../src/application/controllers/RegisterUserController.js';
+import type {
+  LoginController,
+  LoginControllerRequest,
+} from '../../../../../src/application/controllers/LoginController.js';
+import type {
+  RegisterUserController,
+  RegisterUserControllerRequest,
+} from '../../../../../src/application/controllers/RegisterUserController.js';
+import type { HttpReply } from '../../../../../src/infrastructure/http/httpReply.js';
 import { registerHealthRoutes } from '../../../../../src/infrastructure/http/routes/health.routes.js';
 import { registerIdentityRoutes } from '../../../../../src/infrastructure/http/routes/identity.routes.js';
 import { createHttpServer } from '../../../../../src/infrastructure/http/server.js';
 
 const asRegisterUserController = (
-  handle: RegisterUserController['handle'],
+  handle: (request: RegisterUserControllerRequest) => Promise<HttpReply>,
 ): RegisterUserController => ({ handle }) as unknown as RegisterUserController;
 
-const asLoginController = (handle: LoginController['handle']): LoginController =>
-  ({ handle }) as unknown as LoginController;
+const asLoginController = (
+  handle: (request: LoginControllerRequest) => Promise<HttpReply>,
+): LoginController => ({ handle }) as unknown as LoginController;
 
 const buildApp = async (overrides?: {
   registerUserController?: RegisterUserController;

@@ -2,9 +2,9 @@ import { err, ok } from '@zipframes/core';
 import type { Result } from '@zipframes/core';
 
 import type {
-  EmailTakenError,
-  OutboxEventWrite,
   UserRepository,
+  UserRepositoryEmailTakenError,
+  UserRepositoryOutboxEventWrite,
 } from '../../src/application/interfaces/repositories/UserRepository.js';
 import type { Clock } from '../../src/application/interfaces/services/Clock.js';
 import type { IdGenerator } from '../../src/application/interfaces/services/IdGenerator.js';
@@ -19,13 +19,16 @@ import type { PasswordHash } from '../../src/domain/valueObjects/password.js';
  */
 export class InMemoryUserRepository implements UserRepository {
   readonly users = new Map<string, User>();
-  readonly events: OutboxEventWrite[] = [];
+  readonly events: UserRepositoryOutboxEventWrite[] = [];
 
   findByEmail(email: string): Promise<User | null> {
     return Promise.resolve(this.users.get(email) ?? null);
   }
 
-  save(user: User, outbox: OutboxEventWrite): Promise<Result<void, EmailTakenError>> {
+  save(
+    user: User,
+    outbox: UserRepositoryOutboxEventWrite,
+  ): Promise<Result<void, UserRepositoryEmailTakenError>> {
     if (this.users.has(user.email)) {
       return Promise.resolve(err({ code: 'EMAIL_TAKEN' as const }));
     }

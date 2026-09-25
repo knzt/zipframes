@@ -4,9 +4,9 @@ import type { JWK } from 'jose';
 import { createCorrelationId, runWithCorrelationId } from '@zipframes/logger';
 import { authService } from '@zipframes/schemas';
 
-import type { ControllerResponse } from '../../../application/http/controllerResponse.types.js';
 import type { LoginController } from '../../../application/controllers/LoginController.js';
 import type { RegisterUserController } from '../../../application/controllers/RegisterUserController.js';
+import type { HttpReply } from '../httpReply.js';
 import { jsonSchemaOf } from '../openapi.js';
 
 export interface IdentityRoutesDependencies {
@@ -45,10 +45,7 @@ const correlationIdOf = (headerValue: string | string[] | undefined): string => 
   return createCorrelationId();
 };
 
-const sendControllerResult = async (
-  reply: FastifyReply,
-  result: ControllerResponse,
-): Promise<void> => {
+const sendControllerResult = async (reply: FastifyReply, result: HttpReply): Promise<void> => {
   const outgoing = reply.code(result.status);
   if (result.contentType !== undefined) {
     void outgoing.header('content-type', result.contentType);

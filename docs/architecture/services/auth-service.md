@@ -36,8 +36,7 @@ auth-service/src/
 │   ├── errors/userErrors.ts
 │   └── index.ts
 ├── application/
-│   ├── http/controllerResponse.types.ts
-│   ├── controllers/{RegisterUserController,LoginController,registerUser.types.ts,login.types.ts}
+│   ├── controllers/{RegisterUserController.ts,LoginController.ts}
 │   ├── useCases/
 │   │   ├── registerUser/{RegisterUserUseCase.ts, registerUser.types.ts}
 │   │   └── login/{LoginUseCase.ts, login.types.ts}
@@ -46,6 +45,7 @@ auth-service/src/
 │       └── services/{PasswordHasher,TokenIssuer,Clock,IdGenerator}.ts
 ├── infrastructure/
 │   ├── http/
+│   │   ├── httpReply.ts
 │   │   ├── routes/{identity,health}.routes.ts
 │   │   └── server.ts
 │   ├── repositories/prisma/{schema.prisma,migrations/,client.ts,user.repository.ts}

@@ -1,12 +1,14 @@
 import { isProcessingError, ProcessingError } from '../../../domain/errors/processingError.js';
 import { framesPackageObjectKey } from '../../../domain/policies/framesPackage.js';
-import type { ProcessingJob } from '../../../domain/valueObjects/processingJob.js';
-import type { ProcessingResult } from '../../../domain/valueObjects/processingResult.js';
 import type { EventPublisher } from '../../interfaces/gateways/EventPublisher.js';
 import type { FrameExtractor } from '../../interfaces/gateways/FrameExtractor.js';
 import type { ObjectStorage } from '../../interfaces/gateways/ObjectStorage.js';
 import type { ArchiveBuilder } from '../../interfaces/services/ArchiveBuilder.js';
 import type { WorkDirectory } from '../../interfaces/services/WorkDirectory.js';
+import type {
+  ProcessUploadedVideoUseCaseInput,
+  ProcessUploadedVideoUseCaseOutput,
+} from './processUploadedVideo.types.js';
 
 interface JobWorkspace {
   readonly rootDir: string;
@@ -97,10 +99,13 @@ export class ProcessUploadedVideoUseCase {
     private readonly events: EventPublisher,
     private readonly now: () => Date,
     private readonly processingTimeoutMs: number,
-    private readonly onDiscardOriginalFailed?: (job: ProcessingJob, error: unknown) => void,
+    private readonly onDiscardOriginalFailed?: (
+      job: ProcessUploadedVideoUseCaseInput,
+      error: unknown,
+    ) => void,
   ) {}
 
-  async execute(job: ProcessingJob): Promise<ProcessingResult> {
+  async execute(job: ProcessUploadedVideoUseCaseInput): Promise<ProcessUploadedVideoUseCaseOutput> {
     const workspace = await openJobWorkspace(this.workDirectory, job.videoId, job.originalFileName);
     const startedAt = this.now().getTime();
     const deadline = startDeadline(this.processingTimeoutMs);
@@ -125,7 +130,7 @@ export class ProcessUploadedVideoUseCase {
     }
   }
 
-  private async publishProcessingStarted(job: ProcessingJob): Promise<void> {
+  private async publishProcessingStarted(job: ProcessUploadedVideoUseCaseInput): Promise<void> {
     await this.events.publish({
       eventType: 'video.processing.started',
       correlationId: job.correlationId,
@@ -134,7 +139,7 @@ export class ProcessUploadedVideoUseCase {
   }
 
   private async downloadOriginalVideo(
-    job: ProcessingJob,
+    job: ProcessUploadedVideoUseCaseInput,
     workspace: JobWorkspace,
     signal: AbortSignal,
   ): Promise<void> {
@@ -157,7 +162,7 @@ export class ProcessUploadedVideoUseCase {
   }
 
   private async storeFramesPackage(
-    job: ProcessingJob,
+    job: ProcessUploadedVideoUseCaseInput,
     workspace: JobWorkspace,
     framePaths: readonly string[],
     signal: AbortSignal,
@@ -175,7 +180,7 @@ export class ProcessUploadedVideoUseCase {
   }
 
   private async publishFramesPackaged(
-    job: ProcessingJob,
+    job: ProcessUploadedVideoUseCaseInput,
     packaged: FramesPackageReady,
     startedAt: number,
   ): Promise<void> {
@@ -192,7 +197,10 @@ export class ProcessUploadedVideoUseCase {
     });
   }
 
-  private async publishMediaRejected(job: ProcessingJob, failure: ProcessingError): Promise<void> {
+  private async publishMediaRejected(
+    job: ProcessUploadedVideoUseCaseInput,
+    failure: ProcessingError,
+  ): Promise<void> {
     await this.events.publish({
       eventType: 'video.failed',
       correlationId: job.correlationId,
@@ -206,7 +214,7 @@ export class ProcessUploadedVideoUseCase {
     });
   }
 
-  private async discardOriginalVideo(job: ProcessingJob): Promise<void> {
+  private async discardOriginalVideo(job: ProcessUploadedVideoUseCaseInput): Promise<void> {
     try {
       await this.storage.deleteObject(job.sourceKey);
     } catch (error) {
@@ -215,7 +223,7 @@ export class ProcessUploadedVideoUseCase {
   }
 
   private async buildFramesPackage(
-    job: ProcessingJob,
+    job: ProcessUploadedVideoUseCaseInput,
     workspace: JobWorkspace,
     signal: AbortSignal,
   ): Promise<FramesPackageReady> {

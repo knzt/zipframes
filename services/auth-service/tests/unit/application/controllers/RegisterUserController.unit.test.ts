@@ -51,9 +51,11 @@ describe('RegisterUserController', () => {
     });
 
     expect(execute).not.toHaveBeenCalled();
-    expect(response.status).toBe(400);
-    expect(response.contentType).toBe('application/problem+json');
-    expect(response.body).toMatchObject({ status: 400, correlationId });
+    expect(response).toMatchObject({
+      status: 400,
+      contentType: 'application/problem+json',
+      body: { status: 400, correlationId },
+    });
   });
 
   it('returns 400 when the use case rejects the input', async () => {
@@ -88,11 +90,13 @@ describe('RegisterUserController', () => {
       body: { name: 'Ada Lovelace', email: 'ada@example.com', password: 'senha1234' },
     });
 
-    expect(response.status).toBe(409);
-    expect(response.contentType).toBe('application/problem+json');
-    expect(response.body).toMatchObject({
-      title: 'Email already registered',
-      correlationId,
+    expect(response).toMatchObject({
+      status: 409,
+      contentType: 'application/problem+json',
+      body: {
+        title: 'Email already registered',
+        correlationId,
+      },
     });
   });
 });

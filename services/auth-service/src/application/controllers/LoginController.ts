@@ -1,9 +1,24 @@
-import { PROBLEM_CONTENT_TYPE, problemDetails } from '@zipframes/core';
+import { PROBLEM_CONTENT_TYPE, problemDetails, type ProblemDetails } from '@zipframes/core';
 import { authService, parseSchema } from '@zipframes/schemas';
+import type { z } from 'zod';
 
-import type { ControllerResponse } from '../http/controllerResponse.types.js';
 import type { LoginUseCase } from '../useCases/login/LoginUseCase.js';
-import type { LoginRequest } from './login.types.js';
+
+export interface LoginControllerRequest {
+  readonly body: unknown;
+  readonly correlationId: string;
+}
+
+export type LoginControllerResponse =
+  | {
+      readonly status: 200;
+      readonly body: z.infer<typeof authService.loginResponseSchema>;
+    }
+  | {
+      readonly status: 401;
+      readonly contentType: typeof PROBLEM_CONTENT_TYPE;
+      readonly body: ProblemDetails;
+    };
 
 /**
  * Turns an already decoded login request into a status and a body.
@@ -13,7 +28,7 @@ import type { LoginRequest } from './login.types.js';
 export class LoginController {
   constructor(private readonly loginUseCase: LoginUseCase) {}
 
-  async handle(request: LoginRequest): Promise<ControllerResponse> {
+  async handle(request: LoginControllerRequest): Promise<LoginControllerResponse> {
     const body = parseSchema(authService.loginRequestSchema, request.body);
     if (!body.ok) {
       return {

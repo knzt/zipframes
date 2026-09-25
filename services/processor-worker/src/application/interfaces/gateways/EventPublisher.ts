@@ -4,26 +4,27 @@ import type {
   VideoProcessingStartedPayload,
 } from '@zipframes/schemas/processor-worker';
 
-export interface ProcessingStartedEvent {
+export interface EventPublisherProcessingStarted {
   readonly eventType: 'video.processing.started';
   readonly correlationId: string;
   readonly payload: VideoProcessingStartedPayload;
 }
 
-export interface VideoProcessedEvent {
+export interface EventPublisherVideoProcessed {
   readonly eventType: 'video.processed';
   readonly correlationId: string;
   readonly payload: VideoProcessedPayload;
 }
 
-export interface VideoFailedEvent {
+export interface EventPublisherVideoFailed {
   readonly eventType: 'video.failed';
   readonly correlationId: string;
   readonly payload: VideoFailedPayload;
 }
 
-export type ProcessingPublication = ProcessingStartedEvent | VideoProcessedEvent | VideoFailedEvent;
+export type EventPublisherInput =
+  EventPublisherProcessingStarted | EventPublisherVideoProcessed | EventPublisherVideoFailed;
 
 export interface EventPublisher {
-  readonly publish: (event: ProcessingPublication) => Promise<void>;
+  readonly publish: (input: EventPublisherInput) => Promise<void>;
 }

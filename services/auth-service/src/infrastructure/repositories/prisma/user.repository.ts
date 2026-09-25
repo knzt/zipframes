@@ -4,9 +4,9 @@ import { err, ok } from '@zipframes/core';
 import type { Result } from '@zipframes/core';
 
 import type {
-  EmailTakenError,
-  OutboxEventWrite,
   UserRepository,
+  UserRepositoryEmailTakenError,
+  UserRepositoryOutboxEventWrite,
 } from '../../../application/interfaces/repositories/UserRepository.js';
 import { asUserId } from '../../../domain/entities/user.js';
 import type { User } from '../../../domain/entities/user.js';
@@ -38,7 +38,10 @@ export class PrismaUserRepository implements UserRepository {
     return row === null ? null : toDomain(row);
   }
 
-  async save(user: User, outbox: OutboxEventWrite): Promise<Result<void, EmailTakenError>> {
+  async save(
+    user: User,
+    outbox: UserRepositoryOutboxEventWrite,
+  ): Promise<Result<void, UserRepositoryEmailTakenError>> {
     try {
       await this.prisma.$transaction([
         this.prisma.user.create({

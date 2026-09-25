@@ -44,9 +44,10 @@ processor-worker/src/
 │   ├── policies/{frameExtractionPolicy,framesPackage}.ts
 │   └── index.ts
 ├── application/
-│   ├── controllers/{ProcessUploadedVideoController.ts,processUploadedVideo.types.ts}
+│   ├── controllers/ProcessUploadedVideoController.ts
 │   ├── useCases/processUploadedVideo/
-│   │   └── ProcessUploadedVideoUseCase.ts
+│   │   ├── ProcessUploadedVideoUseCase.ts
+│   │   └── processUploadedVideo.types.ts
 │   └── interfaces/
 │       ├── gateways/{ObjectStorage,EventPublisher,FrameExtractor}.ts
 │       └── services/{ArchiveBuilder,WorkDirectory}.ts
