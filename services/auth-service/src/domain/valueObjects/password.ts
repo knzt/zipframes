@@ -15,7 +15,7 @@ export type Password = Brand<string, 'Password'>;
 const MIN_LENGTH = 8;
 // bcrypt silently truncates anything past 72 bytes, so accepting longer
 // passwords would mean telling users characters count when they do not.
-const MAX_LENGTH = 72;
+const MAX_BYTES = 72;
 
 export const createPassword = (raw: string): Result<Password, PasswordError> => {
   if (raw.length < MIN_LENGTH) {
@@ -24,10 +24,10 @@ export const createPassword = (raw: string): Result<Password, PasswordError> => 
       message: `password must be at least ${String(MIN_LENGTH)} characters`,
     });
   }
-  if (raw.length > MAX_LENGTH) {
+  if (Buffer.byteLength(raw, 'utf8') > MAX_BYTES) {
     return err({
       code: 'TOO_LONG' as const,
-      message: `password must be at most ${String(MAX_LENGTH)} characters`,
+      message: `password must be at most ${String(MAX_BYTES)} bytes`,
     });
   }
   if (!/\p{L}/u.test(raw)) {
