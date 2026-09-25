@@ -1,5 +1,4 @@
 import { ConflictError, err, ok } from '@zipframes/core';
-import type { Result } from '@zipframes/core';
 
 import type {
   EventPublisher,

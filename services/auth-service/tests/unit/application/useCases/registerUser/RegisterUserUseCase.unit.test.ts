@@ -1,3 +1,4 @@
+import { ConflictError, err } from '@zipframes/core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { RegisterUserUseCase } from '../../../../../src/application/useCases/registerUser/RegisterUserUseCase.js';
@@ -128,6 +129,31 @@ describe('duplicate email', () => {
     const result = await registerUser.execute({ ...validInput, email: 'HELLEN@EXAMPLE.COM' });
 
     expect(result).toMatchObject({ ok: false, error: { code: 'EMAIL_TAKEN' } });
+  });
+});
+
+describe('repository save failure', () => {
+  it('returns EMAIL_TAKEN when save loses a concurrent registration race', async () => {
+    const raceRepository: InMemoryUserRepository = {
+      users: new Map(),
+      findByEmail: async () => null,
+      save: async () =>
+        Promise.resolve(
+          err(new ConflictError('EMAIL_TAKEN', 'email is already registered')),
+        ),
+    };
+    const useCase = new RegisterUserUseCase(
+      raceRepository,
+      new FakeHasher(),
+      new SequentialIds(),
+      new FixedClock(),
+      eventPublisher,
+    );
+
+    const result = await useCase.execute(validInput);
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'EMAIL_TAKEN' } });
+    expect(eventPublisher.published).toHaveLength(0);
   });
 });
 
