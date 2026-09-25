@@ -11,7 +11,7 @@ import { LoginController } from '../application/controllers/LoginController.js';
 import { RegisterUserController } from '../application/controllers/RegisterUserController.js';
 import { LoginUseCase } from '../application/useCases/login/LoginUseCase.js';
 import { RegisterUserUseCase } from '../application/useCases/registerUser/RegisterUserUseCase.js';
-import { loadConfig } from '../infrastructure/config.js';
+import { loadEnvConfig } from '../infrastructure/envConfig.js';
 import { createAmqpEventPublisher } from '../infrastructure/gateways/amqpEventPublisher.gateway.js';
 import { createHttpServer } from '../infrastructure/http/server.js';
 import { registerHealthRoutes } from '../infrastructure/http/routes/health.routes.js';
@@ -25,7 +25,7 @@ import { deriveRsaKeyMaterial } from '../infrastructure/services/crypto/rsaKeys.
 import { Rs256TokenIssuer } from '../infrastructure/services/crypto/rs256TokenIssuer.js';
 
 export const startAuthService = async (): Promise<{ stop: () => Promise<void> }> => {
-  const config = loadConfig();
+  const config = loadEnvConfig();
   const logger = createLogger({
     service: 'auth-service',
     version: config.serviceVersion,

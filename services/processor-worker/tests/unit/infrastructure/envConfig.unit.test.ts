@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { loadConfig } from '../../../src/infrastructure/config.js';
+import { loadEnvConfig } from '../../../src/infrastructure/envConfig.js';
 
-describe('loadConfig', () => {
+describe('loadEnvConfig', () => {
   it('parses environment variables', () => {
-    const config = loadConfig({
+    const config = loadEnvConfig({
       AMQP_URL: 'amqp://guest:guest@localhost:5672',
       S3_ENDPOINT: 'http://localhost:8333',
       S3_ACCESS_KEY: 'zipframes',
@@ -29,7 +29,7 @@ describe('loadConfig', () => {
   });
 
   it('applies defaults and rejects a boolean false for path style', () => {
-    const config = loadConfig({
+    const config = loadEnvConfig({
       AMQP_URL: 'amqp://guest:guest@localhost:5672',
       S3_ENDPOINT: 'http://localhost:8333',
       S3_ACCESS_KEY: 'zipframes',
@@ -46,6 +46,6 @@ describe('loadConfig', () => {
   });
 
   it('rejects a missing required variable', () => {
-    expect(() => loadConfig({})).toThrow();
+    expect(() => loadEnvConfig({})).toThrow();
   });
 });

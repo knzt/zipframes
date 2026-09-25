@@ -62,7 +62,7 @@ processor-worker/src/
 │   │   └── filesystem/fsWorkDirectory.service.ts
 │   ├── messaging/{rabbitmqConnection,topology,videoUploadedConsumer}.ts
 │   ├── observability/jobMetrics.ts
-│   └── config.ts
+│   └── envConfig.ts
 └── main/{compose.ts,index.ts}
 ```
 

@@ -26,7 +26,7 @@ const configSchema = z.object({
   serviceVersion: z.string().min(1),
 });
 
-export type Config = z.infer<typeof configSchema>;
+export type EnvConfig = z.infer<typeof configSchema>;
 
 const resolveJwtPrivateKeyPem = (env: NodeJS.ProcessEnv): string => {
   const inline = env.JWT_PRIVATE_KEY_PEM;
@@ -64,7 +64,7 @@ const formatZodError = (error: z.ZodError): Error => {
   return new Error(`invalid environment variable: ${field}`);
 };
 
-export const loadConfig = (env: NodeJS.ProcessEnv = process.env): Config => {
+export const loadEnvConfig = (env: NodeJS.ProcessEnv = process.env): EnvConfig => {
   try {
     return configSchema.parse({
       port: emptyToUndefined(env.PORT) ?? '3000',

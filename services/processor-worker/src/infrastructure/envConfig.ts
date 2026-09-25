@@ -22,9 +22,9 @@ const configSchema = z.object({
   serviceVersion: z.string().min(1),
 });
 
-export type WorkerConfig = z.infer<typeof configSchema>;
+export type EnvConfig = z.infer<typeof configSchema>;
 
-export const loadConfig = (env: NodeJS.ProcessEnv = process.env): WorkerConfig =>
+export const loadEnvConfig = (env: NodeJS.ProcessEnv = process.env): EnvConfig =>
   configSchema.parse({
     amqpUrl: env.AMQP_URL,
     s3Endpoint: env.S3_ENDPOINT,

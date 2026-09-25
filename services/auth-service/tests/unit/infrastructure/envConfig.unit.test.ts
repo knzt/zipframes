@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { loadConfig } from '../../../src/infrastructure/config.js';
+import { loadEnvConfig } from '../../../src/infrastructure/envConfig.js';
 
 const REQUIRED_VARS = {
   AUTH_DATABASE_URL: 'postgresql://localhost/auth_db',
@@ -30,9 +30,9 @@ afterEach(() => {
   process.env = { ...originalEnv };
 });
 
-describe('loadConfig', () => {
+describe('loadEnvConfig', () => {
   it('reads every required variable', () => {
-    const config = loadConfig();
+    const config = loadEnvConfig();
 
     expect(config).toMatchObject({
       databaseUrl: REQUIRED_VARS.AUTH_DATABASE_URL,
@@ -46,7 +46,7 @@ describe('loadConfig', () => {
   });
 
   it('defaults port and cors when not set', () => {
-    const config = loadConfig();
+    const config = loadEnvConfig();
 
     expect(config.port).toBe(3000);
     expect(config.corsOrigin).toBe('*');
@@ -58,7 +58,7 @@ describe('loadConfig', () => {
     process.env.LOG_LEVEL = 'debug';
     process.env.SERVICE_VERSION = '1.2.3';
 
-    const config = loadConfig();
+    const config = loadEnvConfig();
 
     expect(config.port).toBe(4000);
     expect(config.corsOrigin).toBe('https://app.zipframes.test');
@@ -73,49 +73,49 @@ describe('loadConfig', () => {
     writeFileSync(file, 'from-file');
     process.env.JWT_PRIVATE_KEY_FILE = file;
 
-    expect(loadConfig().jwtPrivateKeyPem).toBe('from-file');
+    expect(loadEnvConfig().jwtPrivateKeyPem).toBe('from-file');
   });
 
   it('throws when AUTH_DATABASE_URL is missing', () => {
     delete process.env.AUTH_DATABASE_URL;
 
-    expect(() => loadConfig()).toThrow('AUTH_DATABASE_URL');
+    expect(() => loadEnvConfig()).toThrow('AUTH_DATABASE_URL');
   });
 
   it('throws when AMQP_URL is missing', () => {
     delete process.env.AMQP_URL;
 
-    expect(() => loadConfig()).toThrow('AMQP_URL');
+    expect(() => loadEnvConfig()).toThrow('AMQP_URL');
   });
 
   it('throws when JWT_PRIVATE_KEY_PEM is missing', () => {
     delete process.env.JWT_PRIVATE_KEY_PEM;
 
-    expect(() => loadConfig()).toThrow('JWT_PRIVATE_KEY_PEM');
+    expect(() => loadEnvConfig()).toThrow('JWT_PRIVATE_KEY_PEM');
   });
 
   it('throws when JWT_KID is missing', () => {
     delete process.env.JWT_KID;
 
-    expect(() => loadConfig()).toThrow('JWT_KID');
+    expect(() => loadEnvConfig()).toThrow('JWT_KID');
   });
 
   it('throws when JWT_ISSUER is missing', () => {
     delete process.env.JWT_ISSUER;
 
-    expect(() => loadConfig()).toThrow('JWT_ISSUER');
+    expect(() => loadEnvConfig()).toThrow('JWT_ISSUER');
   });
 
   it('throws when JWT_AUDIENCE is missing', () => {
     delete process.env.JWT_AUDIENCE;
 
-    expect(() => loadConfig()).toThrow('JWT_AUDIENCE');
+    expect(() => loadEnvConfig()).toThrow('JWT_AUDIENCE');
   });
 
   it('rejects a non-positive port', () => {
     process.env.PORT = '0';
 
-    expect(() => loadConfig()).toThrow('PORT');
+    expect(() => loadEnvConfig()).toThrow('PORT');
   });
 
   it('rejects an empty private key file', () => {
@@ -125,11 +125,11 @@ describe('loadConfig', () => {
     writeFileSync(file, '');
     process.env.JWT_PRIVATE_KEY_FILE = file;
 
-    expect(() => loadConfig()).toThrow('JWT_PRIVATE_KEY_PEM');
+    expect(() => loadEnvConfig()).toThrow('JWT_PRIVATE_KEY_PEM');
   });
 
   it('coerces a numeric port', () => {
-    const config = loadConfig({
+    const config = loadEnvConfig({
       ...process.env,
       PORT: 4100 as unknown as string,
     });
@@ -139,7 +139,7 @@ describe('loadConfig', () => {
 
   it('names an unexpected field when the value is not a string', () => {
     expect(() =>
-      loadConfig({
+      loadEnvConfig({
         ...process.env,
         SERVICE_VERSION: { length: 1 } as unknown as string,
       }),
@@ -149,18 +149,18 @@ describe('loadConfig', () => {
   it('rejects a non-numeric port', () => {
     process.env.PORT = 'abc';
 
-    expect(() => loadConfig()).toThrow('PORT');
+    expect(() => loadEnvConfig()).toThrow('PORT');
   });
 
   it('treats a blank port as the default', () => {
     process.env.PORT = '';
 
-    expect(loadConfig().port).toBe(3000);
+    expect(loadEnvConfig().port).toBe(3000);
   });
 
   it('rejects an unknown log level', () => {
     process.env.LOG_LEVEL = 'verbose';
 
-    expect(() => loadConfig()).toThrow('LOG_LEVEL');
+    expect(() => loadEnvConfig()).toThrow('LOG_LEVEL');
   });
 });

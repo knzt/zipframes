@@ -50,7 +50,7 @@ auth-service/src/
 │   ├── gateways/amqpEventPublisher.gateway.ts
 │   ├── services/crypto/{bcryptPasswordHasher,rs256TokenIssuer,rsaKeys}.ts
 │   ├── messaging/{amqpConnection,amqpPublisher}.ts
-│   └── config.ts
+│   └── envConfig.ts
 └── main/{compose.ts,index.ts}
 ```
 
