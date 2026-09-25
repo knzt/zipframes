@@ -189,4 +189,149 @@ describe('ProcessUploadedVideoUseCase', () => {
 
     expect(onDiscardOriginalFailed).toHaveBeenCalledOnce();
   });
+
+  it('rejects a video that yields no frames and deletes the source', async () => {
+    const events = eventsDouble();
+    const deleteObject = vi.fn(async () => undefined);
+    const processUploadedVideo = new ProcessUploadedVideoUseCase(
+      {
+        downloadToFile: async () => undefined,
+        uploadFile: async () => undefined,
+        deleteObject,
+      },
+      { extract: async () => [] },
+      { createZip: async () => undefined },
+      {
+        createTempDir: async () => '/tmp/job',
+        removeDir: async () => undefined,
+      },
+      events,
+      () => new Date('2026-09-20T12:00:05.000Z'),
+      60_000,
+    );
+
+    const processingResult = await processUploadedVideo.execute(job);
+
+    expect(processingResult).toBe('media_rejected');
+    expect(deleteObject).toHaveBeenCalledWith(job.sourceKey);
+    expect(publishedTypes(events)).toEqual(['video.processing.started', 'video.failed']);
+    const failed = events.publish.mock.calls[1]?.[0] as EventPublisherInput;
+    expect(failed.payload).toMatchObject({ errorCode: 'NO_FRAMES' });
+  });
+
+  it('stores an extensionless upload as original.bin', async () => {
+    const downloadToFile = vi.fn(async () => undefined);
+    const processUploadedVideo = new ProcessUploadedVideoUseCase(
+      {
+        downloadToFile,
+        uploadFile: async () => undefined,
+        deleteObject: async () => undefined,
+      },
+      { extract: async () => ['/tmp/frame_0001.png'] },
+      { createZip: async () => undefined },
+      {
+        createTempDir: async () => '/tmp/job',
+        removeDir: async () => undefined,
+      },
+      eventsDouble(),
+      () => new Date('2026-09-20T12:00:05.000Z'),
+      60_000,
+    );
+
+    await processUploadedVideo.execute({ ...job, originalFileName: 'clip' });
+
+    expect(downloadToFile).toHaveBeenCalledWith(
+      job.sourceKey,
+      '/tmp/job/original.bin',
+      expect.any(AbortSignal),
+    );
+  });
+
+  it('lowercases the stored original extension', async () => {
+    const downloadToFile = vi.fn(async () => undefined);
+    const processUploadedVideo = new ProcessUploadedVideoUseCase(
+      {
+        downloadToFile,
+        uploadFile: async () => undefined,
+        deleteObject: async () => undefined,
+      },
+      { extract: async () => ['/tmp/frame_0001.png'] },
+      { createZip: async () => undefined },
+      {
+        createTempDir: async () => '/tmp/job',
+        removeDir: async () => undefined,
+      },
+      eventsDouble(),
+      () => new Date('2026-09-20T12:00:05.000Z'),
+      60_000,
+    );
+
+    await processUploadedVideo.execute({ ...job, originalFileName: 'clip.MP4' });
+
+    expect(downloadToFile).toHaveBeenCalledWith(
+      job.sourceKey,
+      '/tmp/job/original.mp4',
+      expect.any(AbortSignal),
+    );
+  });
+
+  it('rethrows an unexpected error as retryable and does not publish video.failed', async () => {
+    const events = eventsDouble();
+    const processUploadedVideo = new ProcessUploadedVideoUseCase(
+      {
+        downloadToFile: async () => {
+          throw new Error('disk full');
+        },
+        uploadFile: async () => undefined,
+        deleteObject: async () => undefined,
+      },
+      { extract: async () => [] },
+      { createZip: async () => undefined },
+      {
+        createTempDir: async () => '/tmp/job',
+        removeDir: async () => undefined,
+      },
+      events,
+      () => new Date(),
+      60_000,
+    );
+
+    await expect(processUploadedVideo.execute(job)).rejects.toMatchObject({
+      retryable: true,
+      code: 'UNEXPECTED',
+      message: 'disk full',
+    });
+    expect(publishedTypes(events)).toEqual(['video.processing.started']);
+  });
+
+  it('wraps a generic error as PROCESSING_TIMEOUT once the deadline has fired', async () => {
+    const processUploadedVideo = new ProcessUploadedVideoUseCase(
+      {
+        downloadToFile: async (_key, _path, signal) => {
+          await new Promise<void>((_resolve, reject) => {
+            signal?.addEventListener('abort', () => {
+              reject(new Error('socket hang up'));
+            });
+          });
+        },
+        uploadFile: async () => undefined,
+        deleteObject: async () => undefined,
+      },
+      { extract: async () => [] },
+      { createZip: async () => undefined },
+      {
+        createTempDir: async () => '/tmp/job',
+        removeDir: async () => undefined,
+      },
+      eventsDouble(),
+      () => new Date(),
+      20,
+    );
+
+    await expect(processUploadedVideo.execute(job)).rejects.toMatchObject({
+      retryable: true,
+      code: 'PROCESSING_TIMEOUT',
+      message: 'processing exceeded 20ms',
+    });
+  });
 });

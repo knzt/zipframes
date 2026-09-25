@@ -14,6 +14,7 @@ import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { framesPackageObjectKey } from '../../src/domain/policies/framesPackage.js';
+import { createS3ObjectStorage } from '../../src/infrastructure/gateways/storage/s3ObjectStorage.gateway.js';
 import { EVENT_EXCHANGE } from '../../src/infrastructure/messaging/topology.js';
 import { startWorker } from '../../src/main/compose.js';
 import { useBundledFfmpeg } from '../support/ffmpeg-bin.js';
@@ -185,5 +186,24 @@ describe('processUploadedVideo message flow', () => {
     } finally {
       await worker.stop();
     }
+  });
+
+  it('treats a missing source object as a permanent SOURCE_MISSING failure', async () => {
+    const storage = createS3ObjectStorage({
+      endpoint: objectStore.endpoint,
+      region: objectStore.region,
+      accessKey: objectStore.accessKey,
+      secretKey: objectStore.secretKey,
+      bucket,
+      forcePathStyle: true,
+    });
+    const destination = path.join(tmpdir(), 'zf-missing-source.mp4');
+
+    await expect(
+      storage.downloadToFile(`uploads/${ownerId}/does-not-exist`, destination),
+    ).rejects.toMatchObject({
+      retryable: false,
+      code: 'SOURCE_MISSING',
+    });
   });
 });
