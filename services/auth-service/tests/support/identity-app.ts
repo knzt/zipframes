@@ -15,6 +15,7 @@ import { RegisterUserController } from '../../src/application/controllers/Regist
 import { LoginUseCase } from '../../src/application/useCases/login/LoginUseCase.js';
 import { RegisterUserUseCase } from '../../src/application/useCases/registerUser/RegisterUserUseCase.js';
 import { createHttpServer } from '../../src/infrastructure/http/server.js';
+import { silentLogger } from './silent-logger.js';
 import { registerIdentityRoutes } from '../../src/infrastructure/http/routes/identity.routes.js';
 import { PrismaUserRepository } from '../../src/infrastructure/repositories/prisma/user.repository.js';
 import { BcryptPasswordHasher } from '../../src/infrastructure/services/crypto/bcryptPasswordHasher.js';
@@ -57,7 +58,7 @@ export const startIdentityApp = async (): Promise<IdentityApp> => {
     ),
   );
 
-  const app = await createHttpServer({ corsOrigin: '*' });
+  const app = await createHttpServer({ corsOrigin: '*', logger: silentLogger() });
   registerIdentityRoutes(app, {
     registerUserController,
     loginController,

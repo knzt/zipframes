@@ -97,7 +97,7 @@ export const startAuthService = async (): Promise<{ stop: () => Promise<void> }>
   };
   const isReady = createReadinessCheck([prismaPing, amqpPing]);
 
-  const app = await createHttpServer({ corsOrigin: config.corsOrigin });
+  const app = await createHttpServer({ corsOrigin: config.corsOrigin, logger });
   registerIdentityRoutes(app, {
     registerUserController,
     loginController,

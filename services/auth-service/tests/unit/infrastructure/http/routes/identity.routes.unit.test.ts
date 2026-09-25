@@ -13,6 +13,7 @@ import type { HttpReply } from '../../../../../src/infrastructure/http/httpReply
 import { registerHealthRoutes } from '../../../../../src/infrastructure/http/routes/health.routes.js';
 import { registerIdentityRoutes } from '../../../../../src/infrastructure/http/routes/identity.routes.js';
 import { createHttpServer } from '../../../../../src/infrastructure/http/server.js';
+import { silentLogger } from '../../../../support/silent-logger.js';
 
 const asRegisterUserController = (
   handle: (request: RegisterUserControllerRequest) => Promise<HttpReply>,
@@ -28,7 +29,7 @@ const buildApp = async (overrides?: {
   isReady?: () => Promise<{ ready: boolean; reason?: string }>;
   renderMetrics?: () => Promise<string>;
 }): Promise<FastifyInstance> => {
-  const app = await createHttpServer({ corsOrigin: '*' });
+  const app = await createHttpServer({ corsOrigin: '*', logger: silentLogger() });
 
   registerIdentityRoutes(app, {
     registerUserController:
@@ -135,6 +136,32 @@ describe('identity route binding', () => {
     });
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ tokenType: 'Bearer', expiresIn: 900 });
+    await app.close();
+  });
+
+  it('answers 500 problem details when the controller throws', async () => {
+    const app = await buildApp({
+      loginController: asLoginController(async () => {
+        throw new Error('token issuer down');
+      }),
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/login',
+      headers: { 'x-correlation-id': 'corr-unhandled' },
+      payload: { email: 'ada@example.com', password: 'senha1234' },
+    });
+
+    expect(response.statusCode).toBe(500);
+    expect(response.headers['content-type']).toContain('application/problem+json');
+    expect(response.json()).toEqual({
+      type: 'about:blank',
+      status: 500,
+      title: 'Internal server error',
+      correlationId: 'corr-unhandled',
+    });
+    expect(response.body).not.toContain('token issuer down');
     await app.close();
   });
 });
