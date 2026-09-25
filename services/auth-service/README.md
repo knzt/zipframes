@@ -33,14 +33,14 @@ As regras de dependência entre camadas estão em [`docs/architecture/layers.md`
 
 ## Desenvolvimento
 
-O serviço tem o próprio lockfile. Os pacotes `@zipframes/*` vêm do GitHub Packages.
+O repositório é um workspace pnpm. Os pacotes `@zipframes/*` vêm do GitHub Packages. O pnpm 12 não expande `${NODE_AUTH_TOKEN}` no `.npmrc` versionado; a linha `//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}` fica no `~/.npmrc`.
 
 ```bash
 export NODE_AUTH_TOKEN=<seu token>
-pnpm --dir services/auth-service install
+pnpm install
 pnpm infra:up
-pnpm --dir services/auth-service db:migrate
-pnpm --dir services/auth-service test
+pnpm --filter @zipframes/auth-service db:migrate
+pnpm --filter @zipframes/auth-service test
 ```
 
 A imagem e o processo no Compose estão descritos em [`infra/docker-compose/README.md`](../../infra/docker-compose/README.md).

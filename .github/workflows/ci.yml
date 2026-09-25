@@ -34,7 +34,7 @@ jobs:
           cache-dependency-path: pnpm-lock.yaml
 
       - name: Install root tooling
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --filter zip-frames
 
       - name: Format
         run: pnpm format

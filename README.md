@@ -25,7 +25,7 @@ zipframes/
 └── tests/             # testes e2e e de carga
 ```
 
-Cada serviço tem `package.json`, `pnpm-lock.yaml`, `Dockerfile`, migrations e testes próprios. **Nenhum serviço importa código de outro serviço.** Não há pnpm workspace: a raiz só tem o tooling do repositório (lint, format, hooks); cada serviço instala e trava as próprias dependências.
+Cada serviço tem o próprio `package.json`, `Dockerfile`, migrations e testes. **Nenhum serviço importa código de outro serviço.** O repositório é um workspace pnpm (`pnpm-workspace.yaml`): um `pnpm-lock.yaml` na raiz trava o tooling e os serviços, e cada serviço continua sendo construído e testado sozinho (`pnpm --filter`). As dependências `@zipframes/*` vêm do registro, não de `file:`.
 
 O código compartilhado não vive aqui: ele é publicado como pacotes npm (`@zipframes/*`) a partir de um repositório próprio, e cada serviço declara a versão que usa. Assim um serviço só adota uma mudança quando escolhe subir de versão, em vez de ser afetado no mesmo instante.
 
@@ -42,25 +42,23 @@ Os pacotes trazem **forma**, nunca **política**: validam o que é universal (um
 
 ## Pré-requisitos
 
-- Node.js 22+
-- pnpm 9+
+- Node.js 26+
+- pnpm 12+
 - Docker e Docker Compose
 
 ## Desenvolvimento local
 
 ```bash
-# tooling do repositório (eslint, prettier, husky)
+# workspace inteiro (tooling e serviços)
+# O pnpm 12 não expande ${NODE_AUTH_TOKEN} no .npmrc versionado.
+# No ~/.npmrc: //npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}
 pnpm install
-
-# cada serviço tem o próprio lockfile — instale dentro dele
-cd services/processor-worker
-pnpm install   # precisa de NODE_AUTH_TOKEN para @zipframes/* no GitHub Packages
 
 # subir a infraestrutura (Postgres, RabbitMQ, Redis, SeaweedFS, Mailpit)
 pnpm infra:up
 
-# build / testes do worker (a partir da raiz ou do serviço)
-pnpm --dir services/processor-worker test
+# build / testes de um serviço, sem construir o outro
+pnpm --filter @zipframes/processor-worker test
 ```
 
 ## Convenções
@@ -78,7 +76,7 @@ Cada serviço é construído, testado e empacotado no próprio workflow (`.githu
 
 | Camada           | Tecnologia                                            |
 | ---------------- | ----------------------------------------------------- |
-| Linguagem        | Node.js 22 + TypeScript 5 (strict)                    |
+| Linguagem        | Node.js 26 + TypeScript 5 (strict)                    |
 | HTTP             | Fastify (API e saúde, em todo serviço)                |
 | Validação        | Zod                                                   |
 | ORM / migrations | Prisma                                                |
@@ -88,7 +86,7 @@ Cada serviço é construído, testado e empacotado no próprio workflow (`.githu
 | E-mail           | Nodemailer                                            |
 | Banco de dados   | PostgreSQL (uma instância por serviço)                |
 | Testes           | Vitest + Testcontainers                               |
-| Monorepo         | um `pnpm-lock.yaml` por serviço                       |
+| Monorepo         | workspace pnpm (`pnpm-workspace.yaml`)                |
 | Containers       | Docker + Kubernetes (kind)                            |
 | Escala           | KEDA (worker escala pelo tamanho da fila)             |
 | CD               | Argo CD (GitOps), imagens locais, sem deploy em nuvem |

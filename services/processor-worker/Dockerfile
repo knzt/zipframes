@@ -1,4 +1,4 @@
-FROM node:22-bookworm-slim
+FROM node:26-bookworm-slim
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ffmpeg \
@@ -6,10 +6,10 @@ RUN apt-get update \
 
 WORKDIR /app
 
-COPY package.json ./
-COPY dist ./dist
+COPY services/processor-worker/package.json ./
+COPY services/processor-worker/dist ./dist
 # Copies the production modules staged by `pnpm stage-runtime`.
-COPY .runtime/node_modules ./node_modules
+COPY services/processor-worker/.runtime/node_modules ./node_modules
 
 ENV NODE_ENV=production
 CMD ["node", "dist/main/index.js"]

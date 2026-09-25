@@ -1,0 +1,13 @@
+packages:
+  - 'services/*'
+
+# pnpm 12 refuses install scripts unless they are listed here.
+allowBuilds:
+  '@prisma/client': true
+  '@prisma/engines': true
+  cpu-features: true
+  esbuild: true
+  ffmpeg-static: true
+  prisma: true
+  protobufjs: true
+  ssh2: true

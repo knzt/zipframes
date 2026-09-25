@@ -52,16 +52,14 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: pnpm
-          cache-dependency-path: |
-            pnpm-lock.yaml
-            services/${{ inputs.service }}/pnpm-lock.yaml
+          cache-dependency-path: pnpm-lock.yaml
+          # pnpm 12 does not expand ${NODE_AUTH_TOKEN} in a committed .npmrc.
+          # setup-node writes that credential to a user-level file instead.
+          registry-url: https://npm.pkg.github.com
+          scope: '@zipframes'
 
-      - name: Install root tooling
-        run: pnpm install --frozen-lockfile
-
-      - name: Install the service
-        working-directory: services/${{ inputs.service }}
-        run: pnpm install --frozen-lockfile
+      - name: Install this service and the root tooling
+        run: pnpm install --frozen-lockfile --filter zip-frames --filter "@zipframes/${{ inputs.service }}..."
 
       - name: Generate the Prisma client
         if: ${{ inputs.prisma }}
@@ -102,8 +100,12 @@ jobs:
           if [ "${{ inputs.docker_secret }}" = "true" ]; then
             docker build \
               --secret id=node_auth_token,env=NODE_AUTH_TOKEN \
+              --file "services/${{ inputs.service }}/Dockerfile" \
               --tag "${{ inputs.image }}" \
-              "services/${{ inputs.service }}"
+              .
           else
-            docker build --tag "${{ inputs.image }}" "services/${{ inputs.service }}"
+            docker build \
+              --file "services/${{ inputs.service }}/Dockerfile" \
+              --tag "${{ inputs.image }}" \
+              .
           fi

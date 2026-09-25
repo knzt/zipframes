@@ -149,8 +149,8 @@ services:
   # ─── Identidade ─────────────────────────────────────────────
   auth-service:
     build:
-      context: ../../services/auth-service
-      dockerfile: Dockerfile
+      context: ../..
+      dockerfile: services/auth-service/Dockerfile
       secrets:
         - node_auth_token
     image: zipframes-auth-service
@@ -193,8 +193,8 @@ services:
   # ─── Processamento ──────────────────────────────────────────
   processor-worker:
     build:
-      context: ../../services/processor-worker
-      dockerfile: Dockerfile
+      context: ../..
+      dockerfile: services/processor-worker/Dockerfile
     image: zipframes-processor-worker
     container_name: zipframes-processor-worker
     depends_on:

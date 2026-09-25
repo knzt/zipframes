@@ -53,6 +53,6 @@ pnpm install
 pnpm dev
 ```
 
-O lockfile deste serviço é `services/processor-worker/pnpm-lock.yaml`. `pnpm install` precisa de `NODE_AUTH_TOKEN` para os pacotes `@zipframes/*` (exceto `@zipframes/core`, linkado via `file:`).
+O lockfile do workspace é o `pnpm-lock.yaml` da raiz. `pnpm install` precisa de `NODE_AUTH_TOKEN` para os pacotes `@zipframes/*`. O pnpm 12 só expande esse token num `.npmrc` de usuário (`//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}`), não no arquivo versionado.
 
 No cluster, o Argo CD aplica `infra/k8s/processor-worker`. O Secret de exemplo não entra nesse apply.
