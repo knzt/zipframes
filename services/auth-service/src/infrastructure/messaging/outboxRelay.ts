@@ -1,4 +1,4 @@
-import type { Prisma, PrismaClient } from '@prisma/client';
+import { Prisma, type PrismaClient } from '@prisma/client';
 
 import type { Publisher } from '@zipframes/communication';
 import { EVENT_EXCHANGE } from '@zipframes/schemas';
@@ -24,6 +24,10 @@ export interface OutboxRelayOptions {
 }
 
 const DEFAULT_BATCH_SIZE = 20;
+
+// Prisma binds a string[] as text[]. id is uuid, and Postgres has no uuid = text.
+const uuidIn = (ids: readonly string[]): Prisma.Sql =>
+  Prisma.join(ids.map((id) => Prisma.sql`${id}::uuid`));
 
 const asPayload = (value: unknown): Record<string, unknown> => {
   if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
@@ -117,13 +121,15 @@ export const createOutboxRelay = (
         }
 
         if (publishedIds.length > 0) {
+          const ids = uuidIn(publishedIds);
           await tx.$executeRaw`
-          UPDATE outbox SET published_at = now() WHERE id = ANY(${publishedIds})
+          UPDATE outbox SET published_at = now() WHERE id IN (${ids})
         `;
         }
         if (failedIds.length > 0) {
+          const ids = uuidIn(failedIds);
           await tx.$executeRaw`
-          UPDATE outbox SET attempts = attempts + 1 WHERE id = ANY(${failedIds})
+          UPDATE outbox SET attempts = attempts + 1 WHERE id IN (${ids})
         `;
         }
 
