@@ -15,8 +15,19 @@ export default {
       },
     },
     {
+      name: 'domain-não-importa-node',
+      comment:
+        'O domínio não importa módulos nativos (fs, crypto, child_process). ' +
+        'Esses detalhes ficam em infrastructure/.',
+      severity: 'error',
+      from: { path: '/src/domain/' },
+      to: { dependencyTypes: ['core'] },
+    },
+    {
       name: 'domain-não-importa-infra',
-      comment: 'O domínio não pode depender de bibliotecas de infraestrutura.',
+      comment:
+        'O domínio só pode depender de @zipframes/core, @zipframes/value-objects e de @types. ' +
+        'Qualquer outro pacote npm é infraestrutura.',
       severity: 'error',
       from: { path: '/src/domain/' },
       to: {
@@ -50,23 +61,17 @@ export default {
     {
       name: 'application-não-importa-libs-de-infra',
       comment:
-        'application/ não pode importar Prisma, amqplib, ioredis, @aws-sdk, nodemailer, fastify… ' +
-        'A interface fica em application/interfaces/; a implementação fica em infrastructure/.',
+        'application/ só importa pacotes de contrato (@zipframes/core, schemas, value-objects) ' +
+        'e zod, que o controller usa no tipo da resposta. Prisma, amqplib, Fastify, bcrypt, jose ' +
+        'e o restante ficam em infrastructure/. Uma lista de proibições deixava bcrypt e jose passarem.',
       severity: 'error',
       from: { path: '/src/application/' },
       to: {
         dependencyTypes: ['npm'],
-        // Como acima, comparado com o caminho resolvido. O `node_modules/`
-        // no início ancora o padrão no nome do pacote e evita casar com um
-        // arquivo do próprio serviço que por acaso se chame `prisma.ts`.
-        path: [
-          'node_modules/(@prisma/|prisma/)',
-          'node_modules/amqplib/',
-          'node_modules/ioredis/',
-          'node_modules/@aws-sdk/',
-          'node_modules/nodemailer/',
-          'node_modules/(@fastify/|fastify/)',
-          'node_modules/pino/',
+        pathNot: [
+          'node_modules/@zipframes/(core|schemas|value-objects)/',
+          'node_modules/zod/',
+          'node_modules/@types/',
         ],
       },
     },

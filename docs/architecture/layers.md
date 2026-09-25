@@ -6,7 +6,7 @@ A Clean Architecture de Robert C. Martin é a base. A regra que fica do livro é
 
 A pasta `application/` junta o que o livro separa: casos de uso e interface adapters. Os dois ficam juntos porque a interface só existe para o caso de uso chamar alguma coisa fora dele sem nomear a tecnologia. O caso de uso mora em `application/useCases/`. Ele recebe um comando e conduz a regra da aplicação: cadastrar um usuário, autenticar, processar um vídeo que chegou. Quando precisa de persistência, de um programa externo ou de um relógio, chama uma interface que ele mesmo declara em `application/interfaces/`.
 
-O controller em `application/controllers/` é o interface adapter da borda. Ele recebe o pedido já traduzido, chama o caso de uso e devolve status e corpo. Não importa Fastify, Prisma nem AMQP. A rota HTTP e o consumer AMQP só ligam o framework a esse resultado. As interfaces em `application/interfaces/` continuam sendo o que o caso de uso declara: guardar um `User`, extrair frames, publicar um evento, calcular um hash. A classe que implementa essa interface fica em `infrastructure/`, ao lado do framework que ela usa. O caso de uso não importa essa classe. A classe importa a interface. A seta fica para dentro: `infrastructure` depende de `application`, e `application` depende de `domain`.
+No `auth-service`, o controller em `application/controllers/` é o interface adapter da borda HTTP. Ele valida o corpo, chama o caso de uso e devolve status e corpo. Não importa Fastify nem Prisma. A rota só escreve esse resultado. No `processor-worker` não há essa classe: o consumer AMQP já decodifica `video.uploaded` e chama o caso de uso. Uma classe no meio só copiava os campos do envelope. As interfaces em `application/interfaces/` continuam sendo o que o caso de uso declara: guardar um `User`, extrair frames, publicar um evento, calcular um hash. A classe que implementa essa interface fica em `infrastructure/`, ao lado do framework que ela usa. O caso de uso não importa essa classe. A classe importa a interface. A seta fica para dentro: `infrastructure` depende de `application`, e `application` depende de `domain`.
 
 A interface fica ao lado do caso de uso, e não ao lado da classe do Prisma, para o caso de uso não precisar importar `infrastructure` só para enxergar o tipo. A regra da aplicação permanece estável quando o driver muda. Um teste do caso de uso entrega um fake. Um driver novo é uma classe nova em `infrastructure/` e a linha em `main/` que a instancia.
 
@@ -14,7 +14,7 @@ A interface fica ao lado do caso de uso, e não ao lado da classe do Prisma, par
 
 No `auth-service`, o Fastify recebe o HTTP em `infrastructure/http`. A rota lê o corpo e o correlation id e chama o controller em `application/controllers/`. O controller valida o pedido, chama `RegisterUserUseCase` ou `LoginUseCase` e devolve status e corpo. O caso de uso chama `UserRepository`, `PasswordHasher`, `TokenIssuer` e as outras interfaces que declarou. Essas chamadas caem nos objetos injetados — `PrismaUserRepository`, `BcryptPasswordHasher`, `Rs256TokenIssuer` — e são eles que falam com o Postgres, o bcrypt e a chave RS256. A rota só escreve a resposta que o controller devolveu. O controller e o caso de uso não importam Fastify nem Prisma.
 
-No `processor-worker`, o consumer AMQP em `infrastructure/messaging` decodifica `video.uploaded` e chama o controller. O controller entrega o envelope já decodificado a `ProcessUploadedVideoUseCase`. O caso de uso chama `ObjectStorage`, `FrameExtractor`, `EventPublisher`, `ArchiveBuilder` e `WorkDirectory`. As implementações — storage S3, ffmpeg, o publisher AMQP, o zip e o diretório temporário — foram criadas em `main/` e ficam em `infrastructure/gateways/` e `infrastructure/services/`. O consumer confirma, tenta de novo ou envia à dead-letter a partir do desfecho. O controller e o caso de uso não importam o SDK da AWS nem o cliente AMQP.
+No `processor-worker`, o consumer AMQP em `infrastructure/messaging` decodifica `video.uploaded` e chama `ProcessUploadedVideoUseCase`. O caso de uso chama `ObjectStorage`, `FrameExtractor`, `EventPublisher`, `ArchiveBuilder` e `WorkDirectory`. As implementações — storage S3, ffmpeg, o publisher AMQP, o zip e o diretório temporário — foram criadas em `main/` e ficam em `infrastructure/gateways/` e `infrastructure/services/`. O consumer confirma, tenta de novo ou envia à dead-letter a partir do desfecho. O caso de uso não importa o SDK da AWS nem o cliente AMQP.
 
 `domain/` fica no centro: entidades, value objects, eventos de domínio, erros e policies. Não conhece HTTP, banco, fila nem ffmpeg.
 
@@ -33,14 +33,14 @@ infrastructure  →  application  →  domain
 
 ### Layout
 
-| Pasta                 | Neste projeto                     | Conteúdo                                                                                                                               |
-| --------------------- | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/domain/`         | Entidades                         | Entidades, value objects, eventos de domínio, erros e policies                                                                         |
-| `src/application/`    | Casos de uso e interface adapters | Casos de uso, controllers da borda, tipos e as interfaces que os casos de uso declaram (`interfaces/{repositories,gateways,services}`) |
-| `src/infrastructure/` | Implementação e frameworks        | Classes que implementam essas interfaces, HTTP, messaging, config, observability                                                       |
-| `src/main/`           | Composition root                  | Wiring na inicialização                                                                                                                |
+| Pasta                 | Neste projeto                     | Conteúdo                                                                                                                                           |
+| --------------------- | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/domain/`         | Entidades                         | Entidades, value objects, eventos de domínio, erros e policies                                                                                     |
+| `src/application/`    | Casos de uso e interface adapters | Casos de uso, controllers HTTP do auth-service, tipos e as interfaces que os casos de uso declaram (`interfaces/{repositories,gateways,services}`) |
+| `src/infrastructure/` | Implementação e frameworks        | Classes que implementam essas interfaces, HTTP, messaging, config, observability                                                                   |
+| `src/main/`           | Composition root                  | Wiring na inicialização                                                                                                                            |
 
-O caso de uso fica em `application/useCases/`. O controller da borda fica em `application/controllers/`. A interface que o caso de uso declara fica em `application/interfaces/`. A classe que implementa essa interface fica em `infrastructure/`, com o framework. O caso de uso não importa a implementação. A implementação importa a interface.
+O caso de uso fica em `application/useCases/`. O controller HTTP do auth-service fica em `application/controllers/`. A interface que o caso de uso declara fica em `application/interfaces/`. A classe que implementa essa interface fica em `infrastructure/`, com o framework. O caso de uso não importa a implementação. A implementação importa a interface.
 
 A pasta não se chama `ports/`. O nome daqui é `interfaces/`.
 
@@ -70,7 +70,7 @@ Pastas em **camelCase**. Arquivos de classe e de interface usam o nome do tipo. 
 | Gateway     | `application/interfaces/gateways/ObjectStorage.ts`                                                                                    |
 | Service     | `application/interfaces/services/PasswordHasher.ts`                                                                                   |
 
-Cada subpasta pública de `domain/` e `application/` expõe um `index.ts` (barrel).
+`domain/index.ts` reexporta o que os outros módulos do serviço precisam do domínio. `application/` não tem barrel: cada caso de uso, controller e interface é importado pelo arquivo.
 
 ### Dependência externa
 

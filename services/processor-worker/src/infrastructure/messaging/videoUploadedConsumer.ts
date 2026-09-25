@@ -5,8 +5,8 @@ import { runWithCorrelationId } from '@zipframes/logger';
 import { parseSchema } from '@zipframes/schemas';
 import { videoUploadedEventSchema } from '@zipframes/schemas/video-service';
 
-import type { ProcessUploadedVideoController } from '../../application/controllers/ProcessUploadedVideoController.js';
 import type { EventPublisher } from '../../application/interfaces/gateways/EventPublisher.js';
+import type { ProcessUploadedVideoUseCase } from '../../application/useCases/processUploadedVideo/ProcessUploadedVideoUseCase.js';
 import { isProcessingError } from '../../domain/errors/processingError.js';
 
 export interface JobMetrics {
@@ -17,7 +17,7 @@ export interface JobMetrics {
 }
 
 export interface VideoUploadedConsumerDeps {
-  readonly controller: ProcessUploadedVideoController;
+  readonly processUploadedVideo: ProcessUploadedVideoUseCase;
   readonly events: EventPublisher;
   readonly retry: RetryOptions;
   readonly logger: Logger;
@@ -43,9 +43,14 @@ export const createVideoUploadedConsumer = (deps: VideoUploadedConsumerDeps): Co
 
     await runWithCorrelationId(event.correlationId, async () => {
       try {
-        const processingResult = await deps.controller.handle({
-          event,
+        const processingResult = await deps.processUploadedVideo.execute({
+          videoId: event.payload.videoId,
+          ownerId: event.payload.ownerId,
+          sourceKey: event.payload.sourceKey,
+          originalFileName: event.payload.originalFileName,
+          sizeBytes: event.payload.sizeBytes,
           attempt: context.attempt,
+          correlationId: event.correlationId,
         });
         if (processingResult === 'frames_packaged') {
           deps.metrics?.recordFramesPackaged(elapsedSeconds());

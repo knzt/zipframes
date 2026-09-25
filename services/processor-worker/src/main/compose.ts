@@ -5,7 +5,6 @@ import { createLogger } from '@zipframes/logger';
 import { createMetrics } from '@zipframes/telemetry';
 import { randomUUID } from 'node:crypto';
 
-import { ProcessUploadedVideoController } from '../application/controllers/ProcessUploadedVideoController.js';
 import { ProcessUploadedVideoUseCase } from '../application/useCases/processUploadedVideo/ProcessUploadedVideoUseCase.js';
 import { loadConfig } from '../infrastructure/config.js';
 import { createAmqpEventPublisher } from '../infrastructure/gateways/amqpEventPublisher.gateway.js';
@@ -49,31 +48,29 @@ export const startWorker = async (): Promise<{ stop: () => Promise<void> }> => {
     forcePathStyle: config.s3ForcePathStyle,
   });
 
-  const processUploadedVideoController = new ProcessUploadedVideoController(
-    new ProcessUploadedVideoUseCase(
-      storage,
-      createFfmpegFrameExtractor(),
-      createZipArchiveBuilder(),
-      createFsWorkDirectory(config.workDir),
-      events,
-      now,
-      config.processingTimeoutMs,
-      (job, error) => {
-        logger.error('failed to discard original object after processing', {
-          videoId: job.videoId,
-          sourceKey: job.sourceKey,
-          errorCode: error instanceof Error ? error.message : 'unknown',
-        });
-        technicalMetrics.messagesHandledTotal.inc({
-          destination: UPLOADED_QUEUE,
-          outcome: 'delete_original_failed',
-        });
-      },
-    ),
+  const processUploadedVideo = new ProcessUploadedVideoUseCase(
+    storage,
+    createFfmpegFrameExtractor(),
+    createZipArchiveBuilder(),
+    createFsWorkDirectory(config.workDir),
+    events,
+    now,
+    config.processingTimeoutMs,
+    (job, error) => {
+      logger.error('failed to discard original object after processing', {
+        videoId: job.videoId,
+        sourceKey: job.sourceKey,
+        errorCode: error instanceof Error ? error.message : 'unknown',
+      });
+      technicalMetrics.messagesHandledTotal.inc({
+        destination: UPLOADED_QUEUE,
+        outcome: 'delete_original_failed',
+      });
+    },
   );
 
   const consumer = createVideoUploadedConsumer({
-    controller: processUploadedVideoController,
+    processUploadedVideo,
     events,
     retry: {
       maxAttempts: config.maxAttempts,

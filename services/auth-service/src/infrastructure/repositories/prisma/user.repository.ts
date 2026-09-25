@@ -14,6 +14,19 @@ import { asPasswordHash } from '../../../domain/valueObjects/password.js';
 
 const UNIQUE_CONSTRAINT_VIOLATION = 'P2002';
 
+/**
+ * Only the users.email unique constraint means the address is taken.
+ * A collision on users.id or outbox.id is a different failure and must
+ * not be reported as a registration conflict.
+ */
+export const isEmailUniqueViolation = (error: Prisma.PrismaClientKnownRequestError): boolean => {
+  const target = error.meta?.target;
+  const fields = Array.isArray(target) ? target : typeof target === 'string' ? [target] : [];
+  return fields.some(
+    (field) => typeof field === 'string' && (field === 'email' || field.endsWith('_email_key')),
+  );
+};
+
 const toDomain = (row: {
   id: string;
   name: string;
@@ -71,7 +84,8 @@ export class PrismaUserRepository implements UserRepository {
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === UNIQUE_CONSTRAINT_VIOLATION
+        error.code === UNIQUE_CONSTRAINT_VIOLATION &&
+        isEmailUniqueViolation(error)
       ) {
         return err({ code: 'EMAIL_TAKEN' as const });
       }
