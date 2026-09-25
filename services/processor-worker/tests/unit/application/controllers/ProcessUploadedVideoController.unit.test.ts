@@ -37,7 +37,6 @@ describe('ProcessUploadedVideoController', () => {
       ownerId: event.payload.ownerId,
       sourceKey: event.payload.sourceKey,
       originalFileName: event.payload.originalFileName,
-      sizeBytes: event.payload.sizeBytes,
       attempt: 2,
       correlationId: event.correlationId,
     });

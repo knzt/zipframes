@@ -2,7 +2,7 @@ import { ConflictError, ValidationError, err, ok } from '@zipframes/core';
 import type { Result } from '@zipframes/core';
 
 import { userRegisteredFrom } from '../../../domain/events/userRegistered.js';
-import { registerUser } from '../../../domain/entities/user.js';
+import { registerUser, type User } from '../../../domain/entities/user.js';
 import { createPassword } from '../../../domain/valueObjects/password.js';
 import type { EventPublisher } from '../../interfaces/gateways/EventPublisher.js';
 import type { UserRepository } from '../../interfaces/repositories/UserRepository.js';
@@ -69,10 +69,7 @@ export class RegisterUserUseCase {
     });
   }
 
-  private async publishUserRegistered(
-    correlationId: string,
-    user: { readonly id: string; readonly name: string; readonly email: string },
-  ): Promise<void> {
+  private async publishUserRegistered(correlationId: string, user: User): Promise<void> {
     try {
       await this.eventPublisher.publish({
         eventType: 'user.registered',
