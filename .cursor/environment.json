@@ -1,0 +1,4 @@
+{
+  "name": "ZipFrames",
+  "install": "bash .cursor/install.sh"
+}
