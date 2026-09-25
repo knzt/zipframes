@@ -57,12 +57,13 @@ describe('RegisterUserController', () => {
       contentType: 'application/problem+json',
       body: { status: 400, correlationId },
     });
+    expect(response.body).not.toHaveProperty('detail');
   });
 
   it('returns 400 when the use case rejects the input', async () => {
     const execute = vi.fn(async () => ({
       ok: false as const,
-      error: new ValidationError('INVALID_INPUT', 'password needs a digit'),
+      error: new ValidationError('NO_DIGIT', 'password must contain at least one digit'),
     }));
     const controller = controllerFor(execute);
 
@@ -73,10 +74,10 @@ describe('RegisterUserController', () => {
 
     expect(response.status).toBe(400);
     expect(response.body).toMatchObject({
-      title: 'Invalid request body',
-      detail: 'password needs a digit',
+      title: 'password must contain at least one digit',
       correlationId,
     });
+    expect(response.body).not.toHaveProperty('detail');
   });
 
   it('returns 409 when the email is already registered', async () => {
@@ -95,9 +96,10 @@ describe('RegisterUserController', () => {
       status: 409,
       contentType: 'application/problem+json',
       body: {
-        title: 'Email already registered',
+        title: 'email is already registered',
         correlationId,
       },
     });
+    expect(response.body).not.toHaveProperty('detail');
   });
 });

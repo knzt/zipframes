@@ -2,7 +2,7 @@ import { ConflictError, ValidationError, err, ok } from '@zipframes/core';
 import type { Result } from '@zipframes/core';
 
 import { userRegisteredFrom } from '../../../domain/events/userRegistered.js';
-import { registerUser, type User } from '../../../domain/entities/user.js';
+import { User } from '../../../domain/entities/user.js';
 import { createPassword } from '../../../domain/valueObjects/password.js';
 import type { EventPublisher } from '../../interfaces/gateways/EventPublisher.js';
 import type { UserRepository } from '../../interfaces/repositories/UserRepository.js';
@@ -33,13 +33,13 @@ export class RegisterUserUseCase {
   ): Promise<Result<RegisterUserUseCaseOutput, RegisterUserUseCaseError>> {
     const password = createPassword(input.password);
     if (!password.ok) {
-      return err(new ValidationError('INVALID_INPUT', password.error.message));
+      return err(new ValidationError(password.error.code, password.error.message));
     }
 
     const passwordHash = await this.passwordHasher.hash(password.value);
     const now = this.clock.now();
 
-    const user = registerUser({
+    const user = User.register({
       id: this.idGenerator.next(),
       name: input.name,
       email: input.email,
@@ -47,7 +47,7 @@ export class RegisterUserUseCase {
       now,
     });
     if (!user.ok) {
-      return err(new ValidationError('INVALID_INPUT', user.error.message));
+      return err(new ValidationError(user.error.code, user.error.message));
     }
 
     const existing = await this.userRepository.findByEmail(user.value.email);
@@ -55,14 +55,14 @@ export class RegisterUserUseCase {
       return err(new ConflictError('EMAIL_TAKEN', 'email is already registered'));
     }
 
-    await this.userRepository.create(user.value);
+    const created = await this.userRepository.create(user.value);
 
-    await this.publishUserRegistered(input.correlationId, user.value);
+    await this.publishUserRegistered(input.correlationId, created);
 
     return ok({
-      userId: user.value.id,
-      name: user.value.name,
-      email: user.value.email,
+      userId: created.id,
+      name: created.name,
+      email: created.email,
     });
   }
 

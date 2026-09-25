@@ -35,12 +35,7 @@ export class RegisterUserController {
   async handle(request: RegisterUserControllerRequest): Promise<RegisterUserControllerResponse> {
     const body = parseSchema(authService.registerRequestSchema, request.body);
     if (!body.ok) {
-      return problemResponse(
-        400,
-        'Invalid request body',
-        body.error.message,
-        request.correlationId,
-      );
+      return problemResponse(400, body.error.message, undefined, request.correlationId);
     }
 
     const result = await this.registerUserUseCase.execute({
@@ -48,20 +43,12 @@ export class RegisterUserController {
       correlationId: request.correlationId,
     });
     if (!result.ok) {
-      if (result.error.statusCode === 409) {
-        return problemResponse(
-          409,
-          'Email already registered',
-          result.error.message,
-          request.correlationId,
-        );
-      }
       return problemResponse(
-        400,
-        'Invalid request body',
+        result.error.statusCode,
         result.error.message,
+        undefined,
         request.correlationId,
-      );
+      ) as RegisterUserControllerResponse;
     }
 
     return {

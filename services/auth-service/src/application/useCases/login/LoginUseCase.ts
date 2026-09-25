@@ -12,7 +12,7 @@ import type { LoginUseCaseError, LoginUseCaseInput, LoginUseCaseOutput } from '.
  * apart from "wrong password" would let anyone enumerate which addresses
  * are registered.
  */
-const invalidCredentials = new UnauthorizedError(
+export const invalidCredentials = new UnauthorizedError(
   'INVALID_CREDENTIALS',
   'invalid email or password',
 );

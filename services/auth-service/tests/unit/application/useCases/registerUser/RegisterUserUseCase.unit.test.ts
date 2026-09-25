@@ -85,7 +85,7 @@ describe('invalid input', () => {
   it('rejects a password that fails the policy', async () => {
     const result = await registerUser.execute({ ...validInput, password: 'curta1' });
 
-    expect(result).toMatchObject({ ok: false, error: { code: 'INVALID_INPUT' } });
+    expect(result).toMatchObject({ ok: false, error: { code: 'TOO_SHORT' } });
     expect(userRepository.users.size).toBe(0);
     expect(eventPublisher.published).toHaveLength(0);
   });
@@ -93,14 +93,14 @@ describe('invalid input', () => {
   it('rejects an invalid email', async () => {
     const result = await registerUser.execute({ ...validInput, email: 'not-an-email' });
 
-    expect(result).toMatchObject({ ok: false, error: { code: 'INVALID_INPUT' } });
+    expect(result).toMatchObject({ ok: false, error: { code: 'INVALID_EMAIL' } });
     expect(eventPublisher.published).toHaveLength(0);
   });
 
   it('rejects an invalid name', async () => {
     const result = await registerUser.execute({ ...validInput, name: 'H' });
 
-    expect(result).toMatchObject({ ok: false, error: { code: 'INVALID_INPUT' } });
+    expect(result).toMatchObject({ ok: false, error: { code: 'INVALID_NAME' } });
   });
 
   it('checks the password before hashing anything else', async () => {
@@ -135,7 +135,7 @@ describe('repository create failure', () => {
   it('propagates when create loses a concurrent registration race', async () => {
     const raceRepository = {
       findByEmail: async () => null,
-      create: async () => {
+      create: async (): Promise<never> => {
         throw new Error('unique constraint');
       },
     };

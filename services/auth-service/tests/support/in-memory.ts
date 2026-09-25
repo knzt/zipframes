@@ -21,9 +21,9 @@ export class InMemoryUserRepository implements UserRepository {
     return Promise.resolve(this.users.get(email) ?? null);
   }
 
-  create(user: User): Promise<void> {
+  create(user: User): Promise<User> {
     this.users.set(user.email, user);
-    return Promise.resolve();
+    return Promise.resolve(user);
   }
 }
 
