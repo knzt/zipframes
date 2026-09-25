@@ -1,4 +1,4 @@
-import { err, ok } from '@zipframes/core';
+import { ConflictError, ValidationError, err, ok } from '@zipframes/core';
 import type { Result } from '@zipframes/core';
 
 import { userRegisteredFrom } from '../../../domain/events/userRegistered.js';
@@ -33,7 +33,7 @@ export class RegisterUserUseCase {
   ): Promise<Result<RegisterUserUseCaseOutput, RegisterUserUseCaseError>> {
     const password = createPassword(input.password);
     if (!password.ok) {
-      return err({ code: 'INVALID_INPUT' as const, message: password.error.message });
+      return err(new ValidationError('INVALID_INPUT', password.error.message));
     }
 
     const passwordHash = await this.passwordHasher.hash(password.value);
@@ -47,31 +47,43 @@ export class RegisterUserUseCase {
       now,
     });
     if (!user.ok) {
-      return err({ code: 'INVALID_INPUT' as const, message: user.error.message });
+      return err(new ValidationError('INVALID_INPUT', user.error.message));
+    }
+
+    const existing = await this.userRepository.findByEmail(user.value.email);
+    if (existing !== null) {
+      return err(new ConflictError('EMAIL_TAKEN', 'email is already registered'));
     }
 
     const saved = await this.userRepository.save(user.value);
     if (!saved.ok) {
-      return err({ code: 'EMAIL_TAKEN' as const, message: 'email is already registered' });
+      return err(saved.error);
     }
 
-    try {
-      await this.eventPublisher.publish({
-        eventType: 'user.registered',
-        correlationId: input.correlationId,
-        payload: userRegisteredFrom(user.value),
-      });
-    } catch (error) {
-      this.onPublishFailed?.(error, {
-        userId: user.value.id,
-        correlationId: input.correlationId,
-      });
-    }
+    await this.publishUserRegistered(input.correlationId, user.value);
 
     return ok({
       userId: user.value.id,
       name: user.value.name,
       email: user.value.email,
     });
+  }
+
+  private async publishUserRegistered(
+    correlationId: string,
+    user: { readonly id: string; readonly name: string; readonly email: string },
+  ): Promise<void> {
+    try {
+      await this.eventPublisher.publish({
+        eventType: 'user.registered',
+        correlationId,
+        payload: userRegisteredFrom(user),
+      });
+    } catch (error) {
+      this.onPublishFailed?.(error, {
+        userId: user.id,
+        correlationId,
+      });
+    }
   }
 }

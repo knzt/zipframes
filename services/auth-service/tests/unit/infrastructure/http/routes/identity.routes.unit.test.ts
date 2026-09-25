@@ -206,7 +206,7 @@ describe('health and metrics', () => {
     const response = await app.inject({ method: 'GET', url: '/health/ready' });
 
     expect(response.statusCode).toBe(503);
-    expect(response.json()).toEqual({ status: 'not_ready', reason: 'amqp disconnected' });
+    expect(response.json()).toEqual({ status: 'not_ready', reason: 'dependency unavailable' });
   });
 
   it('answers 503 when the readiness check throws', async () => {
@@ -219,10 +219,10 @@ describe('health and metrics', () => {
     const response = await app.inject({ method: 'GET', url: '/health/ready' });
 
     expect(response.statusCode).toBe(503);
-    expect(response.json()).toEqual({ status: 'not_ready', reason: 'database down' });
+    expect(response.json()).toEqual({ status: 'not_ready', reason: 'dependency unavailable' });
   });
 
-  it('answers 503 with unknown when a dependency is down and gives no reason', async () => {
+  it('answers 503 with dependency unavailable when a dependency is down and gives no reason', async () => {
     const app = await buildApp({
       isReady: async () => ({ ready: false }),
     });
@@ -230,10 +230,10 @@ describe('health and metrics', () => {
     const response = await app.inject({ method: 'GET', url: '/health/ready' });
 
     expect(response.statusCode).toBe(503);
-    expect(response.json()).toEqual({ status: 'not_ready', reason: 'unknown' });
+    expect(response.json()).toEqual({ status: 'not_ready', reason: 'dependency unavailable' });
   });
 
-  it('answers 503 with unknown when the readiness check throws a non-error', async () => {
+  it('answers 503 with dependency unavailable when the readiness check throws a non-error', async () => {
     const app = await buildApp({
       isReady: async () => {
         // Exercises the branch where the failure is not an Error.
@@ -245,7 +245,7 @@ describe('health and metrics', () => {
     const response = await app.inject({ method: 'GET', url: '/health/ready' });
 
     expect(response.statusCode).toBe(503);
-    expect(response.json()).toEqual({ status: 'not_ready', reason: 'unknown' });
+    expect(response.json()).toEqual({ status: 'not_ready', reason: 'dependency unavailable' });
   });
 
   it('returns the prometheus text from the metrics registry', async () => {

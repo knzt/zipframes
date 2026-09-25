@@ -1,4 +1,5 @@
-import { isProcessingError, ProcessingError } from '../../../domain/errors/processingError.js';
+import { InfrastructureError, InternalServerError, TimeoutError } from '@zipframes/core';
+
 import { framesPackageObjectKey } from '../../../domain/policies/framesPackage.js';
 import type { EventPublisher } from '../../interfaces/gateways/EventPublisher.js';
 import type { FrameExtractor } from '../../interfaces/gateways/FrameExtractor.js';
@@ -66,27 +67,27 @@ const startDeadline = (timeoutMs: number): ProcessingDeadline => {
 
 const ensureStillRunning = (signal: AbortSignal): void => {
   if (signal.aborted) {
-    throw new ProcessingError(true, 'PROCESSING_TIMEOUT', 'processing was cancelled');
+    throw new TimeoutError('PROCESSING_TIMEOUT', 'processing was cancelled');
   }
 };
 
-const classifyFailure = (error: unknown, timedOut: boolean, timeoutMs: number): ProcessingError => {
-  if (timedOut && !isProcessingError(error)) {
-    return new ProcessingError(
-      true,
-      'PROCESSING_TIMEOUT',
-      `processing exceeded ${String(timeoutMs)}ms`,
-      error,
-    );
+const classifyFailure = (
+  error: unknown,
+  timedOut: boolean,
+  timeoutMs: number,
+): InfrastructureError => {
+  if (timedOut && !(error instanceof InfrastructureError)) {
+    return new TimeoutError('PROCESSING_TIMEOUT', `processing exceeded ${String(timeoutMs)}ms`, {
+      cause: error,
+    });
   }
-  if (isProcessingError(error)) {
+  if (error instanceof InfrastructureError) {
     return error;
   }
-  return new ProcessingError(
-    true,
+  return new InfrastructureError(
     'UNEXPECTED',
     error instanceof Error ? error.message : 'unexpected processing error',
-    error,
+    { cause: error },
   );
 };
 
@@ -156,7 +157,7 @@ export class ProcessUploadedVideoUseCase {
       signal,
     );
     if (framePaths.length === 0) {
-      throw new ProcessingError(false, 'NO_FRAMES', 'ffmpeg produced no frames');
+      throw new InternalServerError('NO_FRAMES', 'ffmpeg produced no frames');
     }
     return framePaths;
   }
@@ -199,7 +200,7 @@ export class ProcessUploadedVideoUseCase {
 
   private async publishMediaRejected(
     job: ProcessUploadedVideoUseCaseInput,
-    failure: ProcessingError,
+    failure: InfrastructureError,
   ): Promise<void> {
     await this.events.publish({
       eventType: 'video.failed',

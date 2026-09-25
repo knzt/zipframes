@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { loadConfig } from '../../../src/infrastructure/config.js';
+import { loadConfig } from '../../../src/infrastructure/loadEnvConfig.js';
 
 describe('loadConfig', () => {
   it('parses environment variables', () => {

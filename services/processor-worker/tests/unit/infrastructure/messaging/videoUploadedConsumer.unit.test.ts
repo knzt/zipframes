@@ -1,3 +1,4 @@
+import { UnavailableError } from '@zipframes/core';
 import type { ConsumeContext } from '@zipframes/communication';
 import { createLogger } from '@zipframes/logger';
 import { getCorrelationId } from '@zipframes/logger';
@@ -5,7 +6,6 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { ProcessUploadedVideoController } from '../../../../src/application/controllers/ProcessUploadedVideoController.js';
 import type { EventPublisher } from '../../../../src/application/interfaces/gateways/EventPublisher.js';
-import { ProcessingError } from '../../../../src/domain/errors/processingError.js';
 import { createVideoUploadedConsumer } from '../../../../src/infrastructure/messaging/videoUploadedConsumer.js';
 
 const ownerId = 'user-1';
@@ -83,7 +83,7 @@ describe('failure contract: video uploaded consumer', () => {
     const context = createContext(1);
     const consumer = createVideoUploadedConsumer({
       controller: controllerWith(async () => {
-        throw new ProcessingError(true, 'STORAGE_DOWNLOAD_FAILED', 'down');
+        throw new UnavailableError('STORAGE_DOWNLOAD_FAILED', 'down');
       }),
       events,
       retry: { maxAttempts: 5, baseDelayMs: 10, maxDelayMs: 100 },
@@ -105,7 +105,7 @@ describe('failure contract: video uploaded consumer', () => {
     const context = createContext(5);
     const consumer = createVideoUploadedConsumer({
       controller: controllerWith(async () => {
-        throw new ProcessingError(true, 'FFMPEG_FAILED', 'busy');
+        throw new UnavailableError('FFMPEG_FAILED', 'busy');
       }),
       events,
       retry: { maxAttempts: 5, baseDelayMs: 10, maxDelayMs: 100 },

@@ -1,9 +1,14 @@
-import { type PROBLEM_CONTENT_TYPE, problemResponse, type ProblemDetails } from '@zipframes/core';
+import {
+  ConflictError,
+  type PROBLEM_CONTENT_TYPE,
+  problemResponse,
+  type ProblemDetails,
+  ValidationError,
+} from '@zipframes/core';
 import { authService, parseSchema } from '@zipframes/schemas';
 import type { z } from 'zod';
 
 import type { RegisterUserUseCase } from '../useCases/registerUser/RegisterUserUseCase.js';
-import type { RegisterUserUseCaseError } from '../useCases/registerUser/registerUser.types.js';
 
 export interface RegisterUserControllerRequest {
   readonly body: unknown;
@@ -25,11 +30,6 @@ export type RegisterUserControllerResponse =
       readonly contentType: typeof PROBLEM_CONTENT_TYPE;
       readonly body: ProblemDetails;
     };
-
-const failures: Record<RegisterUserUseCaseError['code'], { status: 400 | 409; title: string }> = {
-  INVALID_INPUT: { status: 400, title: 'Invalid request body' },
-  EMAIL_TAKEN: { status: 409, title: 'Email already registered' },
-};
 
 /**
  * Turns an already decoded register request into a status and a body.
@@ -54,13 +54,23 @@ export class RegisterUserController {
       correlationId: request.correlationId,
     });
     if (!result.ok) {
-      const failure = failures[result.error.code];
-      return problemResponse(
-        failure.status,
-        failure.title,
-        result.error.message,
-        request.correlationId,
-      );
+      if (result.error instanceof ValidationError) {
+        return problemResponse(
+          400,
+          'Invalid request body',
+          result.error.message,
+          request.correlationId,
+        );
+      }
+      if (result.error instanceof ConflictError) {
+        return problemResponse(
+          409,
+          'Email already registered',
+          result.error.message,
+          request.correlationId,
+        );
+      }
+      throw new Error('unexpected register failure', { cause: result.error });
     }
 
     return {

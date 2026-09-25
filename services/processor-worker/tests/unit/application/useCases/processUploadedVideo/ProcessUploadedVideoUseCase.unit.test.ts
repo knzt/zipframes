@@ -1,3 +1,4 @@
+import { InternalServerError, TimeoutError, UnavailableError } from '@zipframes/core';
 import { describe, expect, it, vi } from 'vitest';
 
 import type {
@@ -5,7 +6,6 @@ import type {
   EventPublisherInput,
 } from '../../../../../src/application/interfaces/gateways/EventPublisher.js';
 import { ProcessUploadedVideoUseCase } from '../../../../../src/application/useCases/processUploadedVideo/ProcessUploadedVideoUseCase.js';
-import { ProcessingError } from '../../../../../src/domain/errors/processingError.js';
 
 const ownerId = 'user-1';
 const videoId = '11111111-1111-4111-8111-111111111111';
@@ -82,7 +82,7 @@ describe('ProcessUploadedVideoUseCase', () => {
     const processUploadedVideo = new ProcessUploadedVideoUseCase(
       {
         downloadToFile: async () => {
-          throw new ProcessingError(false, 'UNSUPPORTED_MEDIA', 'bad file');
+          throw new InternalServerError('UNSUPPORTED_MEDIA', 'bad file');
         },
         uploadFile: async () => undefined,
         deleteObject: async () => undefined,
@@ -109,7 +109,7 @@ describe('ProcessUploadedVideoUseCase', () => {
     const processUploadedVideo = new ProcessUploadedVideoUseCase(
       {
         downloadToFile: async () => {
-          throw new ProcessingError(true, 'STORAGE_DOWNLOAD_FAILED', 'down');
+          throw new UnavailableError('STORAGE_DOWNLOAD_FAILED', 'down');
         },
         uploadFile: async () => undefined,
         deleteObject: async () => undefined,
@@ -139,7 +139,7 @@ describe('ProcessUploadedVideoUseCase', () => {
         downloadToFile: async (_key, _path, signal) => {
           await new Promise<void>((_resolve, reject) => {
             signal?.addEventListener('abort', () => {
-              reject(new ProcessingError(true, 'PROCESSING_TIMEOUT', 'cancelled'));
+              reject(new TimeoutError('PROCESSING_TIMEOUT', 'cancelled'));
             });
           });
         },

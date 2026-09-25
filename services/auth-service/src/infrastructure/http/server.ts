@@ -2,7 +2,7 @@ import cors from '@fastify/cors';
 import Fastify from 'fastify';
 import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
-import { problemResponse } from '@zipframes/core';
+import { InternalServerError, problemResponse } from '@zipframes/core';
 import { createCorrelationId } from '@zipframes/logger';
 import type { Logger } from '@zipframes/logger';
 
@@ -57,7 +57,13 @@ export const createHttpServer = async (options: HttpServerOptions): Promise<Fast
       );
     }
 
-    options.logger.error('unhandled http error', { err: error, correlationId });
+    options.logger.error('unhandled http error', {
+      err:
+        error instanceof InternalServerError
+          ? error
+          : new InternalServerError('UNEXPECTED', error.message, { cause: error }),
+      correlationId,
+    });
     return sendProblem(
       reply,
       problemResponse(500, 'Internal server error', undefined, correlationId),

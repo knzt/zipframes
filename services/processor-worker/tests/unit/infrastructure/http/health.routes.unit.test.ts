@@ -87,11 +87,11 @@ describe('health and metrics HTTP', () => {
     try {
       const broker = await disconnected.inject({ method: 'GET', url: '/health/ready' });
       expect(broker.statusCode).toBe(503);
-      expect(broker.json()).toEqual({ status: 'not_ready', reason: 'amqp disconnected' });
+      expect(broker.json()).toEqual({ status: 'not_ready', reason: 'dependency unavailable' });
 
       const storage = await storageDown.inject({ method: 'GET', url: '/health/ready' });
       expect(storage.statusCode).toBe(503);
-      expect(storage.json()).toEqual({ status: 'not_ready', reason: 'bucket missing' });
+      expect(storage.json()).toEqual({ status: 'not_ready', reason: 'dependency unavailable' });
     } finally {
       await disconnected.close();
       await storageDown.close();
@@ -115,7 +115,7 @@ describe('health and metrics HTTP', () => {
     try {
       const response = await app.inject({ method: 'GET', url: '/health/ready' });
       expect(response.statusCode).toBe(503);
-      expect(response.json()).toEqual({ status: 'not_ready', reason: 'unknown' });
+      expect(response.json()).toEqual({ status: 'not_ready', reason: 'dependency unavailable' });
     } finally {
       await app.close();
     }
@@ -132,7 +132,7 @@ describe('health and metrics HTTP', () => {
     try {
       const broken = await failing.inject({ method: 'GET', url: '/metrics' });
       expect(broken.statusCode).toBe(500);
-      expect(broken.body).toBe('registry closed');
+      expect(broken.body).toBe('metrics unavailable');
     } finally {
       await failing.close();
     }
@@ -148,7 +148,7 @@ describe('health and metrics HTTP', () => {
     try {
       const bare = await bareFailure.inject({ method: 'GET', url: '/metrics' });
       expect(bare.statusCode).toBe(500);
-      expect(bare.body).toBe('metrics failed');
+      expect(bare.body).toBe('metrics unavailable');
     } finally {
       await bareFailure.close();
     }

@@ -7,7 +7,7 @@ import { randomUUID } from 'node:crypto';
 
 import { ProcessUploadedVideoController } from '../application/controllers/ProcessUploadedVideoController.js';
 import { ProcessUploadedVideoUseCase } from '../application/useCases/processUploadedVideo/ProcessUploadedVideoUseCase.js';
-import { loadConfig } from '../infrastructure/config.js';
+import { loadConfig } from '../infrastructure/loadEnvConfig.js';
 import { createAmqpEventPublisher } from '../infrastructure/gateways/amqpEventPublisher.gateway.js';
 import { createFfmpegFrameExtractor } from '../infrastructure/gateways/media/ffmpegFrameExtractor.gateway.js';
 import { createS3ObjectStorage } from '../infrastructure/gateways/storage/s3ObjectStorage.gateway.js';
@@ -105,6 +105,7 @@ export const startWorker = async (): Promise<{ stop: () => Promise<void> }> => {
   const healthServer = await startHealthServer(config.healthPort, {
     isReady,
     renderMetrics: () => technicalMetrics.registry.metrics(),
+    logger,
   });
 
   logger.info('processor-worker started', {

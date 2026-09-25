@@ -1,9 +1,9 @@
+import { UnavailableError } from '@zipframes/core';
 import archiver from 'archiver';
 import { createWriteStream } from 'node:fs';
 import path from 'node:path';
 
 import type { ArchiveBuilder } from '../../../application/interfaces/services/ArchiveBuilder.js';
-import { ProcessingError } from '../../../domain/errors/processingError.js';
 
 /** Zip with store method only — PNGs are already compressed. */
 export const createZipArchiveBuilder = (): ArchiveBuilder => ({
@@ -16,10 +16,10 @@ export const createZipArchiveBuilder = (): ArchiveBuilder => ({
         resolve();
       });
       packageStream.on('error', (error) => {
-        reject(new ProcessingError(true, 'ZIP_WRITE_FAILED', 'failed writing zip', error));
+        reject(new UnavailableError('ZIP_WRITE_FAILED', 'failed writing zip', { cause: error }));
       });
       archive.on('error', (error) => {
-        reject(new ProcessingError(true, 'ZIP_BUILD_FAILED', 'failed building zip', error));
+        reject(new UnavailableError('ZIP_BUILD_FAILED', 'failed building zip', { cause: error }));
       });
 
       archive.pipe(packageStream);

@@ -1,10 +1,14 @@
 import type { FastifyInstance } from 'fastify';
 
+import type { Logger } from '@zipframes/logger';
 import type { ReadinessResult } from '@zipframes/core';
+
+const DEPENDENCY_UNAVAILABLE = 'dependency unavailable';
 
 export interface HealthRoutesDependencies {
   readonly isReady: () => Promise<ReadinessResult>;
   readonly renderMetrics: () => Promise<string>;
+  readonly logger?: Logger;
 }
 
 const liveResponseSchema = {
@@ -72,11 +76,13 @@ export const registerHealthRoutes = (
           await reply.code(200).send({ status: 'ready' });
           return;
         }
-        await reply.code(503).send({ status: 'not_ready', reason: result.reason ?? 'unknown' });
+        deps.logger?.warn('readiness check reported not ready', { reason: result.reason });
+        await reply.code(503).send({ status: 'not_ready', reason: DEPENDENCY_UNAVAILABLE });
       } catch (error) {
+        deps.logger?.error('readiness check failed', { err: error });
         await reply.code(503).send({
           status: 'not_ready',
-          reason: error instanceof Error ? error.message : 'unknown',
+          reason: DEPENDENCY_UNAVAILABLE,
         });
       }
     },

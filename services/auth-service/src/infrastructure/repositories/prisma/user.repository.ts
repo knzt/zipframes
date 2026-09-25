@@ -1,17 +1,24 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
 
-import { err, ok } from '@zipframes/core';
+import { ConflictError, err, ok } from '@zipframes/core';
 import type { Result } from '@zipframes/core';
 
-import type {
-  UserRepository,
-  UserRepositoryEmailTakenError,
-} from '../../../application/interfaces/repositories/UserRepository.js';
+import type { UserRepository } from '../../../application/interfaces/repositories/UserRepository.js';
 import { asUserId } from '../../../domain/entities/user.js';
 import type { User } from '../../../domain/entities/user.js';
 import { asPasswordHash } from '../../../domain/valueObjects/password.js';
 
 const UNIQUE_CONSTRAINT_VIOLATION = 'P2002';
+
+const isEmailUniqueViolation = (target: unknown): boolean => {
+  if (Array.isArray(target)) {
+    return target.includes('email');
+  }
+  if (typeof target === 'string') {
+    return target === 'email' || target.endsWith('_email_key');
+  }
+  return false;
+};
 
 const toDomain = (row: {
   id: string;
@@ -37,7 +44,7 @@ export class PrismaUserRepository implements UserRepository {
     return row === null ? null : toDomain(row);
   }
 
-  async save(user: User): Promise<Result<void, UserRepositoryEmailTakenError>> {
+  async save(user: User): Promise<Result<void, ConflictError>> {
     try {
       await this.prisma.user.create({
         data: {
@@ -53,9 +60,10 @@ export class PrismaUserRepository implements UserRepository {
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === UNIQUE_CONSTRAINT_VIOLATION
+        error.code === UNIQUE_CONSTRAINT_VIOLATION &&
+        isEmailUniqueViolation(error.meta?.target)
       ) {
-        return err({ code: 'EMAIL_TAKEN' as const });
+        return err(new ConflictError('EMAIL_TAKEN', 'email is already registered'));
       }
       throw error;
     }

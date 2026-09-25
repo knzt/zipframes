@@ -1,3 +1,5 @@
+import type { UnauthorizedError } from '@zipframes/core';
+
 export interface LoginUseCaseInput {
   readonly email: string;
   readonly password: string;
@@ -9,7 +11,4 @@ export interface LoginUseCaseOutput {
   readonly expiresIn: number;
 }
 
-export interface LoginUseCaseError {
-  readonly code: 'INVALID_CREDENTIALS';
-  readonly message: string;
-}
+export type LoginUseCaseError = UnauthorizedError;

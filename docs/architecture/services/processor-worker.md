@@ -18,12 +18,12 @@ O consumer em `infrastructure/messaging` lê `video.uploaded` e chama `ProcessUp
 infrastructure  →  application  →  domain
 ```
 
-| Pasta                 | Neste projeto                     | Conteúdo                                                                  |
-| --------------------- | --------------------------------- | ------------------------------------------------------------------------- |
-| `src/domain/`         | Entidades                         | Value objects, policies e erros (`ProcessingError` com `retryable`)       |
-| `src/application/`    | Casos de uso e interface adapters | `ProcessUploadedVideoUseCase`, controller da mensagem, tipos e interfaces |
-| `src/infrastructure/` | Implementação e frameworks        | Consumer AMQP, S3/ffmpeg, zip/fs, health HTTP no Fastify                  |
-| `src/main/`           | Composition root                  | Wiring na inicialização                                                   |
+| Pasta                 | Neste projeto                     | Conteúdo                                                                                |
+| --------------------- | --------------------------------- | --------------------------------------------------------------------------------------- |
+| `src/domain/`         | Entidades                         | Value objects, policies e erros de domínio (`ValidationError` do core quando aplicável) |
+| `src/application/`    | Casos de uso e interface adapters | `ProcessUploadedVideoUseCase`, controller da mensagem, tipos e interfaces               |
+| `src/infrastructure/` | Implementação e frameworks        | Consumer AMQP, S3/ffmpeg, zip/fs, health HTTP no Fastify                                |
+| `src/main/`           | Composition root                  | Wiring na inicialização                                                                 |
 
 ### Gateway e service
 
@@ -40,7 +40,6 @@ infrastructure  →  application  →  domain
 processor-worker/src/
 ├── domain/
 │   ├── valueObjects/{processingJob,processingResult}.ts
-│   ├── errors/processingError.ts
 │   ├── policies/{frameExtractionPolicy,framesPackage}.ts
 │   └── index.ts
 ├── application/
@@ -62,7 +61,7 @@ processor-worker/src/
 │   │   └── filesystem/fsWorkDirectory.service.ts
 │   ├── messaging/{rabbitmqConnection,topology,videoUploadedConsumer}.ts
 │   ├── observability/jobMetrics.ts
-│   └── config.ts
+│   └── loadEnvConfig.ts
 └── main/{compose.ts,index.ts}
 ```
 

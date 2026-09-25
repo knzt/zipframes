@@ -1,3 +1,4 @@
+import { ConflictError, ValidationError } from '@zipframes/core';
 import { describe, expect, it, vi } from 'vitest';
 
 import { RegisterUserController } from '../../../../src/application/controllers/RegisterUserController.js';
@@ -61,7 +62,7 @@ describe('RegisterUserController', () => {
   it('returns 400 when the use case rejects the input', async () => {
     const execute = vi.fn(async () => ({
       ok: false as const,
-      error: { code: 'INVALID_INPUT' as const, message: 'password needs a digit' },
+      error: new ValidationError('INVALID_INPUT', 'password needs a digit'),
     }));
     const controller = controllerFor(execute);
 
@@ -81,7 +82,7 @@ describe('RegisterUserController', () => {
   it('returns 409 when the email is already registered', async () => {
     const execute = vi.fn(async () => ({
       ok: false as const,
-      error: { code: 'EMAIL_TAKEN' as const, message: 'email is already registered' },
+      error: new ConflictError('EMAIL_TAKEN', 'email is already registered'),
     }));
     const controller = controllerFor(execute);
 

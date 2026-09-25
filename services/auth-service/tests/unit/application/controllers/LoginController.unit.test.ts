@@ -1,3 +1,4 @@
+import { UnauthorizedError } from '@zipframes/core';
 import { describe, expect, it, vi } from 'vitest';
 
 import { LoginController } from '../../../../src/application/controllers/LoginController.js';
@@ -49,7 +50,7 @@ describe('LoginController', () => {
   it('returns 401 when the use case rejects the credentials', async () => {
     const execute = vi.fn(async () => ({
       ok: false as const,
-      error: { code: 'INVALID_CREDENTIALS' as const, message: 'invalid email or password' },
+      error: new UnauthorizedError('INVALID_CREDENTIALS', 'invalid email or password'),
     }));
     const controller = controllerFor(execute);
 

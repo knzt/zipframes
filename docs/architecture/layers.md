@@ -80,8 +80,10 @@ Tudo o que pertence a um ORM fica na pasta desse repository. Para o Prisma, sche
 
 ### Falhas: `Result` vs `throw`
 
-- **auth-service** usa `Result<T, E>` (`@zipframes/core`) nas interfaces e nos casos de uso.
-- **processor-worker** lança erros com `retryable: boolean` (mesmo vocabulário de `InfrastructureError` em `@zipframes/core`), adequado a um pipeline com I/O externo.
+- **auth-service** usa `Result<T, E>` (`@zipframes/core`) nas interfaces e nos casos de uso; o controller mapeia `ValidationError`, `ConflictError` e `UnauthorizedError` para problem+json (400, 409, 401). Falha inesperada que escapa vira `InternalServerError` → 500 sem `detail`.
+- **processor-worker** lança erros do `@zipframes/core` com `retryable` (`UnavailableError`, `TimeoutError`, `InternalServerError`, …). Na borda do consumer, um único critério: `isRetryableError`.
+
+Conflito de e-mail no cadastro: `findByEmail` + `ConflictError`; corrida no Postgres (`P2002` só em `email`) mapeia para o mesmo. Health/readiness e métricas do worker não expõem `error.message` — log interno e `reason` estável na resposta HTTP.
 
 Não misturar os dois estilos dentro do mesmo caso de uso.
 
