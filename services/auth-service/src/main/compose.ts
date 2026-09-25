@@ -44,11 +44,11 @@ export const startAuthService = async (): Promise<{ stop: () => Promise<void> }>
   const createId = (): string => randomUUID();
   const now = (): Date => new Date();
   const publisher = createPublisher(createAmqpPublishPort(amqp.channel));
-  const events = createAmqpEventPublisher({ publisher, createId, now });
+  const eventPublisher = createAmqpEventPublisher({ publisher, createId, now });
 
-  const users = new PrismaUserRepository(prisma);
-  const hasher = new BcryptPasswordHasher();
-  const tokens = new Rs256TokenIssuer({
+  const userRepository = new PrismaUserRepository(prisma);
+  const passwordHasher = new BcryptPasswordHasher();
+  const tokenIssuer = new Rs256TokenIssuer({
     keys,
     issuer: config.jwtIssuer,
     audience: config.jwtAudience,
@@ -56,11 +56,11 @@ export const startAuthService = async (): Promise<{ stop: () => Promise<void> }>
 
   const registerUserController = new RegisterUserController(
     new RegisterUserUseCase(
-      users,
-      hasher,
+      userRepository,
+      passwordHasher,
       { next: createId },
       { now },
-      events,
+      eventPublisher,
       (error, details) => {
         logger.error('failed to publish user.registered', {
           err: error,
@@ -70,7 +70,9 @@ export const startAuthService = async (): Promise<{ stop: () => Promise<void> }>
       },
     ),
   );
-  const loginController = new LoginController(new LoginUseCase(users, hasher, tokens));
+  const loginController = new LoginController(
+    new LoginUseCase(userRepository, passwordHasher, tokenIssuer),
+  );
 
   const prismaPing: Pingable = {
     ping: () => pingDatabase(prisma),

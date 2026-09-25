@@ -17,11 +17,11 @@ import type {
 
 export class RegisterUserUseCase {
   constructor(
-    private readonly users: UserRepository,
-    private readonly hasher: PasswordHasher,
-    private readonly ids: IdGenerator,
+    private readonly userRepository: UserRepository,
+    private readonly passwordHasher: PasswordHasher,
+    private readonly idGenerator: IdGenerator,
     private readonly clock: Clock,
-    private readonly events: EventPublisher,
+    private readonly eventPublisher: EventPublisher,
     private readonly onPublishFailed?: (
       error: unknown,
       details: { readonly userId: string; readonly correlationId: string },
@@ -36,11 +36,11 @@ export class RegisterUserUseCase {
       return err({ code: 'INVALID_INPUT' as const, message: password.error.message });
     }
 
-    const passwordHash = await this.hasher.hash(password.value);
+    const passwordHash = await this.passwordHasher.hash(password.value);
     const now = this.clock.now();
 
     const user = registerUser({
-      id: this.ids.next(),
+      id: this.idGenerator.next(),
       name: input.name,
       email: input.email,
       passwordHash,
@@ -50,13 +50,13 @@ export class RegisterUserUseCase {
       return err({ code: 'INVALID_INPUT' as const, message: user.error.message });
     }
 
-    const saved = await this.users.save(user.value);
+    const saved = await this.userRepository.save(user.value);
     if (!saved.ok) {
       return err({ code: 'EMAIL_TAKEN' as const, message: 'email is already registered' });
     }
 
     try {
-      await this.events.publish({
+      await this.eventPublisher.publish({
         eventType: 'user.registered',
         correlationId: input.correlationId,
         payload: userRegisteredFrom(user.value),

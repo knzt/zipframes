@@ -46,7 +46,7 @@ describe('POST /register against Postgres and RabbitMQ', () => {
     rabbit = await startRabbitMq();
     const amqpConnection = await connectAmqp(rabbit.amqpUri);
     await amqpConnection.channel.assertExchange(EVENT_EXCHANGE, 'topic', { durable: true });
-    const events = createAmqpEventPublisher({
+    const eventPublisher = createAmqpEventPublisher({
       publisher: createPublisher(createAmqpPublishPort(amqpConnection.channel)),
       createId: () => randomUUID(),
       now: () => new Date(),
@@ -62,7 +62,7 @@ describe('POST /register against Postgres and RabbitMQ', () => {
     outcomesQueue = outcomes.queue;
     await channel.bindQueue(outcomesQueue, EVENT_EXCHANGE, 'user.registered');
 
-    app = await startIdentityApp({ events });
+    app = await startIdentityApp({ eventPublisher });
   }, 180_000);
 
   afterAll(async () => {

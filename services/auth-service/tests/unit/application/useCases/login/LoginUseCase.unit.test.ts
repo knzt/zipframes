@@ -11,24 +11,24 @@ import {
   SequentialIds,
 } from '../../../../support/in-memory.js';
 
-let users: InMemoryUserRepository;
-let tokens: FakeTokenIssuer;
-let hasher: FakeHasher;
-let events: InMemoryEventPublisher;
+let userRepository: InMemoryUserRepository;
+let tokenIssuer: FakeTokenIssuer;
+let passwordHasher: FakeHasher;
+let eventPublisher: InMemoryEventPublisher;
 let login: LoginUseCase;
 
 beforeEach(async () => {
-  users = new InMemoryUserRepository();
-  tokens = new FakeTokenIssuer();
-  hasher = new FakeHasher();
-  events = new InMemoryEventPublisher();
+  userRepository = new InMemoryUserRepository();
+  tokenIssuer = new FakeTokenIssuer();
+  passwordHasher = new FakeHasher();
+  eventPublisher = new InMemoryEventPublisher();
 
   await new RegisterUserUseCase(
-    users,
-    hasher,
+    userRepository,
+    passwordHasher,
     new SequentialIds(),
     new FixedClock(),
-    events,
+    eventPublisher,
   ).execute({
     name: 'Hellen Santos',
     email: 'hellen@example.com',
@@ -36,8 +36,8 @@ beforeEach(async () => {
     correlationId: '0194f3a0-0000-7000-8000-000000000099',
   });
 
-  login = new LoginUseCase(users, hasher, tokens);
-  hasher.verifiedAgainst.length = 0;
+  login = new LoginUseCase(userRepository, passwordHasher, tokenIssuer);
+  passwordHasher.verifiedAgainst.length = 0;
 });
 
 describe('a successful login', () => {
@@ -51,8 +51,8 @@ describe('a successful login', () => {
       tokenType: 'Bearer',
       expiresIn: 900,
     });
-    expect(tokens.issuedFor).toEqual(['0194f3a0-0000-7000-8000-000000000001']);
-    expect(events.published).toHaveLength(1);
+    expect(tokenIssuer.issuedFor).toEqual(['0194f3a0-0000-7000-8000-000000000001']);
+    expect(eventPublisher.published).toHaveLength(1);
   });
 
   it('accepts the email in any case, since it is normalized', async () => {
@@ -73,14 +73,14 @@ describe('a failed login', () => {
     const result = await login.execute({ email: 'ninguem@example.com', password: 'senha1234' });
 
     expect(result).toMatchObject({ ok: false, error: { code: 'INVALID_CREDENTIALS' } });
-    expect(hasher.verifiedAgainst).toEqual([]);
+    expect(passwordHasher.verifiedAgainst).toEqual([]);
   });
 
   it('rejects a malformed email', async () => {
     const result = await login.execute({ email: 'not-an-email', password: 'senha1234' });
 
     expect(result).toMatchObject({ ok: false, error: { code: 'INVALID_CREDENTIALS' } });
-    expect(hasher.verifiedAgainst).toEqual([]);
+    expect(passwordHasher.verifiedAgainst).toEqual([]);
   });
 
   it('gives the identical error for a wrong password and an unknown email', async () => {
@@ -101,6 +101,6 @@ describe('a failed login', () => {
   it('issues no token when authentication fails', async () => {
     await login.execute({ email: 'hellen@example.com', password: 'errada123' });
 
-    expect(tokens.issuedFor).toHaveLength(0);
+    expect(tokenIssuer.issuedFor).toHaveLength(0);
   });
 });

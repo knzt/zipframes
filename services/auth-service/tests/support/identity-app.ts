@@ -36,7 +36,7 @@ export interface IdentityApp {
 }
 
 export interface IdentityAppOptions {
-  readonly events?: EventPublisher;
+  readonly eventPublisher?: EventPublisher;
 }
 
 export const startIdentityApp = async (options?: IdentityAppOptions): Promise<IdentityApp> => {
@@ -50,22 +50,24 @@ export const startIdentityApp = async (options?: IdentityAppOptions): Promise<Id
   const prisma = new PrismaClient({ datasources: { db: { url: postgres.connectionUri } } });
   const { privateKey } = await generateKeyPair('RS256');
   const keys = await deriveRsaKeyMaterial(await exportPKCS8(privateKey), 'key-1');
-  const users = new PrismaUserRepository(prisma);
-  const hasher = new BcryptPasswordHasher();
-  const events: EventPublisher = options?.events ?? { publish: () => Promise.resolve() };
+  const userRepository = new PrismaUserRepository(prisma);
+  const passwordHasher = new BcryptPasswordHasher();
+  const eventPublisher: EventPublisher = options?.eventPublisher ?? {
+    publish: () => Promise.resolve(),
+  };
   const registerUserController = new RegisterUserController(
     new RegisterUserUseCase(
-      users,
-      hasher,
+      userRepository,
+      passwordHasher,
       { next: () => randomUUID() },
       { now: () => new Date() },
-      events,
+      eventPublisher,
     ),
   );
   const loginController = new LoginController(
     new LoginUseCase(
-      users,
-      hasher,
+      userRepository,
+      passwordHasher,
       new Rs256TokenIssuer({ keys, issuer: ISSUER, audience: AUDIENCE }),
     ),
   );

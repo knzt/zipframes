@@ -9,13 +9,13 @@ describe('createAmqpEventPublisher', () => {
   it('publishes the envelope on the events exchange', async () => {
     const publish = vi.fn(async () => undefined);
     const publisher: Publisher = { publish };
-    const events = createAmqpEventPublisher({
+    const eventPublisher = createAmqpEventPublisher({
       publisher,
       createId: () => '44444444-4444-4444-8444-444444444444',
       now: () => new Date('2026-09-20T12:00:05.000Z'),
     });
 
-    await events.publish({
+    await eventPublisher.publish({
       eventType: 'user.registered',
       correlationId: '22222222-2222-4222-8222-222222222222',
       payload: {
