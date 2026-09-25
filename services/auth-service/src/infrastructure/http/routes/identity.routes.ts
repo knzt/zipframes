@@ -4,24 +4,14 @@ import type { JWK } from 'jose';
 import { createCorrelationId, runWithCorrelationId } from '@zipframes/logger';
 import { authService } from '@zipframes/schemas';
 
-import type { LoginControllerResponse } from '../../../application/controllers/login.controller.js';
-import type { RegisterUserControllerResponse } from '../../../application/controllers/registerUser.controller.js';
+import type { ControllerResponse } from '../../../application/controllers/ControllerResponse.js';
+import type { LoginController } from '../../../application/controllers/LoginController.js';
+import type { RegisterUserController } from '../../../application/controllers/RegisterUserController.js';
 import { jsonSchemaOf } from '../openapi.js';
 
-type ControllerResponse = RegisterUserControllerResponse | LoginControllerResponse;
-
-export interface IdentityControllerRequest {
-  readonly body: unknown;
-  readonly correlationId: string;
-}
-
-export type IdentityController = (
-  request: IdentityControllerRequest,
-) => Promise<ControllerResponse>;
-
 export interface IdentityRoutesDependencies {
-  readonly registerUser: IdentityController;
-  readonly login: IdentityController;
+  readonly registerUserController: RegisterUserController;
+  readonly loginController: LoginController;
   readonly jwks: readonly JWK[];
 }
 
@@ -90,7 +80,10 @@ export const registerIdentityRoutes = (
     async (request, reply) => {
       const correlationId = correlationIdOf(request.headers[CORRELATION_HEADER]);
       await runWithCorrelationId(correlationId, async () => {
-        const result = await deps.registerUser({ body: request.body, correlationId });
+        const result = await deps.registerUserController.handle({
+          body: request.body,
+          correlationId,
+        });
         await sendControllerResult(reply, result);
       });
     },
@@ -112,7 +105,10 @@ export const registerIdentityRoutes = (
     async (request, reply) => {
       const correlationId = correlationIdOf(request.headers[CORRELATION_HEADER]);
       await runWithCorrelationId(correlationId, async () => {
-        const result = await deps.login({ body: request.body, correlationId });
+        const result = await deps.loginController.handle({
+          body: request.body,
+          correlationId,
+        });
         await sendControllerResult(reply, result);
       });
     },

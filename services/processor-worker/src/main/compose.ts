@@ -5,8 +5,8 @@ import { createLogger } from '@zipframes/logger';
 import { createMetrics } from '@zipframes/telemetry';
 import { randomUUID } from 'node:crypto';
 
-import { makeProcessUploadedVideoController } from '../application/controllers/processUploadedVideo.controller.js';
-import { createProcessUploadedVideo } from '../application/useCases/processUploadedVideo/processUploadedVideo.useCase.js';
+import { ProcessUploadedVideoController } from '../application/controllers/ProcessUploadedVideoController.js';
+import { ProcessUploadedVideoUseCase } from '../application/useCases/processUploadedVideo/ProcessUploadedVideoUseCase.js';
 import { loadConfig } from '../infrastructure/config.js';
 import { createAmqpEventPublisher } from '../infrastructure/gateways/amqpEventPublisher.gateway.js';
 import { createFfmpegFrameExtractor } from '../infrastructure/gateways/media/ffmpegFrameExtractor.gateway.js';
@@ -49,29 +49,31 @@ export const startWorker = async (): Promise<{ stop: () => Promise<void> }> => {
     forcePathStyle: config.s3ForcePathStyle,
   });
 
-  const processUploadedVideo = createProcessUploadedVideo({
-    storage,
-    extractor: createFfmpegFrameExtractor(),
-    archive: createZipArchiveBuilder(),
-    workDirectory: createFsWorkDirectory(config.workDir),
-    events,
-    now,
-    processingTimeoutMs: config.processingTimeoutMs,
-    onDiscardOriginalFailed: (job, error) => {
-      logger.error('failed to discard original object after processing', {
-        videoId: job.videoId,
-        sourceKey: job.sourceKey,
-        errorCode: error instanceof Error ? error.message : 'unknown',
-      });
-      technicalMetrics.messagesHandledTotal.inc({
-        destination: UPLOADED_QUEUE,
-        outcome: 'delete_original_failed',
-      });
-    },
-  });
+  const processUploadedVideoController = new ProcessUploadedVideoController(
+    new ProcessUploadedVideoUseCase({
+      storage,
+      extractor: createFfmpegFrameExtractor(),
+      archive: createZipArchiveBuilder(),
+      workDirectory: createFsWorkDirectory(config.workDir),
+      events,
+      now,
+      processingTimeoutMs: config.processingTimeoutMs,
+      onDiscardOriginalFailed: (job, error) => {
+        logger.error('failed to discard original object after processing', {
+          videoId: job.videoId,
+          sourceKey: job.sourceKey,
+          errorCode: error instanceof Error ? error.message : 'unknown',
+        });
+        technicalMetrics.messagesHandledTotal.inc({
+          destination: UPLOADED_QUEUE,
+          outcome: 'delete_original_failed',
+        });
+      },
+    }),
+  );
 
   const consumer = createVideoUploadedConsumer({
-    handleUploadedVideo: makeProcessUploadedVideoController({ processUploadedVideo }),
+    controller: processUploadedVideoController,
     events,
     retry: {
       maxAttempts: config.maxAttempts,

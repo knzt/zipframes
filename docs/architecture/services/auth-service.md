@@ -12,18 +12,18 @@ Cadastrar usuário, autenticar e emitir JWT RS256. Publicar `user.registered` pe
 
 As dependências apontam para dentro. `application/` junta o que o livro separa: casos de uso e interface adapters. O caso de uso fica em `application/useCases/` e a interface que ele declara fica em `application/interfaces/`; a classe que implementa essa interface fica em `infrastructure/`. O raciocínio dessa decisão está em [layers.md](../layers.md).
 
-Neste serviço, a rota Fastify em `infrastructure/http` só liga o framework. O controller em `application/controllers/` recebe o pedido já traduzido, chama `registerUser` ou `login` e devolve status e corpo. O caso de uso só enxerga as interfaces que declara. `main/compose.ts` instancia o repositório Prisma, o hasher bcrypt e o emissor RS256, monta o caso de uso e entrega o controller à rota. O controller não importa Fastify, Prisma nem bcrypt.
+Neste serviço, a rota Fastify em `infrastructure/http` só liga o framework. O controller em `application/controllers/` recebe o pedido já traduzido, chama `RegisterUserUseCase` ou `LoginUseCase` e devolve status e corpo. O caso de uso só enxerga as interfaces que declara. `main/compose.ts` instancia o repositório Prisma, o hasher bcrypt e o emissor RS256, monta o caso de uso e entrega o controller à rota. O controller não importa Fastify, Prisma nem bcrypt.
 
 ```
 infrastructure  →  application  →  domain
 ```
 
-| Pasta                 | Neste projeto                     | O que há aqui                                                                                                                            |
-| --------------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/domain/`         | Entidades                         | `User`, `Password`, `UserRegistered`, erros de domínio                                                                                   |
-| `src/application/`    | Casos de uso e interface adapters | `registerUser`, `login`, controllers HTTP, DTOs e interfaces (`UserRepository`, `PasswordHasher`, `TokenIssuer`, `Clock`, `IdGenerator`) |
-| `src/infrastructure/` | Implementação e frameworks        | Prisma, bcrypt, RS256, rotas HTTP, relay do outbox, publisher AMQP                                                                       |
-| `src/main/`           | Composition root                  | `compose.ts` monta o grafo; `index.ts` trata sinal e shutdown                                                                            |
+| Pasta                 | Neste projeto                     | O que há aqui                                                                                                                                           |
+| --------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/domain/`         | Entidades                         | `User`, `Password`, `UserRegistered`, erros de domínio                                                                                                  |
+| `src/application/`    | Casos de uso e interface adapters | `RegisterUserUseCase`, `LoginUseCase`, controllers HTTP, tipos e interfaces (`UserRepository`, `PasswordHasher`, `TokenIssuer`, `Clock`, `IdGenerator`) |
+| `src/infrastructure/` | Implementação e frameworks        | Prisma, bcrypt, RS256, rotas HTTP, relay do outbox, publisher AMQP                                                                                      |
+| `src/main/`           | Composition root                  | `compose.ts` monta o grafo; `index.ts` trata sinal e shutdown                                                                                           |
 
 ## Mapa de pastas
 
@@ -36,10 +36,10 @@ auth-service/src/
 │   ├── errors/userErrors.ts
 │   └── index.ts
 ├── application/
-│   ├── controllers/{registerUser,login}.controller.ts
+│   ├── controllers/{RegisterUserController,LoginController,ControllerResponse}.ts
 │   ├── useCases/
-│   │   ├── registerUser/{registerUser.useCase.ts, registerUser.dto.ts}
-│   │   └── login/{login.useCase.ts, login.dto.ts}
+│   │   ├── registerUser/{RegisterUserUseCase.ts, registerUser.types.ts}
+│   │   └── login/{LoginUseCase.ts, login.types.ts}
 │   └── interfaces/
 │       ├── repositories/user.repository.ts
 │       └── services/{passwordHasher,tokenIssuer,clock,idGenerator}.service.ts
@@ -59,10 +59,10 @@ A persistência é repository: `UserRepository` em `application/interfaces/repos
 
 ## Casos de uso
 
-| Caso de uso    | O que faz                                                                                                                                                        |
-| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `registerUser` | Valida a senha, pede o hash, monta o `User`, monta o envelope de outbox (`id`, `version`, `correlationId`, payload) e persiste user + outbox na mesma transação. |
-| `login`        | Normaliza o e-mail, busca o usuário e compara a senha. E-mail desconhecido responde `INVALID_CREDENTIALS` sem comparar hash. Emite o token.                      |
+| Caso de uso           | O que faz                                                                                                                                                        |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `RegisterUserUseCase` | Valida a senha, pede o hash, monta o `User`, monta o envelope de outbox (`id`, `version`, `correlationId`, payload) e persiste user + outbox na mesma transação. |
+| `LoginUseCase`        | Normaliza o e-mail, busca o usuário e compara a senha. E-mail desconhecido responde `INVALID_CREDENTIALS` sem comparar hash. Emite o token.                      |
 
 Falha de login é sempre `INVALID_CREDENTIALS`. Erros de aplicação usam `Result` de `@zipframes/core`. Erros HTTP usam Problem Details (RFC 9457) via `@zipframes/core`.
 

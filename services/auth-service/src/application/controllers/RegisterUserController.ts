@@ -1,26 +1,22 @@
 import { PROBLEM_CONTENT_TYPE, problemDetails } from '@zipframes/core';
 import { authService, parseSchema } from '@zipframes/schemas';
 
-import type { makeRegisterUser } from '../useCases/registerUser/registerUser.useCase.js';
+import type { RegisterUserUseCase } from '../useCases/registerUser/RegisterUserUseCase.js';
+import type { ControllerResponse } from './ControllerResponse.js';
 
-export interface RegisterUserControllerRequest {
+export interface RegisterUserRequest {
   readonly body: unknown;
   readonly correlationId: string;
-}
-
-export interface RegisterUserControllerResponse {
-  readonly status: number;
-  readonly body: unknown;
-  readonly contentType?: string;
 }
 
 /**
  * Turns an already decoded register request into a status and a body.
  * The Fastify route only forwards this result.
  */
-export const makeRegisterUserController =
-  (registerUser: ReturnType<typeof makeRegisterUser>) =>
-  async (request: RegisterUserControllerRequest): Promise<RegisterUserControllerResponse> => {
+export class RegisterUserController {
+  constructor(private readonly useCase: RegisterUserUseCase) {}
+
+  async handle(request: RegisterUserRequest): Promise<ControllerResponse> {
     const body = parseSchema(authService.registerRequestSchema, request.body);
     if (!body.ok) {
       return {
@@ -35,7 +31,10 @@ export const makeRegisterUserController =
       };
     }
 
-    const result = await registerUser({ ...body.value, correlationId: request.correlationId });
+    const result = await this.useCase.execute({
+      ...body.value,
+      correlationId: request.correlationId,
+    });
     if (!result.ok) {
       const status = result.error.code === 'EMAIL_TAKEN' ? 409 : 400;
       const title =
@@ -51,4 +50,5 @@ export const makeRegisterUserController =
       status: 201,
       body: authService.registerResponseSchema.parse(result.value),
     };
-  };
+  }
+}

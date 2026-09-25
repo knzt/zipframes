@@ -1,17 +1,12 @@
 import { PROBLEM_CONTENT_TYPE, problemDetails } from '@zipframes/core';
 import { authService, parseSchema } from '@zipframes/schemas';
 
-import type { makeLogin } from '../useCases/login/login.useCase.js';
+import type { LoginUseCase } from '../useCases/login/LoginUseCase.js';
+import type { ControllerResponse } from './ControllerResponse.js';
 
-export interface LoginControllerRequest {
+export interface LoginRequest {
   readonly body: unknown;
   readonly correlationId: string;
-}
-
-export interface LoginControllerResponse {
-  readonly status: number;
-  readonly body: unknown;
-  readonly contentType?: string;
 }
 
 /**
@@ -19,9 +14,10 @@ export interface LoginControllerResponse {
  * A malformed body and a failed login share the same 401, so the response
  * does not reveal which emails exist.
  */
-export const makeLoginController =
-  (login: ReturnType<typeof makeLogin>) =>
-  async (request: LoginControllerRequest): Promise<LoginControllerResponse> => {
+export class LoginController {
+  constructor(private readonly useCase: LoginUseCase) {}
+
+  async handle(request: LoginRequest): Promise<ControllerResponse> {
     const body = parseSchema(authService.loginRequestSchema, request.body);
     if (!body.ok) {
       return {
@@ -31,7 +27,7 @@ export const makeLoginController =
       };
     }
 
-    const result = await login(body.value);
+    const result = await this.useCase.execute(body.value);
     if (!result.ok) {
       return {
         status: 401,
@@ -44,4 +40,5 @@ export const makeLoginController =
       status: 200,
       body: authService.loginResponseSchema.parse(result.value),
     };
-  };
+  }
+}

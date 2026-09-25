@@ -10,10 +10,10 @@ import type { PostgresHandle } from '@zipframes/test-toolkit';
 import { exportPKCS8, generateKeyPair } from 'jose';
 import type { JWK } from 'jose';
 
-import { makeLoginController } from '../../src/application/controllers/login.controller.js';
-import { makeRegisterUserController } from '../../src/application/controllers/registerUser.controller.js';
-import { makeLogin } from '../../src/application/useCases/login/login.useCase.js';
-import { makeRegisterUser } from '../../src/application/useCases/registerUser/registerUser.useCase.js';
+import { LoginController } from '../../src/application/controllers/LoginController.js';
+import { RegisterUserController } from '../../src/application/controllers/RegisterUserController.js';
+import { LoginUseCase } from '../../src/application/useCases/login/LoginUseCase.js';
+import { RegisterUserUseCase } from '../../src/application/useCases/registerUser/RegisterUserUseCase.js';
 import { createHttpServer } from '../../src/infrastructure/http/server.js';
 import { registerIdentityRoutes } from '../../src/infrastructure/http/routes/identity.routes.js';
 import { PrismaUserRepository } from '../../src/infrastructure/repositories/prisma/user.repository.js';
@@ -46,22 +46,26 @@ export const startIdentityApp = async (): Promise<IdentityApp> => {
   const keys = await deriveRsaKeyMaterial(await exportPKCS8(privateKey), 'key-1');
   const users = new PrismaUserRepository(prisma);
   const hasher = new BcryptPasswordHasher();
-  const registerUser = makeRegisterUser({
-    users,
-    hasher,
-    ids: { next: () => randomUUID() },
-    clock: { now: () => new Date() },
-  });
-  const login = makeLogin({
-    users,
-    hasher,
-    tokens: new Rs256TokenIssuer({ keys, issuer: ISSUER, audience: AUDIENCE }),
-  });
+  const registerUserController = new RegisterUserController(
+    new RegisterUserUseCase({
+      users,
+      hasher,
+      ids: { next: () => randomUUID() },
+      clock: { now: () => new Date() },
+    }),
+  );
+  const loginController = new LoginController(
+    new LoginUseCase({
+      users,
+      hasher,
+      tokens: new Rs256TokenIssuer({ keys, issuer: ISSUER, audience: AUDIENCE }),
+    }),
+  );
 
   const app = await createHttpServer({ corsOrigin: '*' });
   registerIdentityRoutes(app, {
-    registerUser: makeRegisterUserController(registerUser),
-    login: makeLoginController(login),
+    registerUserController,
+    loginController,
     jwks: [keys.publicJwk],
   });
   await app.listen({ port: 0, host: '127.0.0.1' });

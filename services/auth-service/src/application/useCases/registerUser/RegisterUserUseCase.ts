@@ -4,27 +4,42 @@ import type { Result } from '@zipframes/core';
 import { userRegisteredFrom } from '../../../domain/events/userRegistered.js';
 import { registerUser } from '../../../domain/entities/user.js';
 import { createPassword } from '../../../domain/valueObjects/password.js';
-import type { OutboxEventWrite } from '../../interfaces/repositories/user.repository.js';
+import type {
+  OutboxEventWrite,
+  UserRepository,
+} from '../../interfaces/repositories/user.repository.js';
+import type { Clock } from '../../interfaces/services/clock.service.js';
+import type { IdGenerator } from '../../interfaces/services/idGenerator.service.js';
+import type { PasswordHasher } from '../../interfaces/services/passwordHasher.service.js';
 import type {
   RegisterUserCommand,
-  RegisterUserDependencies,
   RegisterUserError,
   RegisterUserResult,
-} from './registerUser.dto.js';
+} from './registerUser.types.js';
 
-export const makeRegisterUser =
-  (deps: RegisterUserDependencies) =>
-  async (command: RegisterUserCommand): Promise<Result<RegisterUserResult, RegisterUserError>> => {
+export class RegisterUserUseCase {
+  constructor(
+    private readonly deps: {
+      readonly users: UserRepository;
+      readonly hasher: PasswordHasher;
+      readonly ids: IdGenerator;
+      readonly clock: Clock;
+    },
+  ) {}
+
+  async execute(
+    command: RegisterUserCommand,
+  ): Promise<Result<RegisterUserResult, RegisterUserError>> {
     const password = createPassword(command.password);
     if (!password.ok) {
       return err({ code: 'INVALID_INPUT' as const, message: password.error.message });
     }
 
-    const passwordHash = await deps.hasher.hash(password.value);
-    const now = deps.clock.now();
+    const passwordHash = await this.deps.hasher.hash(password.value);
+    const now = this.deps.clock.now();
 
     const user = registerUser({
-      id: deps.ids.next(),
+      id: this.deps.ids.next(),
       name: command.name,
       email: command.email,
       passwordHash,
@@ -36,7 +51,7 @@ export const makeRegisterUser =
 
     const registered = userRegisteredFrom(user.value);
     const outbox: OutboxEventWrite = {
-      id: deps.ids.next(),
+      id: this.deps.ids.next(),
       aggregateType: 'User',
       aggregateId: user.value.id,
       eventType: 'user.registered',
@@ -46,7 +61,7 @@ export const makeRegisterUser =
       occurredAt: user.value.createdAt,
     };
 
-    const saved = await deps.users.save(user.value, outbox);
+    const saved = await this.deps.users.save(user.value, outbox);
     if (!saved.ok) {
       return err({ code: 'EMAIL_TAKEN' as const, message: 'email is already registered' });
     }
@@ -56,4 +71,5 @@ export const makeRegisterUser =
       name: user.value.name,
       email: user.value.email,
     });
-  };
+  }
+}

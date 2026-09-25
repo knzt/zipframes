@@ -9,7 +9,7 @@ export default defineConfig({
       exclude: [
         'src/main/**',
         'src/application/interfaces/**',
-        'src/application/useCases/**/*.dto.ts',
+        'src/application/useCases/**/*.types.ts',
         'src/domain/index.ts',
         'src/domain/valueObjects/**',
         'src/infrastructure/gateways/storage/**',

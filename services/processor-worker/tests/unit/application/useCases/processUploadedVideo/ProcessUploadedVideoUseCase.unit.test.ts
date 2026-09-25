@@ -4,7 +4,7 @@ import type {
   EventPublisher,
   ProcessingPublication,
 } from '../../../../../src/application/interfaces/gateways/eventPublisher.gateway.js';
-import { createProcessUploadedVideo } from '../../../../../src/application/useCases/processUploadedVideo/processUploadedVideo.useCase.js';
+import { ProcessUploadedVideoUseCase } from '../../../../../src/application/useCases/processUploadedVideo/ProcessUploadedVideoUseCase.js';
 import { ProcessingError } from '../../../../../src/domain/errors/processingError.js';
 
 const ownerId = 'user-1';
@@ -32,7 +32,7 @@ const publishedTypes = (events: { readonly publish: ReturnType<typeof vi.fn> }):
     return event.eventType;
   });
 
-describe('processUploadedVideo', () => {
+describe('ProcessUploadedVideoUseCase', () => {
   it('publishes started and processed, then deletes the source', async () => {
     const events = eventsDouble();
     const downloadToFile = vi.fn(async () => undefined);
@@ -43,7 +43,7 @@ describe('processUploadedVideo', () => {
     const createTempDir = vi.fn(async () => '/tmp/job');
     const removeDir = vi.fn(async () => undefined);
 
-    const processUploadedVideo = createProcessUploadedVideo({
+    const processUploadedVideo = new ProcessUploadedVideoUseCase({
       storage: { downloadToFile, uploadFile, deleteObject },
       extractor: { extract },
       archive: { createZip },
@@ -53,7 +53,7 @@ describe('processUploadedVideo', () => {
       processingTimeoutMs: 60_000,
     });
 
-    const processingResult = await processUploadedVideo(job);
+    const processingResult = await processUploadedVideo.execute(job);
 
     expect(processingResult).toBe('frames_packaged');
     expect(downloadToFile).toHaveBeenCalledWith(
@@ -79,7 +79,7 @@ describe('processUploadedVideo', () => {
 
   it('publishes video.failed on unprocessable media and returns media_rejected', async () => {
     const events = eventsDouble();
-    const processUploadedVideo = createProcessUploadedVideo({
+    const processUploadedVideo = new ProcessUploadedVideoUseCase({
       storage: {
         downloadToFile: async () => {
           throw new ProcessingError(false, 'UNSUPPORTED_MEDIA', 'bad file');
@@ -98,7 +98,7 @@ describe('processUploadedVideo', () => {
       processingTimeoutMs: 60_000,
     });
 
-    const processingResult = await processUploadedVideo(job);
+    const processingResult = await processUploadedVideo.execute(job);
 
     expect(processingResult).toBe('media_rejected');
     expect(publishedTypes(events)).toEqual(['video.processing.started', 'video.failed']);
@@ -106,7 +106,7 @@ describe('processUploadedVideo', () => {
 
   it('rethrows retryable errors for the consumer to retry', async () => {
     const events = eventsDouble();
-    const processUploadedVideo = createProcessUploadedVideo({
+    const processUploadedVideo = new ProcessUploadedVideoUseCase({
       storage: {
         downloadToFile: async () => {
           throw new ProcessingError(true, 'STORAGE_DOWNLOAD_FAILED', 'down');
@@ -125,7 +125,7 @@ describe('processUploadedVideo', () => {
       processingTimeoutMs: 60_000,
     });
 
-    await expect(processUploadedVideo(job)).rejects.toMatchObject({
+    await expect(processUploadedVideo.execute(job)).rejects.toMatchObject({
       retryable: true,
       code: 'STORAGE_DOWNLOAD_FAILED',
     });
@@ -134,7 +134,7 @@ describe('processUploadedVideo', () => {
 
   it('aborts via AbortSignal on timeout and cleans up the work dir', async () => {
     const removeDir = vi.fn(async () => undefined);
-    const processUploadedVideo = createProcessUploadedVideo({
+    const processUploadedVideo = new ProcessUploadedVideoUseCase({
       storage: {
         downloadToFile: async (_key, _path, signal) => {
           await new Promise<void>((_resolve, reject) => {
@@ -157,13 +157,15 @@ describe('processUploadedVideo', () => {
       processingTimeoutMs: 20,
     });
 
-    await expect(processUploadedVideo(job)).rejects.toMatchObject({ code: 'PROCESSING_TIMEOUT' });
+    await expect(processUploadedVideo.execute(job)).rejects.toMatchObject({
+      code: 'PROCESSING_TIMEOUT',
+    });
     expect(removeDir).toHaveBeenCalledWith('/tmp/job');
   });
 
   it('invokes onDiscardOriginalFailed when cleanup delete fails', async () => {
     const onDiscardOriginalFailed = vi.fn();
-    const processUploadedVideo = createProcessUploadedVideo({
+    const processUploadedVideo = new ProcessUploadedVideoUseCase({
       storage: {
         downloadToFile: async () => undefined,
         uploadFile: async () => undefined,
@@ -183,7 +185,7 @@ describe('processUploadedVideo', () => {
       onDiscardOriginalFailed,
     });
 
-    await processUploadedVideo(job);
+    await processUploadedVideo.execute(job);
 
     expect(onDiscardOriginalFailed).toHaveBeenCalledOnce();
   });

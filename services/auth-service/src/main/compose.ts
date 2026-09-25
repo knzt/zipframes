@@ -6,10 +6,10 @@ import type { Pingable } from '@zipframes/core';
 import { createLogger } from '@zipframes/logger';
 import { createMetrics } from '@zipframes/telemetry';
 
-import { makeLoginController } from '../application/controllers/login.controller.js';
-import { makeRegisterUserController } from '../application/controllers/registerUser.controller.js';
-import { makeLogin } from '../application/useCases/login/login.useCase.js';
-import { makeRegisterUser } from '../application/useCases/registerUser/registerUser.useCase.js';
+import { LoginController } from '../application/controllers/LoginController.js';
+import { RegisterUserController } from '../application/controllers/RegisterUserController.js';
+import { LoginUseCase } from '../application/useCases/login/LoginUseCase.js';
+import { RegisterUserUseCase } from '../application/useCases/registerUser/RegisterUserUseCase.js';
 import { loadConfig } from '../infrastructure/config.js';
 import { createHttpServer } from '../infrastructure/http/server.js';
 import { registerHealthRoutes } from '../infrastructure/http/routes/health.routes.js';
@@ -50,13 +50,15 @@ export const startAuthService = async (): Promise<{ stop: () => Promise<void> }>
     audience: config.jwtAudience,
   });
 
-  const registerUser = makeRegisterUser({
-    users,
-    hasher,
-    ids: { next: () => randomUUID() },
-    clock: { now: () => new Date() },
-  });
-  const login = makeLogin({ users, hasher, tokens });
+  const registerUserController = new RegisterUserController(
+    new RegisterUserUseCase({
+      users,
+      hasher,
+      ids: { next: () => randomUUID() },
+      clock: { now: () => new Date() },
+    }),
+  );
+  const loginController = new LoginController(new LoginUseCase({ users, hasher, tokens }));
 
   const relay = createOutboxRelay({
     prisma,
@@ -102,8 +104,8 @@ export const startAuthService = async (): Promise<{ stop: () => Promise<void> }>
 
   const app = await createHttpServer({ corsOrigin: config.corsOrigin });
   registerIdentityRoutes(app, {
-    registerUser: makeRegisterUserController(registerUser),
-    login: makeLoginController(login),
+    registerUserController,
+    loginController,
     jwks: [keys.publicJwk],
   });
   registerHealthRoutes(app, {

@@ -12,9 +12,9 @@ A interface fica ao lado do caso de uso, e não ao lado da classe do Prisma, par
 
 `main/` é o composition root. É o único código que conhece todas as pastas, e só na inicialização. Ele constrói os objetos de infraestrutura e entrega essas implementações ao caso de uso. Depois disso, um pedido não procura a infraestrutura: ela já foi injetada.
 
-No `auth-service`, o Fastify recebe o HTTP em `infrastructure/http`. A rota lê o corpo e o correlation id e chama o controller em `application/controllers/`. O controller valida o pedido, chama `registerUser` ou `login` e devolve status e corpo. O caso de uso chama `UserRepository`, `PasswordHasher`, `TokenIssuer` e as outras interfaces que declarou. Essas chamadas caem nos objetos injetados — `PrismaUserRepository`, `BcryptPasswordHasher`, `Rs256TokenIssuer` — e são eles que falam com o Postgres, o bcrypt e a chave RS256. A rota só escreve a resposta que o controller devolveu. O controller e o caso de uso não importam Fastify nem Prisma.
+No `auth-service`, o Fastify recebe o HTTP em `infrastructure/http`. A rota lê o corpo e o correlation id e chama o controller em `application/controllers/`. O controller valida o pedido, chama `RegisterUserUseCase` ou `LoginUseCase` e devolve status e corpo. O caso de uso chama `UserRepository`, `PasswordHasher`, `TokenIssuer` e as outras interfaces que declarou. Essas chamadas caem nos objetos injetados — `PrismaUserRepository`, `BcryptPasswordHasher`, `Rs256TokenIssuer` — e são eles que falam com o Postgres, o bcrypt e a chave RS256. A rota só escreve a resposta que o controller devolveu. O controller e o caso de uso não importam Fastify nem Prisma.
 
-No `processor-worker`, o consumer AMQP em `infrastructure/messaging` decodifica `video.uploaded` e chama o controller. O controller entrega o envelope já decodificado a `processUploadedVideo`. O caso de uso chama `ObjectStorage`, `FrameExtractor`, `EventPublisher`, `ArchiveBuilder` e `WorkDirectory`. As implementações — storage S3, ffmpeg, o publisher AMQP, o zip e o diretório temporário — foram criadas em `main/` e ficam em `infrastructure/gateways/` e `infrastructure/services/`. O consumer confirma, tenta de novo ou envia à dead-letter a partir do desfecho. O controller e o caso de uso não importam o SDK da AWS nem o cliente AMQP.
+No `processor-worker`, o consumer AMQP em `infrastructure/messaging` decodifica `video.uploaded` e chama o controller. O controller entrega o envelope já decodificado a `ProcessUploadedVideoUseCase`. O caso de uso chama `ObjectStorage`, `FrameExtractor`, `EventPublisher`, `ArchiveBuilder` e `WorkDirectory`. As implementações — storage S3, ffmpeg, o publisher AMQP, o zip e o diretório temporário — foram criadas em `main/` e ficam em `infrastructure/gateways/` e `infrastructure/services/`. O consumer confirma, tenta de novo ou envia à dead-letter a partir do desfecho. O controller e o caso de uso não importam o SDK da AWS nem o cliente AMQP.
 
 `domain/` fica no centro: entidades, value objects, eventos de domínio, erros e policies. Não conhece HTTP, banco, fila nem ffmpeg.
 
@@ -33,12 +33,12 @@ infrastructure  →  application  →  domain
 
 ### Layout
 
-| Pasta                 | Neste projeto                     | Conteúdo                                                                                                                              |
-| --------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/domain/`         | Entidades                         | Entidades, value objects, eventos de domínio, erros e policies                                                                        |
-| `src/application/`    | Casos de uso e interface adapters | Casos de uso, controllers da borda, DTOs e as interfaces que os casos de uso declaram (`interfaces/{repositories,gateways,services}`) |
-| `src/infrastructure/` | Implementação e frameworks        | Classes que implementam essas interfaces, HTTP, messaging, config, observability                                                      |
-| `src/main/`           | Composition root                  | Wiring na inicialização                                                                                                               |
+| Pasta                 | Neste projeto                     | Conteúdo                                                                                                                               |
+| --------------------- | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/domain/`         | Entidades                         | Entidades, value objects, eventos de domínio, erros e policies                                                                         |
+| `src/application/`    | Casos de uso e interface adapters | Casos de uso, controllers da borda, tipos e as interfaces que os casos de uso declaram (`interfaces/{repositories,gateways,services}`) |
+| `src/infrastructure/` | Implementação e frameworks        | Classes que implementam essas interfaces, HTTP, messaging, config, observability                                                       |
+| `src/main/`           | Composition root                  | Wiring na inicialização                                                                                                                |
 
 O caso de uso fica em `application/useCases/`. O controller da borda fica em `application/controllers/`. A interface que o caso de uso declara fica em `application/interfaces/`. A classe que implementa essa interface fica em `infrastructure/`, com o framework. O caso de uso não importa a implementação. A implementação importa a interface.
 
@@ -58,15 +58,16 @@ Três categorias em `application/interfaces/`, espelhadas em `infrastructure/`:
 
 #### Nomenclatura
 
-Pastas e arquivos em **camelCase**, com marcador de tipo no arquivo quando o tipo não é óbvio só pela pasta:
+Pastas em **camelCase**. Arquivos de classe usam o nome da classe. Interfaces e tipos usam marcador de tipo no arquivo quando o tipo não é óbvio só pela pasta:
 
-| Tipo        | Exemplo                                                     |
-| ----------- | ----------------------------------------------------------- |
-| Caso de uso | `application/useCases/registerUser/registerUser.useCase.ts` |
-| DTO         | `registerUser.dto.ts` (ao lado do caso de uso)              |
-| Repository  | `user.repository.ts`                                        |
-| Gateway     | `objectStorage.gateway.ts`                                  |
-| Service     | `passwordHasher.service.ts`                                 |
+| Tipo        | Exemplo                                                    |
+| ----------- | ---------------------------------------------------------- |
+| Caso de uso | `application/useCases/registerUser/RegisterUserUseCase.ts` |
+| Tipos       | `registerUser.types.ts` (ao lado do caso de uso)           |
+| Controller  | `application/controllers/RegisterUserController.ts`        |
+| Repository  | `user.repository.ts`                                       |
+| Gateway     | `objectStorage.gateway.ts`                                 |
+| Service     | `passwordHasher.service.ts`                                |
 
 Cada subpasta pública de `domain/` e `application/` expõe um `index.ts` (barrel).
 
