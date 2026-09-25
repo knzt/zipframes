@@ -9,4 +9,4 @@ allowBuilds:
   protobufjs: true
   ssh2: true
 minimumReleaseAgeExclude:
-  - '@zipframes/test-toolkit@0.2.0'
+  - '@zipframes/test-toolkit@0.2.1-pr33-20260925031024'
