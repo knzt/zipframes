@@ -6,6 +6,8 @@ import type { Pingable } from '@zipframes/core';
 import { createLogger } from '@zipframes/logger';
 import { createMetrics } from '@zipframes/telemetry';
 
+import { makeLoginController } from '../application/controllers/login.controller.js';
+import { makeRegisterUserController } from '../application/controllers/registerUser.controller.js';
 import { makeLogin } from '../application/useCases/login/login.useCase.js';
 import { makeRegisterUser } from '../application/useCases/registerUser/registerUser.useCase.js';
 import { loadConfig } from '../infrastructure/config.js';
@@ -100,9 +102,8 @@ export const startAuthService = async (): Promise<{ stop: () => Promise<void> }>
 
   const app = await createHttpServer({ corsOrigin: config.corsOrigin });
   registerIdentityRoutes(app, {
-    registerUser,
-    login,
-    logger,
+    registerUser: makeRegisterUserController(registerUser),
+    login: makeLoginController(login),
     jwks: [keys.publicJwk],
   });
   registerHealthRoutes(app, {

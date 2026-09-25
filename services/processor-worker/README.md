@@ -8,7 +8,7 @@ Arquitetura: [docs/architecture/services/processor-worker.md](../../docs/archite
 
 ```
 src/domain/            # Value objects, policies, erros
-src/application/       # casos de uso e interface adapters (gateways/services)
+src/application/       # casos de uso, controller da mensagem e interfaces
 src/infrastructure/    # implementações, consumers, saúde HTTP (Fastify)
 src/main/              # Composition root
 ```
@@ -26,7 +26,7 @@ src/main/              # Composition root
 
 ```
 tests/unit          # contratos e regras; dependências substituídas
-tests/integration   # filesystem, ffmpeg, RabbitMQ e S3 reais (sem mock)
+tests/integration   # fluxo de video.uploaded contra RabbitMQ e SeaweedFS (sem mock)
 ```
 
 `pnpm test` roda os dois. Integração sobe RabbitMQ e S3 com `@zipframes/test-toolkit` (Docker) e usa o binário do `ffmpeg-static`.

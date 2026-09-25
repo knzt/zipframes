@@ -4,9 +4,10 @@ import type { Logger } from '@zipframes/logger';
 import { runWithCorrelationId } from '@zipframes/logger';
 import { parseSchema } from '@zipframes/schemas';
 import { videoUploadedEventSchema } from '@zipframes/schemas/video-service';
+import type { VideoUploadedEvent } from '@zipframes/schemas/video-service';
 
 import type { EventPublisher } from '../../application/interfaces/gateways/eventPublisher.gateway.js';
-import type { ProcessUploadedVideo } from '../../application/useCases/processUploadedVideo/processUploadedVideo.dto.js';
+import type { ProcessingResult } from '../../domain/valueObjects/processingResult.js';
 import { isProcessingError } from '../../domain/errors/processingError.js';
 
 export interface JobMetrics {
@@ -16,8 +17,13 @@ export interface JobMetrics {
   readonly recordRetriesExhausted: (durationSeconds: number) => void;
 }
 
+export type HandleUploadedVideo = (
+  event: VideoUploadedEvent,
+  attempt: number,
+) => Promise<ProcessingResult>;
+
 export interface VideoUploadedConsumerDeps {
-  readonly processUploadedVideo: ProcessUploadedVideo;
+  readonly handleUploadedVideo: HandleUploadedVideo;
   readonly events: EventPublisher;
   readonly retry: RetryOptions;
   readonly logger: Logger;
@@ -43,15 +49,7 @@ export const createVideoUploadedConsumer = (deps: VideoUploadedConsumerDeps): Co
 
     await runWithCorrelationId(event.correlationId, async () => {
       try {
-        const processingResult = await deps.processUploadedVideo({
-          videoId: event.payload.videoId,
-          ownerId: event.payload.ownerId,
-          sourceKey: event.payload.sourceKey,
-          originalFileName: event.payload.originalFileName,
-          sizeBytes: event.payload.sizeBytes,
-          attempt: context.attempt,
-          correlationId: event.correlationId,
-        });
+        const processingResult = await deps.handleUploadedVideo(event, context.attempt);
         if (processingResult === 'frames_packaged') {
           deps.metrics?.recordFramesPackaged(elapsedSeconds());
           deps.logger.info('video processed', {

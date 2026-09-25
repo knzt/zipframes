@@ -1,0 +1,48 @@
+import { describe, expect, it, vi } from 'vitest';
+
+import { makeProcessUploadedVideoController } from '../../../../src/application/controllers/processUploadedVideo.controller.js';
+import type { VideoUploadedEvent } from '@zipframes/schemas/video-service';
+
+const event: VideoUploadedEvent = {
+  eventId: '33333333-3333-4333-8333-333333333333',
+  eventType: 'video.uploaded',
+  version: 1,
+  occurredAt: '2026-09-22T12:00:00.000Z',
+  correlationId: '22222222-2222-4222-8222-222222222222',
+  payload: {
+    videoId: '11111111-1111-4111-8111-111111111111',
+    ownerId: 'user-1',
+    sourceKey: 'uploads/user-1/11111111-1111-4111-8111-111111111111',
+    originalFileName: 'clip.mp4',
+    sizeBytes: 1024,
+  },
+};
+
+describe('processUploadedVideo controller', () => {
+  it('maps the decoded envelope onto the use case and returns its result', async () => {
+    const processUploadedVideo = vi.fn(async () => 'frames_packaged' as const);
+    const handle = makeProcessUploadedVideoController({ processUploadedVideo });
+
+    const result = await handle(event, 2);
+
+    expect(result).toBe('frames_packaged');
+    expect(processUploadedVideo).toHaveBeenCalledWith({
+      videoId: event.payload.videoId,
+      ownerId: event.payload.ownerId,
+      sourceKey: event.payload.sourceKey,
+      originalFileName: event.payload.originalFileName,
+      sizeBytes: event.payload.sizeBytes,
+      attempt: 2,
+      correlationId: event.correlationId,
+    });
+  });
+
+  it('lets a retryable failure leave the controller for the consumer', async () => {
+    const processUploadedVideo = vi.fn(async () => {
+      throw new Error('storage down');
+    });
+    const handle = makeProcessUploadedVideoController({ processUploadedVideo });
+
+    await expect(handle(event, 1)).rejects.toThrow('storage down');
+  });
+});

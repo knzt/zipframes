@@ -1,39 +1,22 @@
 import type { FastifyInstance } from 'fastify';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-import { createLogger } from '@zipframes/logger';
-
-import { makeLogin } from '../../../../../src/application/useCases/login/login.useCase.js';
-import { makeRegisterUser } from '../../../../../src/application/useCases/registerUser/registerUser.useCase.js';
 import { registerHealthRoutes } from '../../../../../src/infrastructure/http/routes/health.routes.js';
 import { registerIdentityRoutes } from '../../../../../src/infrastructure/http/routes/identity.routes.js';
+import type { IdentityController } from '../../../../../src/infrastructure/http/routes/identity.routes.js';
 import { createHttpServer } from '../../../../../src/infrastructure/http/server.js';
-import {
-  FakeHasher,
-  FakeTokenIssuer,
-  FixedClock,
-  InMemoryUserRepository,
-  SequentialIds,
-} from '../../../../support/in-memory.js';
 
 const buildApp = async (overrides?: {
+  registerUser?: IdentityController;
+  login?: IdentityController;
   isReady?: () => Promise<{ ready: boolean; reason?: string }>;
   renderMetrics?: () => Promise<string>;
 }): Promise<FastifyInstance> => {
-  const users = new InMemoryUserRepository();
-  const hasher = new FakeHasher();
-  const tokens = new FakeTokenIssuer();
   const app = await createHttpServer({ corsOrigin: '*' });
 
   registerIdentityRoutes(app, {
-    registerUser: makeRegisterUser({
-      users,
-      hasher,
-      ids: new SequentialIds(),
-      clock: new FixedClock(),
-    }),
-    login: makeLogin({ users, hasher, tokens }),
-    logger: createLogger({ service: 'auth-service', version: 'test', level: 'error' }),
+    registerUser: overrides?.registerUser ?? (async () => ({ status: 201, body: {} })),
+    login: overrides?.login ?? (async () => ({ status: 200, body: {} })),
     jwks: [{ kty: 'RSA', kid: 'k1', alg: 'RS256', use: 'sig', n: 'abc', e: 'AQAB' }],
   });
   registerHealthRoutes(app, {
@@ -44,117 +27,94 @@ const buildApp = async (overrides?: {
   return app;
 };
 
-describe('POST /register', () => {
-  it('returns 201 with the shape registerResponseSchema expects', async () => {
-    const app = await buildApp();
-
-    const response = await app.inject({
-      method: 'POST',
-      url: '/register',
-      payload: { name: 'Hellen Santos', email: 'hellen@example.com', password: 'senha1234' },
-    });
-
-    expect(response.statusCode).toBe(201);
-    expect(response.json()).toEqual({
-      userId: '0194f3a0-0000-7000-8000-000000000001',
-      name: 'Hellen Santos',
-      email: 'hellen@example.com',
-    });
-  });
-
-  it('returns 400 Problem Details for an invalid body', async () => {
-    const app = await buildApp();
-
-    const response = await app.inject({
-      method: 'POST',
-      url: '/register',
-      payload: { name: '', email: 'not-an-email', password: 'x' },
-    });
-
-    expect(response.statusCode).toBe(400);
-    expect(response.headers['content-type']).toContain('application/problem+json');
-    expect(response.json()).toMatchObject({ status: 400 });
-  });
-
-  it('returns 409 when the email is already registered', async () => {
-    const app = await buildApp();
-    const payload = { name: 'Hellen Santos', email: 'hellen@example.com', password: 'senha1234' };
-
-    await app.inject({ method: 'POST', url: '/register', payload });
-    const response = await app.inject({ method: 'POST', url: '/register', payload });
-
-    expect(response.statusCode).toBe(409);
-  });
-
-  it('mints a correlation id when the header is empty', async () => {
-    const app = await buildApp();
-
-    const response = await app.inject({
-      method: 'POST',
-      url: '/register',
-      headers: { 'x-correlation-id': '' },
-      payload: { name: '', email: 'bad', password: 'x' },
-    });
-
-    expect(response.json().correlationId).toEqual(expect.any(String));
-    expect(response.json().correlationId).not.toBe('');
-  });
-
-  it('echoes the incoming correlation id in the problem response', async () => {
-    const app = await buildApp();
+describe('identity route binding', () => {
+  it('forwards the register body and correlation id, then sends the controller result', async () => {
+    const registerUser = vi.fn(async () => ({
+      status: 201,
+      body: { userId: 'user-1', name: 'Ada', email: 'ada@example.com' },
+    }));
+    const app = await buildApp({ registerUser });
 
     const response = await app.inject({
       method: 'POST',
       url: '/register',
       headers: { 'x-correlation-id': 'corr-xyz' },
-      payload: { name: '', email: 'bad', password: 'x' },
+      payload: { name: 'Ada', email: 'ada@example.com', password: 'senha1234' },
     });
 
-    expect(response.json()).toMatchObject({ correlationId: 'corr-xyz' });
+    expect(registerUser).toHaveBeenCalledWith({
+      body: { name: 'Ada', email: 'ada@example.com', password: 'senha1234' },
+      correlationId: 'corr-xyz',
+    });
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toEqual({
+      userId: 'user-1',
+      name: 'Ada',
+      email: 'ada@example.com',
+    });
+    await app.close();
   });
-});
 
-describe('POST /login', () => {
-  it('returns 200 with the shape loginResponseSchema expects', async () => {
-    const app = await buildApp();
+  it('sets the problem content type when the controller returns one', async () => {
+    const registerUser = vi.fn(async () => ({
+      status: 409,
+      contentType: 'application/problem+json',
+      body: { status: 409, title: 'Email already registered' },
+    }));
+    const app = await buildApp({ registerUser });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/register',
+      payload: { name: 'Ada' },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.headers['content-type']).toContain('application/problem+json');
+    expect(response.json()).toMatchObject({ title: 'Email already registered' });
+    await app.close();
+  });
+
+  it('mints a correlation id when the header is empty', async () => {
+    const registerUser = vi.fn(async (request: { body: unknown; correlationId: string }) => {
+      expect(request.correlationId).toEqual(expect.any(String));
+      expect(request.correlationId).not.toBe('');
+      return { status: 400, body: { status: 400 } };
+    });
+    const app = await buildApp({ registerUser });
+
     await app.inject({
       method: 'POST',
       url: '/register',
-      payload: { name: 'Hellen Santos', email: 'hellen@example.com', password: 'senha1234' },
+      headers: { 'x-correlation-id': '' },
+      payload: {},
     });
+
+    expect(registerUser).toHaveBeenCalledOnce();
+    await app.close();
+  });
+
+  it('forwards the login body and sends the controller result', async () => {
+    const login = vi.fn(async () => ({
+      status: 200,
+      body: { accessToken: 'token', tokenType: 'Bearer', expiresIn: 900 },
+    }));
+    const app = await buildApp({ login });
 
     const response = await app.inject({
       method: 'POST',
       url: '/login',
-      payload: { email: 'hellen@example.com', password: 'senha1234' },
+      headers: { 'x-correlation-id': 'corr-login' },
+      payload: { email: 'ada@example.com', password: 'senha1234' },
     });
 
+    expect(login).toHaveBeenCalledWith({
+      body: { email: 'ada@example.com', password: 'senha1234' },
+      correlationId: 'corr-login',
+    });
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ tokenType: 'Bearer', expiresIn: 900 });
-  });
-
-  it('returns 401 for a malformed body, same as wrong credentials', async () => {
-    const app = await buildApp();
-
-    const response = await app.inject({
-      method: 'POST',
-      url: '/login',
-      payload: { email: 'not-an-email' },
-    });
-
-    expect(response.statusCode).toBe(401);
-  });
-
-  it('returns 401 for wrong credentials', async () => {
-    const app = await buildApp();
-
-    const response = await app.inject({
-      method: 'POST',
-      url: '/login',
-      payload: { email: 'nobody@example.com', password: 'senha1234' },
-    });
-
-    expect(response.statusCode).toBe(401);
+    await app.close();
   });
 });
 
@@ -313,20 +273,5 @@ describe('OpenAPI', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.body).toBe('plain-text');
-  });
-});
-
-describe('register: use case validation beyond what the schema catches', () => {
-  it('returns 400 when the password passes the schema but fails the domain policy', async () => {
-    const app = await buildApp();
-
-    const response = await app.inject({
-      method: 'POST',
-      url: '/register',
-      payload: { name: 'Hellen Santos', email: 'hellen@example.com', password: 'abcdefgh' },
-    });
-
-    expect(response.statusCode).toBe(400);
-    expect(response.json()).toMatchObject({ title: 'Invalid request body' });
   });
 });
