@@ -13,12 +13,12 @@ let registerUser: RegisterUserUseCase;
 
 beforeEach(() => {
   users = new InMemoryUserRepository();
-  registerUser = new RegisterUserUseCase({
+  registerUser = new RegisterUserUseCase(
     users,
-    hasher: new FakeHasher(),
-    ids: new SequentialIds(),
-    clock: new FixedClock(),
-  });
+    new FakeHasher(),
+    new SequentialIds(),
+    new FixedClock(),
+  );
 });
 
 const validCommand = {

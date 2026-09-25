@@ -2,11 +2,11 @@ import { isProcessingError, ProcessingError } from '../../../domain/errors/proce
 import { framesPackageObjectKey } from '../../../domain/policies/framesPackage.js';
 import type { ProcessingJob } from '../../../domain/valueObjects/processingJob.js';
 import type { ProcessingResult } from '../../../domain/valueObjects/processingResult.js';
-import type { EventPublisher } from '../../interfaces/gateways/eventPublisher.gateway.js';
-import type { FrameExtractor } from '../../interfaces/gateways/frameExtractor.gateway.js';
-import type { ObjectStorage } from '../../interfaces/gateways/objectStorage.gateway.js';
-import type { ArchiveBuilder } from '../../interfaces/services/archiveBuilder.service.js';
-import type { WorkDirectory } from '../../interfaces/services/workDirectory.service.js';
+import type { EventPublisher } from '../../interfaces/gateways/EventPublisher.js';
+import type { FrameExtractor } from '../../interfaces/gateways/FrameExtractor.js';
+import type { ObjectStorage } from '../../interfaces/gateways/ObjectStorage.js';
+import type { ArchiveBuilder } from '../../interfaces/services/ArchiveBuilder.js';
+import type { WorkDirectory } from '../../interfaces/services/WorkDirectory.js';
 
 interface JobWorkspace {
   readonly rootDir: string;
@@ -90,26 +90,20 @@ const classifyFailure = (error: unknown, timedOut: boolean, timeoutMs: number): 
 
 export class ProcessUploadedVideoUseCase {
   constructor(
-    private readonly deps: {
-      readonly storage: ObjectStorage;
-      readonly extractor: FrameExtractor;
-      readonly archive: ArchiveBuilder;
-      readonly workDirectory: WorkDirectory;
-      readonly events: EventPublisher;
-      readonly now: () => Date;
-      readonly processingTimeoutMs: number;
-      readonly onDiscardOriginalFailed?: (job: ProcessingJob, error: unknown) => void;
-    },
+    private readonly storage: ObjectStorage,
+    private readonly extractor: FrameExtractor,
+    private readonly archive: ArchiveBuilder,
+    private readonly workDirectory: WorkDirectory,
+    private readonly events: EventPublisher,
+    private readonly now: () => Date,
+    private readonly processingTimeoutMs: number,
+    private readonly onDiscardOriginalFailed?: (job: ProcessingJob, error: unknown) => void,
   ) {}
 
   async execute(job: ProcessingJob): Promise<ProcessingResult> {
-    const workspace = await openJobWorkspace(
-      this.deps.workDirectory,
-      job.videoId,
-      job.originalFileName,
-    );
-    const startedAt = this.deps.now().getTime();
-    const deadline = startDeadline(this.deps.processingTimeoutMs);
+    const workspace = await openJobWorkspace(this.workDirectory, job.videoId, job.originalFileName);
+    const startedAt = this.now().getTime();
+    const deadline = startDeadline(this.processingTimeoutMs);
 
     try {
       await this.publishProcessingStarted(job);
@@ -118,7 +112,7 @@ export class ProcessUploadedVideoUseCase {
       await this.discardOriginalVideo(job);
       return 'frames_packaged';
     } catch (error) {
-      const failure = classifyFailure(error, deadline.timedOut(), this.deps.processingTimeoutMs);
+      const failure = classifyFailure(error, deadline.timedOut(), this.processingTimeoutMs);
       if (!failure.retryable) {
         await this.publishMediaRejected(job, failure);
         await this.discardOriginalVideo(job);
@@ -127,12 +121,12 @@ export class ProcessUploadedVideoUseCase {
       throw failure;
     } finally {
       deadline.cancel();
-      await this.deps.workDirectory.removeDir(workspace.rootDir);
+      await this.workDirectory.removeDir(workspace.rootDir);
     }
   }
 
   private async publishProcessingStarted(job: ProcessingJob): Promise<void> {
-    await this.deps.events.publish({
+    await this.events.publish({
       eventType: 'video.processing.started',
       correlationId: job.correlationId,
       payload: { videoId: job.videoId, attempt: job.attempt },
@@ -144,14 +138,14 @@ export class ProcessUploadedVideoUseCase {
     workspace: JobWorkspace,
     signal: AbortSignal,
   ): Promise<void> {
-    await this.deps.storage.downloadToFile(job.sourceKey, workspace.originalVideoPath, signal);
+    await this.storage.downloadToFile(job.sourceKey, workspace.originalVideoPath, signal);
   }
 
   private async extractFrames(
     workspace: JobWorkspace,
     signal: AbortSignal,
   ): Promise<readonly string[]> {
-    const framePaths = await this.deps.extractor.extract(
+    const framePaths = await this.extractor.extract(
       workspace.originalVideoPath,
       workspace.framesDirectory,
       signal,
@@ -168,10 +162,10 @@ export class ProcessUploadedVideoUseCase {
     framePaths: readonly string[],
     signal: AbortSignal,
   ): Promise<FramesPackageReady> {
-    await this.deps.archive.createZip(framePaths, workspace.framesPackagePath);
+    await this.archive.createZip(framePaths, workspace.framesPackagePath);
     ensureStillRunning(signal);
     const objectKey = framesPackageObjectKey(job.ownerId, job.videoId);
-    await this.deps.storage.uploadFile(
+    await this.storage.uploadFile(
       objectKey,
       workspace.framesPackagePath,
       'application/zip',
@@ -185,8 +179,8 @@ export class ProcessUploadedVideoUseCase {
     packaged: FramesPackageReady,
     startedAt: number,
   ): Promise<void> {
-    const durationMs = Math.max(0, this.deps.now().getTime() - startedAt);
-    await this.deps.events.publish({
+    const durationMs = Math.max(0, this.now().getTime() - startedAt);
+    await this.events.publish({
       eventType: 'video.processed',
       correlationId: job.correlationId,
       payload: {
@@ -199,7 +193,7 @@ export class ProcessUploadedVideoUseCase {
   }
 
   private async publishMediaRejected(job: ProcessingJob, failure: ProcessingError): Promise<void> {
-    await this.deps.events.publish({
+    await this.events.publish({
       eventType: 'video.failed',
       correlationId: job.correlationId,
       payload: {
@@ -214,9 +208,9 @@ export class ProcessUploadedVideoUseCase {
 
   private async discardOriginalVideo(job: ProcessingJob): Promise<void> {
     try {
-      await this.deps.storage.deleteObject(job.sourceKey);
+      await this.storage.deleteObject(job.sourceKey);
     } catch (error) {
-      this.deps.onDiscardOriginalFailed?.(job, error);
+      this.onDiscardOriginalFailed?.(job, error);
     }
   }
 

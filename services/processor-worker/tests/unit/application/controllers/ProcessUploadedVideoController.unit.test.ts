@@ -29,7 +29,7 @@ describe('ProcessUploadedVideoController', () => {
     const execute = vi.fn(async () => 'frames_packaged' as const);
     const controller = controllerFor(execute);
 
-    const result = await controller.handle(event, 2);
+    const result = await controller.handle({ event, attempt: 2 });
 
     expect(result).toBe('frames_packaged');
     expect(execute).toHaveBeenCalledWith({
@@ -49,6 +49,6 @@ describe('ProcessUploadedVideoController', () => {
     });
     const controller = controllerFor(execute);
 
-    await expect(controller.handle(event, 1)).rejects.toThrow('storage down');
+    await expect(controller.handle({ event, attempt: 1 })).rejects.toThrow('storage down');
   });
 });

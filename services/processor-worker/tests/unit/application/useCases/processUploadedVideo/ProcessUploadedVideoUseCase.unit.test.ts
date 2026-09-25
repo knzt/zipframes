@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type {
   EventPublisher,
   ProcessingPublication,
-} from '../../../../../src/application/interfaces/gateways/eventPublisher.gateway.js';
+} from '../../../../../src/application/interfaces/gateways/EventPublisher.js';
 import { ProcessUploadedVideoUseCase } from '../../../../../src/application/useCases/processUploadedVideo/ProcessUploadedVideoUseCase.js';
 import { ProcessingError } from '../../../../../src/domain/errors/processingError.js';
 
@@ -43,15 +43,15 @@ describe('ProcessUploadedVideoUseCase', () => {
     const createTempDir = vi.fn(async () => '/tmp/job');
     const removeDir = vi.fn(async () => undefined);
 
-    const processUploadedVideo = new ProcessUploadedVideoUseCase({
-      storage: { downloadToFile, uploadFile, deleteObject },
-      extractor: { extract },
-      archive: { createZip },
-      workDirectory: { createTempDir, removeDir },
+    const processUploadedVideo = new ProcessUploadedVideoUseCase(
+      { downloadToFile, uploadFile, deleteObject },
+      { extract },
+      { createZip },
+      { createTempDir, removeDir },
       events,
-      now: () => new Date('2026-09-20T12:00:05.000Z'),
-      processingTimeoutMs: 60_000,
-    });
+      () => new Date('2026-09-20T12:00:05.000Z'),
+      60_000,
+    );
 
     const processingResult = await processUploadedVideo.execute(job);
 
@@ -79,24 +79,24 @@ describe('ProcessUploadedVideoUseCase', () => {
 
   it('publishes video.failed on unprocessable media and returns media_rejected', async () => {
     const events = eventsDouble();
-    const processUploadedVideo = new ProcessUploadedVideoUseCase({
-      storage: {
+    const processUploadedVideo = new ProcessUploadedVideoUseCase(
+      {
         downloadToFile: async () => {
           throw new ProcessingError(false, 'UNSUPPORTED_MEDIA', 'bad file');
         },
         uploadFile: async () => undefined,
         deleteObject: async () => undefined,
       },
-      extractor: { extract: async () => [] },
-      archive: { createZip: async () => undefined },
-      workDirectory: {
+      { extract: async () => [] },
+      { createZip: async () => undefined },
+      {
         createTempDir: async () => '/tmp/job',
         removeDir: async () => undefined,
       },
       events,
-      now: () => new Date('2026-09-20T12:00:05.000Z'),
-      processingTimeoutMs: 60_000,
-    });
+      () => new Date('2026-09-20T12:00:05.000Z'),
+      60_000,
+    );
 
     const processingResult = await processUploadedVideo.execute(job);
 
@@ -106,24 +106,24 @@ describe('ProcessUploadedVideoUseCase', () => {
 
   it('rethrows retryable errors for the consumer to retry', async () => {
     const events = eventsDouble();
-    const processUploadedVideo = new ProcessUploadedVideoUseCase({
-      storage: {
+    const processUploadedVideo = new ProcessUploadedVideoUseCase(
+      {
         downloadToFile: async () => {
           throw new ProcessingError(true, 'STORAGE_DOWNLOAD_FAILED', 'down');
         },
         uploadFile: async () => undefined,
         deleteObject: async () => undefined,
       },
-      extractor: { extract: async () => [] },
-      archive: { createZip: async () => undefined },
-      workDirectory: {
+      { extract: async () => [] },
+      { createZip: async () => undefined },
+      {
         createTempDir: async () => '/tmp/job',
         removeDir: async () => undefined,
       },
       events,
-      now: () => new Date(),
-      processingTimeoutMs: 60_000,
-    });
+      () => new Date(),
+      60_000,
+    );
 
     await expect(processUploadedVideo.execute(job)).rejects.toMatchObject({
       retryable: true,
@@ -134,8 +134,8 @@ describe('ProcessUploadedVideoUseCase', () => {
 
   it('aborts via AbortSignal on timeout and cleans up the work dir', async () => {
     const removeDir = vi.fn(async () => undefined);
-    const processUploadedVideo = new ProcessUploadedVideoUseCase({
-      storage: {
+    const processUploadedVideo = new ProcessUploadedVideoUseCase(
+      {
         downloadToFile: async (_key, _path, signal) => {
           await new Promise<void>((_resolve, reject) => {
             signal?.addEventListener('abort', () => {
@@ -146,16 +146,16 @@ describe('ProcessUploadedVideoUseCase', () => {
         uploadFile: async () => undefined,
         deleteObject: async () => undefined,
       },
-      extractor: { extract: async () => [] },
-      archive: { createZip: async () => undefined },
-      workDirectory: {
+      { extract: async () => [] },
+      { createZip: async () => undefined },
+      {
         createTempDir: async () => '/tmp/job',
         removeDir,
       },
-      events: { publish: vi.fn(async () => undefined) },
-      now: () => new Date(),
-      processingTimeoutMs: 20,
-    });
+      { publish: vi.fn(async () => undefined) },
+      () => new Date(),
+      20,
+    );
 
     await expect(processUploadedVideo.execute(job)).rejects.toMatchObject({
       code: 'PROCESSING_TIMEOUT',
@@ -165,25 +165,25 @@ describe('ProcessUploadedVideoUseCase', () => {
 
   it('invokes onDiscardOriginalFailed when cleanup delete fails', async () => {
     const onDiscardOriginalFailed = vi.fn();
-    const processUploadedVideo = new ProcessUploadedVideoUseCase({
-      storage: {
+    const processUploadedVideo = new ProcessUploadedVideoUseCase(
+      {
         downloadToFile: async () => undefined,
         uploadFile: async () => undefined,
         deleteObject: async () => {
           throw new Error('delete boom');
         },
       },
-      extractor: { extract: async () => ['/tmp/frame_0001.png'] },
-      archive: { createZip: async () => undefined },
-      workDirectory: {
+      { extract: async () => ['/tmp/frame_0001.png'] },
+      { createZip: async () => undefined },
+      {
         createTempDir: async () => '/tmp/job',
         removeDir: async () => undefined,
       },
-      events: { publish: vi.fn(async () => undefined) },
-      now: () => new Date(),
-      processingTimeoutMs: 60_000,
+      { publish: vi.fn(async () => undefined) },
+      () => new Date(),
+      60_000,
       onDiscardOriginalFailed,
-    });
+    );
 
     await processUploadedVideo.execute(job);
 

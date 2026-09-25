@@ -36,13 +36,14 @@ auth-service/src/
 │   ├── errors/userErrors.ts
 │   └── index.ts
 ├── application/
-│   ├── controllers/{RegisterUserController,LoginController,ControllerResponse}.ts
+│   ├── http/controllerResponse.types.ts
+│   ├── controllers/{RegisterUserController,LoginController,registerUser.types.ts,login.types.ts}
 │   ├── useCases/
 │   │   ├── registerUser/{RegisterUserUseCase.ts, registerUser.types.ts}
 │   │   └── login/{LoginUseCase.ts, login.types.ts}
 │   └── interfaces/
-│       ├── repositories/user.repository.ts
-│       └── services/{passwordHasher,tokenIssuer,clock,idGenerator}.service.ts
+│       ├── repositories/UserRepository.ts
+│       └── services/{PasswordHasher,TokenIssuer,Clock,IdGenerator}.ts
 ├── infrastructure/
 │   ├── http/
 │   │   ├── routes/{identity,health}.routes.ts

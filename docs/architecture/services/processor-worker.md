@@ -44,12 +44,12 @@ processor-worker/src/
 │   ├── policies/{frameExtractionPolicy,framesPackage}.ts
 │   └── index.ts
 ├── application/
-│   ├── controllers/ProcessUploadedVideoController.ts
+│   ├── controllers/{ProcessUploadedVideoController.ts,processUploadedVideo.types.ts}
 │   ├── useCases/processUploadedVideo/
 │   │   └── ProcessUploadedVideoUseCase.ts
 │   └── interfaces/
-│       ├── gateways/{objectStorage,eventPublisher,frameExtractor}.gateway.ts
-│       └── services/{archiveBuilder,workDirectory}.service.ts
+│       ├── gateways/{ObjectStorage,EventPublisher,FrameExtractor}.ts
+│       └── services/{ArchiveBuilder,WorkDirectory}.ts
 ├── infrastructure/
 │   ├── http/health.routes.ts
 │   ├── gateways/

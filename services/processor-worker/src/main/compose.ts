@@ -50,15 +50,15 @@ export const startWorker = async (): Promise<{ stop: () => Promise<void> }> => {
   });
 
   const processUploadedVideoController = new ProcessUploadedVideoController(
-    new ProcessUploadedVideoUseCase({
+    new ProcessUploadedVideoUseCase(
       storage,
-      extractor: createFfmpegFrameExtractor(),
-      archive: createZipArchiveBuilder(),
-      workDirectory: createFsWorkDirectory(config.workDir),
+      createFfmpegFrameExtractor(),
+      createZipArchiveBuilder(),
+      createFsWorkDirectory(config.workDir),
       events,
       now,
-      processingTimeoutMs: config.processingTimeoutMs,
-      onDiscardOriginalFailed: (job, error) => {
+      config.processingTimeoutMs,
+      (job, error) => {
         logger.error('failed to discard original object after processing', {
           videoId: job.videoId,
           sourceKey: job.sourceKey,
@@ -69,7 +69,7 @@ export const startWorker = async (): Promise<{ stop: () => Promise<void> }> => {
           outcome: 'delete_original_failed',
         });
       },
-    }),
+    ),
   );
 
   const consumer = createVideoUploadedConsumer({

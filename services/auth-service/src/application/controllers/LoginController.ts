@@ -1,13 +1,9 @@
 import { PROBLEM_CONTENT_TYPE, problemDetails } from '@zipframes/core';
 import { authService, parseSchema } from '@zipframes/schemas';
 
+import type { ControllerResponse } from '../http/controllerResponse.types.js';
 import type { LoginUseCase } from '../useCases/login/LoginUseCase.js';
-import type { ControllerResponse } from './ControllerResponse.js';
-
-export interface LoginRequest {
-  readonly body: unknown;
-  readonly correlationId: string;
-}
+import type { LoginRequest } from './login.types.js';
 
 /**
  * Turns an already decoded login request into a status and a body.
@@ -15,7 +11,7 @@ export interface LoginRequest {
  * does not reveal which emails exist.
  */
 export class LoginController {
-  constructor(private readonly useCase: LoginUseCase) {}
+  constructor(private readonly loginUseCase: LoginUseCase) {}
 
   async handle(request: LoginRequest): Promise<ControllerResponse> {
     const body = parseSchema(authService.loginRequestSchema, request.body);
@@ -27,7 +23,7 @@ export class LoginController {
       };
     }
 
-    const result = await this.useCase.execute(body.value);
+    const result = await this.loginUseCase.execute(body.value);
     if (!result.ok) {
       return {
         status: 401,

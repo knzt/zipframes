@@ -1,6 +1,6 @@
 import { SignJWT } from 'jose';
 
-import type { TokenIssuer } from '../../../application/interfaces/services/tokenIssuer.service.js';
+import type { TokenIssuer } from '../../../application/interfaces/services/TokenIssuer.js';
 import type { UserId } from '../../../domain/entities/user.js';
 import type { RsaKeyMaterial } from './rsaKeys.js';
 

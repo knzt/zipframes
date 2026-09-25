@@ -33,12 +33,12 @@ infrastructure  →  application  →  domain
 
 ### Layout
 
-| Pasta                 | Neste projeto                     | Conteúdo                                                                                                                               |
-| --------------------- | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/domain/`         | Entidades                         | Entidades, value objects, eventos de domínio, erros e policies                                                                         |
-| `src/application/`    | Casos de uso e interface adapters | Casos de uso, controllers da borda, tipos e as interfaces que os casos de uso declaram (`interfaces/{repositories,gateways,services}`) |
-| `src/infrastructure/` | Implementação e frameworks        | Classes que implementam essas interfaces, HTTP, messaging, config, observability                                                       |
-| `src/main/`           | Composition root                  | Wiring na inicialização                                                                                                                |
+| Pasta                 | Neste projeto                     | Conteúdo                                                                                                                                              |
+| --------------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/domain/`         | Entidades                         | Entidades, value objects, eventos de domínio, erros e policies                                                                                        |
+| `src/application/`    | Casos de uso e interface adapters | Casos de uso, controllers da borda, contrato HTTP, tipos e as interfaces que os casos de uso declaram (`interfaces/{repositories,gateways,services}`) |
+| `src/infrastructure/` | Implementação e frameworks        | Classes que implementam essas interfaces, HTTP, messaging, config, observability                                                                      |
+| `src/main/`           | Composition root                  | Wiring na inicialização                                                                                                                               |
 
 O caso de uso fica em `application/useCases/`. O controller da borda fica em `application/controllers/`. A interface que o caso de uso declara fica em `application/interfaces/`. A classe que implementa essa interface fica em `infrastructure/`, com o framework. O caso de uso não importa a implementação. A implementação importa a interface.
 
@@ -58,16 +58,17 @@ Três categorias em `application/interfaces/`, espelhadas em `infrastructure/`:
 
 #### Nomenclatura
 
-Pastas em **camelCase**. Arquivos de classe usam o nome da classe. Interfaces e tipos usam marcador de tipo no arquivo quando o tipo não é óbvio só pela pasta:
+Pastas em **camelCase**. Arquivos de classe e de interface usam o nome do tipo. A pasta já diz o papel (`repositories/`, `gateways/`, `services/`). Tipos que não são uma classe ficam em `*.types.ts`.
 
 | Tipo        | Exemplo                                                    |
 | ----------- | ---------------------------------------------------------- |
 | Caso de uso | `application/useCases/registerUser/RegisterUserUseCase.ts` |
 | Tipos       | `registerUser.types.ts` (ao lado do caso de uso)           |
 | Controller  | `application/controllers/RegisterUserController.ts`        |
-| Repository  | `user.repository.ts`                                       |
-| Gateway     | `objectStorage.gateway.ts`                                 |
-| Service     | `passwordHasher.service.ts`                                |
+| HTTP        | `application/http/controllerResponse.types.ts`             |
+| Repository  | `application/interfaces/repositories/UserRepository.ts`    |
+| Gateway     | `application/interfaces/gateways/ObjectStorage.ts`         |
+| Service     | `application/interfaces/services/PasswordHasher.ts`        |
 
 Cada subpasta pública de `domain/` e `application/` expõe um `index.ts` (barrel).
 

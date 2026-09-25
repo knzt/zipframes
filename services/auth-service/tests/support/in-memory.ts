@@ -5,11 +5,11 @@ import type {
   EmailTakenError,
   OutboxEventWrite,
   UserRepository,
-} from '../../src/application/interfaces/repositories/user.repository.js';
-import type { Clock } from '../../src/application/interfaces/services/clock.service.js';
-import type { IdGenerator } from '../../src/application/interfaces/services/idGenerator.service.js';
-import type { PasswordHasher } from '../../src/application/interfaces/services/passwordHasher.service.js';
-import type { TokenIssuer } from '../../src/application/interfaces/services/tokenIssuer.service.js';
+} from '../../src/application/interfaces/repositories/UserRepository.js';
+import type { Clock } from '../../src/application/interfaces/services/Clock.js';
+import type { IdGenerator } from '../../src/application/interfaces/services/IdGenerator.js';
+import type { PasswordHasher } from '../../src/application/interfaces/services/PasswordHasher.js';
+import type { TokenIssuer } from '../../src/application/interfaces/services/TokenIssuer.js';
 import type { User, UserId } from '../../src/domain/entities/user.js';
 import type { PasswordHash } from '../../src/domain/valueObjects/password.js';
 

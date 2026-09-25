@@ -2,7 +2,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { mkdir, readdir, rename } from 'node:fs/promises';
 import path from 'node:path';
 
-import type { FrameExtractor } from '../../../application/interfaces/gateways/frameExtractor.gateway.js';
+import type { FrameExtractor } from '../../../application/interfaces/gateways/FrameExtractor.js';
 import { ProcessingError } from '../../../domain/errors/processingError.js';
 import {
   FRAME_EXTENSION,

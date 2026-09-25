@@ -7,10 +7,10 @@ import { createPassword } from '../../../domain/valueObjects/password.js';
 import type {
   OutboxEventWrite,
   UserRepository,
-} from '../../interfaces/repositories/user.repository.js';
-import type { Clock } from '../../interfaces/services/clock.service.js';
-import type { IdGenerator } from '../../interfaces/services/idGenerator.service.js';
-import type { PasswordHasher } from '../../interfaces/services/passwordHasher.service.js';
+} from '../../interfaces/repositories/UserRepository.js';
+import type { Clock } from '../../interfaces/services/Clock.js';
+import type { IdGenerator } from '../../interfaces/services/IdGenerator.js';
+import type { PasswordHasher } from '../../interfaces/services/PasswordHasher.js';
 import type {
   RegisterUserCommand,
   RegisterUserError,
@@ -19,12 +19,10 @@ import type {
 
 export class RegisterUserUseCase {
   constructor(
-    private readonly deps: {
-      readonly users: UserRepository;
-      readonly hasher: PasswordHasher;
-      readonly ids: IdGenerator;
-      readonly clock: Clock;
-    },
+    private readonly users: UserRepository,
+    private readonly hasher: PasswordHasher,
+    private readonly ids: IdGenerator,
+    private readonly clock: Clock,
   ) {}
 
   async execute(
@@ -35,11 +33,11 @@ export class RegisterUserUseCase {
       return err({ code: 'INVALID_INPUT' as const, message: password.error.message });
     }
 
-    const passwordHash = await this.deps.hasher.hash(password.value);
-    const now = this.deps.clock.now();
+    const passwordHash = await this.hasher.hash(password.value);
+    const now = this.clock.now();
 
     const user = registerUser({
-      id: this.deps.ids.next(),
+      id: this.ids.next(),
       name: command.name,
       email: command.email,
       passwordHash,
@@ -51,7 +49,7 @@ export class RegisterUserUseCase {
 
     const registered = userRegisteredFrom(user.value);
     const outbox: OutboxEventWrite = {
-      id: this.deps.ids.next(),
+      id: this.ids.next(),
       aggregateType: 'User',
       aggregateId: user.value.id,
       eventType: 'user.registered',
@@ -61,7 +59,7 @@ export class RegisterUserUseCase {
       occurredAt: user.value.createdAt,
     };
 
-    const saved = await this.deps.users.save(user.value, outbox);
+    const saved = await this.users.save(user.value, outbox);
     if (!saved.ok) {
       return err({ code: 'EMAIL_TAKEN' as const, message: 'email is already registered' });
     }

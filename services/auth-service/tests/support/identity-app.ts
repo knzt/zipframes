@@ -47,19 +47,14 @@ export const startIdentityApp = async (): Promise<IdentityApp> => {
   const users = new PrismaUserRepository(prisma);
   const hasher = new BcryptPasswordHasher();
   const registerUserController = new RegisterUserController(
-    new RegisterUserUseCase({
-      users,
-      hasher,
-      ids: { next: () => randomUUID() },
-      clock: { now: () => new Date() },
-    }),
+    new RegisterUserUseCase(users, hasher, { next: () => randomUUID() }, { now: () => new Date() }),
   );
   const loginController = new LoginController(
-    new LoginUseCase({
+    new LoginUseCase(
       users,
       hasher,
-      tokens: new Rs256TokenIssuer({ keys, issuer: ISSUER, audience: AUDIENCE }),
-    }),
+      new Rs256TokenIssuer({ keys, issuer: ISSUER, audience: AUDIENCE }),
+    ),
   );
 
   const app = await createHttpServer({ corsOrigin: '*' });

@@ -1,20 +1,16 @@
 import { PROBLEM_CONTENT_TYPE, problemDetails } from '@zipframes/core';
 import { authService, parseSchema } from '@zipframes/schemas';
 
+import type { ControllerResponse } from '../http/controllerResponse.types.js';
 import type { RegisterUserUseCase } from '../useCases/registerUser/RegisterUserUseCase.js';
-import type { ControllerResponse } from './ControllerResponse.js';
-
-export interface RegisterUserRequest {
-  readonly body: unknown;
-  readonly correlationId: string;
-}
+import type { RegisterUserRequest } from './registerUser.types.js';
 
 /**
  * Turns an already decoded register request into a status and a body.
  * The Fastify route only forwards this result.
  */
 export class RegisterUserController {
-  constructor(private readonly useCase: RegisterUserUseCase) {}
+  constructor(private readonly registerUserUseCase: RegisterUserUseCase) {}
 
   async handle(request: RegisterUserRequest): Promise<ControllerResponse> {
     const body = parseSchema(authService.registerRequestSchema, request.body);
@@ -31,7 +27,7 @@ export class RegisterUserController {
       };
     }
 
-    const result = await this.useCase.execute({
+    const result = await this.registerUserUseCase.execute({
       ...body.value,
       correlationId: request.correlationId,
     });

@@ -4,7 +4,7 @@ import type { JWK } from 'jose';
 import { createCorrelationId, runWithCorrelationId } from '@zipframes/logger';
 import { authService } from '@zipframes/schemas';
 
-import type { ControllerResponse } from '../../../application/controllers/ControllerResponse.js';
+import type { ControllerResponse } from '../../../application/http/controllerResponse.types.js';
 import type { LoginController } from '../../../application/controllers/LoginController.js';
 import type { RegisterUserController } from '../../../application/controllers/RegisterUserController.js';
 import { jsonSchemaOf } from '../openapi.js';

@@ -11,7 +11,7 @@ import { stat } from 'node:fs/promises';
 import { pipeline } from 'node:stream/promises';
 import type { Readable } from 'node:stream';
 
-import type { ObjectStorage } from '../../../application/interfaces/gateways/objectStorage.gateway.js';
+import type { ObjectStorage } from '../../../application/interfaces/gateways/ObjectStorage.js';
 import { ProcessingError } from '../../../domain/errors/processingError.js';
 
 export interface S3ObjectStorageConfig {

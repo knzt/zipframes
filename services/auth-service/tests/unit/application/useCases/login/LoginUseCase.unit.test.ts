@@ -20,19 +20,14 @@ beforeEach(async () => {
   tokens = new FakeTokenIssuer();
   hasher = new FakeHasher();
 
-  await new RegisterUserUseCase({
-    users,
-    hasher,
-    ids: new SequentialIds(),
-    clock: new FixedClock(),
-  }).execute({
+  await new RegisterUserUseCase(users, hasher, new SequentialIds(), new FixedClock()).execute({
     name: 'Hellen Santos',
     email: 'hellen@example.com',
     password: 'senha1234',
     correlationId: '0194f3a0-0000-7000-8000-000000000099',
   });
 
-  login = new LoginUseCase({ users, hasher, tokens });
+  login = new LoginUseCase(users, hasher, tokens);
   hasher.verifiedAgainst.length = 0;
 });
 

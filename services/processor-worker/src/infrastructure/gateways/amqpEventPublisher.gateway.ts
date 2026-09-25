@@ -4,7 +4,7 @@ import { EVENT_EXCHANGE } from '@zipframes/schemas/shared';
 import type {
   EventPublisher,
   ProcessingPublication,
-} from '../../application/interfaces/gateways/eventPublisher.gateway.js';
+} from '../../application/interfaces/gateways/EventPublisher.js';
 
 export const createAmqpEventPublisher = (deps: {
   readonly publisher: Publisher;

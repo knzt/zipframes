@@ -4,7 +4,7 @@ import { getCorrelationId } from '@zipframes/logger';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { ProcessUploadedVideoController } from '../../../../src/application/controllers/ProcessUploadedVideoController.js';
-import type { EventPublisher } from '../../../../src/application/interfaces/gateways/eventPublisher.gateway.js';
+import type { EventPublisher } from '../../../../src/application/interfaces/gateways/EventPublisher.js';
 import { ProcessingError } from '../../../../src/domain/errors/processingError.js';
 import { createVideoUploadedConsumer } from '../../../../src/infrastructure/messaging/videoUploadedConsumer.js';
 

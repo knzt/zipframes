@@ -12,6 +12,7 @@ O contrato HTTP é o documento gerado em `GET /docs` (ver [`docs/architecture/ht
 src/
 ├── domain/                 # User, Password, UserRegistered
 ├── application/
+│   ├── http/               # contrato HTTP da borda (ControllerResponse)
 │   ├── controllers/        # LoginController, RegisterUserController
 │   ├── useCases/           # LoginUseCase, RegisterUserUseCase
 │   └── interfaces/         # interface adapters declarados pelo caso de uso

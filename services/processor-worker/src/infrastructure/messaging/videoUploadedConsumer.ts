@@ -6,7 +6,7 @@ import { parseSchema } from '@zipframes/schemas';
 import { videoUploadedEventSchema } from '@zipframes/schemas/video-service';
 
 import type { ProcessUploadedVideoController } from '../../application/controllers/ProcessUploadedVideoController.js';
-import type { EventPublisher } from '../../application/interfaces/gateways/eventPublisher.gateway.js';
+import type { EventPublisher } from '../../application/interfaces/gateways/EventPublisher.js';
 import { isProcessingError } from '../../domain/errors/processingError.js';
 
 export interface JobMetrics {
@@ -43,7 +43,10 @@ export const createVideoUploadedConsumer = (deps: VideoUploadedConsumerDeps): Co
 
     await runWithCorrelationId(event.correlationId, async () => {
       try {
-        const processingResult = await deps.controller.handle(event, context.attempt);
+        const processingResult = await deps.controller.handle({
+          event,
+          attempt: context.attempt,
+        });
         if (processingResult === 'frames_packaged') {
           deps.metrics?.recordFramesPackaged(elapsedSeconds());
           deps.logger.info('video processed', {

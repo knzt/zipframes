@@ -51,14 +51,9 @@ export const startAuthService = async (): Promise<{ stop: () => Promise<void> }>
   });
 
   const registerUserController = new RegisterUserController(
-    new RegisterUserUseCase({
-      users,
-      hasher,
-      ids: { next: () => randomUUID() },
-      clock: { now: () => new Date() },
-    }),
+    new RegisterUserUseCase(users, hasher, { next: () => randomUUID() }, { now: () => new Date() }),
   );
-  const loginController = new LoginController(new LoginUseCase({ users, hasher, tokens }));
+  const loginController = new LoginController(new LoginUseCase(users, hasher, tokens));
 
   const relay = createOutboxRelay({
     prisma,
