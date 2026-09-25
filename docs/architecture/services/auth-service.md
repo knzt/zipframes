@@ -60,7 +60,7 @@ A persistência é repository: `UserRepository` em `application/interfaces/repos
 
 | Caso de uso           | O que faz                                                                                                                                                       |
 | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `RegisterUserUseCase` | Valida a senha, pede o hash, monta o `User`, grava com `UserRepository.save(user)` e, se o save ok, publica `UserRegistered` pelo `EventPublisher`.             |
+| `RegisterUserUseCase` | Valida a senha, pede o hash, monta o `User`, verifica e-mail com `findByEmail`, grava com `UserRepository.create(user)` e publica `UserRegistered` pelo `EventPublisher`.             |
 | `LoginUseCase`        | Normaliza o e-mail, busca o usuário e compara a senha. E-mail desconhecido responde `INVALID_CREDENTIALS` sem comparar hash. Emite o token. Não publica evento. |
 
 Falha de login é sempre `INVALID_CREDENTIALS`. Erros de aplicação usam `Result` de `@zipframes/core`. Erros HTTP usam Problem Details (RFC 9457) via `@zipframes/core`.

@@ -1,6 +1,3 @@
-import { ConflictError, err, ok } from '@zipframes/core';
-import type { Result } from '@zipframes/core';
-
 import type {
   EventPublisher,
   EventPublisherInput,
@@ -24,12 +21,9 @@ export class InMemoryUserRepository implements UserRepository {
     return Promise.resolve(this.users.get(email) ?? null);
   }
 
-  save(user: User): Promise<Result<void, ConflictError>> {
-    if (this.users.has(user.email)) {
-      return Promise.resolve(err(new ConflictError('EMAIL_TAKEN', 'email is already registered')));
-    }
+  create(user: User): Promise<void> {
     this.users.set(user.email, user);
-    return Promise.resolve(ok(undefined));
+    return Promise.resolve();
   }
 }
 

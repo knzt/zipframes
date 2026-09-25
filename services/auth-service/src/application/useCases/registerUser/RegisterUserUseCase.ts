@@ -55,10 +55,7 @@ export class RegisterUserUseCase {
       return err(new ConflictError('EMAIL_TAKEN', 'email is already registered'));
     }
 
-    const saved = await this.userRepository.save(user.value);
-    if (!saved.ok) {
-      return err(saved.error);
-    }
+    await this.userRepository.create(user.value);
 
     await this.publishUserRegistered(input.correlationId, user.value);
 

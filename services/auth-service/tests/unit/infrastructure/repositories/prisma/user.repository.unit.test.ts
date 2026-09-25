@@ -14,44 +14,74 @@ const sampleUser = {
   updatedAt: new Date('2026-01-01T12:00:00.000Z'),
 };
 
-describe('PrismaUserRepository.save', () => {
-  it('maps an email unique violation to ConflictError', async () => {
-    const prisma = {
-      user: {
-        create: vi.fn(async () => {
-          throw new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
-            code: 'P2002',
-            clientVersion: '6.2.1',
-            meta: { target: ['email'] },
-          });
-        }),
-      },
-    };
+describe('PrismaUserRepository.findByEmail', () => {
+  it('queries with findFirst on email', async () => {
+    const findFirst = vi.fn(async () => null);
+    const prisma = { user: { findFirst, create: vi.fn() } };
     const repository = new PrismaUserRepository(prisma as never);
 
-    const result = await repository.save(sampleUser);
+    await repository.findByEmail('ada@example.com');
 
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.error).toMatchObject({ code: 'EMAIL_TAKEN' });
+    expect(findFirst).toHaveBeenCalledWith({ where: { email: 'ada@example.com' } });
   });
 
-  it('rethrows a unique violation on another field', async () => {
+  it('maps a row to the domain user', async () => {
+    const row = {
+      id: sampleUser.id,
+      name: sampleUser.name,
+      email: sampleUser.email,
+      passwordHash: sampleUser.passwordHash,
+      createdAt: sampleUser.createdAt,
+      updatedAt: sampleUser.updatedAt,
+    };
     const prisma = {
       user: {
+        findFirst: vi.fn(async () => row),
+        create: vi.fn(),
+      },
+    };
+    const repository = new PrismaUserRepository(prisma as never);
+
+    await expect(repository.findByEmail(sampleUser.email)).resolves.toEqual(sampleUser);
+  });
+});
+
+describe('PrismaUserRepository.create', () => {
+  it('inserts the user row', async () => {
+    const create = vi.fn(async () => ({}));
+    const prisma = { user: { findFirst: vi.fn(), create } };
+    const repository = new PrismaUserRepository(prisma as never);
+
+    await repository.create(sampleUser);
+
+    expect(create).toHaveBeenCalledWith({
+      data: {
+        id: sampleUser.id,
+        name: sampleUser.name,
+        email: sampleUser.email,
+        passwordHash: sampleUser.passwordHash,
+        createdAt: sampleUser.createdAt,
+        updatedAt: sampleUser.updatedAt,
+      },
+    });
+  });
+
+  it('rethrows prisma errors without mapping them', async () => {
+    const prismaError = new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+      code: 'P2002',
+      clientVersion: '6.2.1',
+      meta: { target: ['email'] },
+    });
+    const prisma = {
+      user: {
+        findFirst: vi.fn(),
         create: vi.fn(async () => {
-          throw new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
-            code: 'P2002',
-            clientVersion: '6.2.1',
-            meta: { target: ['id'] },
-          });
+          throw prismaError;
         }),
       },
     };
     const repository = new PrismaUserRepository(prisma as never);
 
-    await expect(repository.save(sampleUser)).rejects.toBeInstanceOf(
-      Prisma.PrismaClientKnownRequestError,
-    );
+    await expect(repository.create(sampleUser)).rejects.toBe(prismaError);
   });
 });

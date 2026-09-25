@@ -1,4 +1,3 @@
-import { ConflictError, err } from '@zipframes/core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { RegisterUserUseCase } from '../../../../../src/application/useCases/registerUser/RegisterUserUseCase.js';
@@ -58,7 +57,7 @@ describe('a successful registration', () => {
     expect(stored?.passwordHash).not.toBe('senha1234');
   });
 
-  it('saves the user and then publishes user.registered', async () => {
+  it('creates the user and then publishes user.registered', async () => {
     await registerUser.execute(validInput);
 
     expect(userRepository.users.size).toBe(1);
@@ -132,13 +131,13 @@ describe('duplicate email', () => {
   });
 });
 
-describe('repository save failure', () => {
-  it('returns EMAIL_TAKEN when save loses a concurrent registration race', async () => {
-    const raceRepository: InMemoryUserRepository = {
-      users: new Map(),
+describe('repository create failure', () => {
+  it('propagates when create loses a concurrent registration race', async () => {
+    const raceRepository = {
       findByEmail: async () => null,
-      save: async () =>
-        Promise.resolve(err(new ConflictError('EMAIL_TAKEN', 'email is already registered'))),
+      create: async () => {
+        throw new Error('unique constraint');
+      },
     };
     const useCase = new RegisterUserUseCase(
       raceRepository,
@@ -148,14 +147,12 @@ describe('repository save failure', () => {
       eventPublisher,
     );
 
-    const result = await useCase.execute(validInput);
-
-    expect(result).toMatchObject({ ok: false, error: { code: 'EMAIL_TAKEN' } });
+    await expect(useCase.execute(validInput)).rejects.toThrow('unique constraint');
     expect(eventPublisher.published).toHaveLength(0);
   });
 });
 
-describe('publish after save', () => {
+describe('publish after create', () => {
   it('still returns registration success when publish fails', async () => {
     eventPublisher.failWith = new Error('broker down');
 
