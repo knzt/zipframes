@@ -39,23 +39,28 @@ export class RegisterUserUseCase {
     const passwordHash = await this.passwordHasher.hash(password.value);
     const now = this.clock.now();
 
-    const user = User.register({
-      id: this.idGenerator.next(),
-      name: input.name,
-      email: input.email,
-      passwordHash,
-      now,
-    });
-    if (!user.ok) {
-      return err(new ValidationError(user.error.code, user.error.message));
+    let user: User;
+    try {
+      user = new User({
+        id: this.idGenerator.next(),
+        name: input.name,
+        email: input.email,
+        passwordHash,
+        now,
+      });
+    } catch (error) {
+      if (error instanceof ValidationError) {
+        return err(error);
+      }
+      throw error;
     }
 
-    const existing = await this.userRepository.findByEmail(user.value.email);
+    const existing = await this.userRepository.findByEmail(user.email);
     if (existing !== null) {
       return err(new ConflictError('EMAIL_TAKEN', 'email is already registered'));
     }
 
-    const created = await this.userRepository.create(user.value);
+    const created = await this.userRepository.create(user);
 
     await this.publishUserRegistered(input.correlationId, created);
 

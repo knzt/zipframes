@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { Name } from '@zipframes/value-objects';
 
 import { RegisterUserUseCase } from '../../../../../src/application/useCases/registerUser/RegisterUserUseCase.js';
 import {
@@ -108,6 +109,17 @@ describe('invalid input', () => {
 
     expect(result.ok).toBe(false);
     expect(eventPublisher.published).toHaveLength(0);
+  });
+
+  it('rethrows unexpected errors from user construction', async () => {
+    vi.spyOn(Name, 'create').mockImplementation(() => {
+      throw new Error('unexpected');
+    });
+
+    await expect(registerUser.execute(validInput)).rejects.toThrow('unexpected');
+    expect(eventPublisher.published).toHaveLength(0);
+
+    vi.restoreAllMocks();
   });
 });
 

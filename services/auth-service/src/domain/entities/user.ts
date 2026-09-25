@@ -1,8 +1,7 @@
-import { err, ok } from '@zipframes/core';
-import type { Brand, Result } from '@zipframes/core';
+import { ValidationError } from '@zipframes/core';
+import type { Brand } from '@zipframes/core';
 import { Email, Name } from '@zipframes/value-objects';
 
-import type { UserError } from '../errors/userErrors.js';
 import { asPasswordHash } from '../valueObjects/password.js';
 import type { PasswordHash } from '../valueObjects/password.js';
 
@@ -27,59 +26,62 @@ export interface PersistedUser {
   readonly updatedAt: Date;
 }
 
+const reconstitute = Symbol('reconstitute');
+
 /**
- * Identity user. Built through {@link User.register} before persistence or
- * {@link User.fromPersistence} after reading from storage.
+ * Identity user. Created with {@link User} when registering a new identity, or
+ * rehydrated through {@link User.fromPersistence} after reading from storage.
  */
 export class User {
-  private constructor(
-    private readonly _id: UserId,
-    private readonly _name: string,
-    private readonly _email: string,
-    private readonly _passwordHash: PasswordHash,
-    private readonly _createdAt: Date,
-    private readonly _updatedAt: Date,
-  ) {}
+  private readonly _id: UserId;
+  private readonly _name: string;
+  private readonly _email: string;
+  private readonly _passwordHash: PasswordHash;
+  private readonly _createdAt: Date;
+  private readonly _updatedAt: Date;
 
   /**
-   * Builds a user from already-hashed credentials.
+   * Builds a new user from already-hashed credentials.
    *
-   * The plaintext password never reaches this method: hashing happens in
+   * The plaintext password never reaches this constructor: hashing happens in
    * the use case, through PasswordHasher, because it is infrastructure.
    */
-  static register(input: RegisterUserInput): Result<User, UserError> {
-    const name = Name.create(input.name);
+  constructor(input: RegisterUserInput);
+  constructor(data: PersistedUser, mode: typeof reconstitute);
+  constructor(input: RegisterUserInput | PersistedUser, mode?: typeof reconstitute) {
+    if (mode === reconstitute) {
+      const data = input as PersistedUser;
+      this._id = asUserId(data.id);
+      this._name = data.name;
+      this._email = data.email;
+      this._passwordHash = asPasswordHash(data.passwordHash);
+      this._createdAt = data.createdAt;
+      this._updatedAt = data.updatedAt;
+      return;
+    }
+
+    const data = input as RegisterUserInput;
+    const name = Name.create(data.name);
     if (!name.ok) {
-      return err({ code: 'INVALID_NAME' as const, message: name.error.message });
+      throw new ValidationError('INVALID_NAME', name.error.message);
     }
 
-    const email = Email.create(input.email);
+    const email = Email.create(data.email);
     if (!email.ok) {
-      return err({ code: 'INVALID_EMAIL' as const, message: email.error.message });
+      throw new ValidationError('INVALID_EMAIL', email.error.message);
     }
 
-    return ok(
-      new User(
-        asUserId(input.id),
-        name.value,
-        email.value,
-        asPasswordHash(input.passwordHash),
-        input.now,
-        input.now,
-      ),
-    );
+    this._id = asUserId(data.id);
+    this._name = name.value;
+    this._email = email.value;
+    this._passwordHash = asPasswordHash(data.passwordHash);
+    this._createdAt = data.now;
+    this._updatedAt = data.now;
   }
 
   /** Rehydrates a user that was already validated and stored. */
   static fromPersistence(data: PersistedUser): User {
-    return new User(
-      asUserId(data.id),
-      data.name,
-      data.email,
-      asPasswordHash(data.passwordHash),
-      data.createdAt,
-      data.updatedAt,
-    );
+    return new User(data, reconstitute);
   }
 
   get id(): UserId {

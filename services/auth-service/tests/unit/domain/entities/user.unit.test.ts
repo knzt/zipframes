@@ -1,3 +1,4 @@
+import { ValidationError } from '@zipframes/core';
 import { describe, expect, it } from 'vitest';
 
 import { User, userRegisteredFrom } from '../../../../src/domain/index.js';
@@ -10,55 +11,65 @@ const validInput = {
   now: new Date('2026-01-01T12:00:00.000Z'),
 };
 
-describe('User.register', () => {
+describe('new User', () => {
   it('builds a user from valid input', () => {
-    const result = User.register(validInput);
+    const user = new User(validInput);
 
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.value.id).toBe(validInput.id);
-    expect(result.value.name).toBe('Hellen Santos');
-    expect(result.value.email).toBe('hellen@example.com');
-    expect(result.value.passwordHash).toBe(validInput.passwordHash);
-    expect(result.value.createdAt).toBe(validInput.now);
-    expect(result.value.updatedAt).toBe(validInput.now);
+    expect(user.id).toBe(validInput.id);
+    expect(user.name).toBe('Hellen Santos');
+    expect(user.email).toBe('hellen@example.com');
+    expect(user.passwordHash).toBe(validInput.passwordHash);
+    expect(user.createdAt).toBe(validInput.now);
+    expect(user.updatedAt).toBe(validInput.now);
   });
 
   it('normalizes the email, so two accounts cannot differ only by case', () => {
-    const result = User.register({ ...validInput, email: 'Hellen@Example.COM' });
+    const user = new User({ ...validInput, email: 'Hellen@Example.COM' });
 
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.value.email).toBe('hellen@example.com');
+    expect(user.email).toBe('hellen@example.com');
   });
 
   it('collapses whitespace in the name', () => {
-    const result = User.register({ ...validInput, name: '  Hellen   Santos  ' });
+    const user = new User({ ...validInput, name: '  Hellen   Santos  ' });
 
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.value.name).toBe('Hellen Santos');
+    expect(user.name).toBe('Hellen Santos');
   });
 
   it('rejects an invalid name', () => {
-    expect(User.register({ ...validInput, name: 'H' })).toMatchObject({
-      ok: false,
-      error: { code: 'INVALID_NAME' },
-    });
+    expect(() => new User({ ...validInput, name: 'H' })).toThrow(ValidationError);
+
+    try {
+      new User({ ...validInput, name: 'H' });
+    } catch (error) {
+      expect(error).toBeInstanceOf(ValidationError);
+      if (error instanceof ValidationError) {
+        expect(error.code).toBe('INVALID_NAME');
+      }
+    }
   });
 
   it('rejects an invalid email', () => {
-    expect(User.register({ ...validInput, email: 'not-an-email' })).toMatchObject({
-      ok: false,
-      error: { code: 'INVALID_EMAIL' },
-    });
+    expect(() => new User({ ...validInput, email: 'not-an-email' })).toThrow(ValidationError);
+
+    try {
+      new User({ ...validInput, email: 'not-an-email' });
+    } catch (error) {
+      expect(error).toBeInstanceOf(ValidationError);
+      if (error instanceof ValidationError) {
+        expect(error.code).toBe('INVALID_EMAIL');
+      }
+    }
   });
 
   it('checks the name before the email, reporting the first problem found', () => {
-    expect(User.register({ ...validInput, name: '', email: 'also-invalid' })).toMatchObject({
-      ok: false,
-      error: { code: 'INVALID_NAME' },
-    });
+    try {
+      new User({ ...validInput, name: '', email: 'also-invalid' });
+    } catch (error) {
+      expect(error).toBeInstanceOf(ValidationError);
+      if (error instanceof ValidationError) {
+        expect(error.code).toBe('INVALID_NAME');
+      }
+    }
   });
 });
 
@@ -81,10 +92,9 @@ describe('User.fromPersistence', () => {
 
 describe('userRegisteredFrom', () => {
   it('carries only what the Notification context needs', () => {
-    const result = User.register(validInput);
-    if (!result.ok) throw new Error('expected a valid user');
+    const user = new User(validInput);
 
-    const event = userRegisteredFrom(result.value);
+    const event = userRegisteredFrom(user);
 
     expect(event).toEqual({
       userId: validInput.id,
