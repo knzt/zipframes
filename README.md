@@ -6,7 +6,7 @@ Dois processos neste repositório. O `auth-service` cadastra usuários e emite J
 
 ```
 zipframes/
-├── services/auth-service/       # identidade, Postgres e outbox
+├── services/auth-service/       # identidade, Postgres e publicação de eventos
 ├── services/processor-worker/   # frames e zip, sem banco
 ├── infra/docker-compose/        # Postgres, RabbitMQ, SeaweedFS e o resto da máquina
 ├── infra/k8s/                   # manifests dos dois processos; não inclui a infra
@@ -30,7 +30,7 @@ Cada serviço tem o próprio `package.json` e `pnpm-lock.yaml`. A raiz só insta
 
 ## Como os processos se relacionam
 
-O auth grava o usuário e a linha de outbox na mesma transação e publica `user.registered` no exchange `zipframes.events`. O worker não consome esse evento. Ele escuta a fila `processor.video.uploaded`, ligada a `video.uploaded`. Quem publicaria esse evento não está neste repositório.
+O auth grava o usuário e publica `user.registered` no exchange `zipframes.events`. O worker não consome esse evento. Ele escuta a fila `processor.video.uploaded`, ligada a `video.uploaded`. Quem publicaria esse evento não está neste repositório.
 
 Os dois não se chamam por HTTP na subida. O auth precisa do Postgres (`auth_db`) e do RabbitMQ. O worker precisa do RabbitMQ, do bucket `videos` e de `ffmpeg` no `PATH` quando roda fora da imagem. A ordem entre os dois processos não importa.
 

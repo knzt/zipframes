@@ -9,10 +9,9 @@ export default defineConfig({
         'src/domain/**',
         'src/application/**',
         'src/infrastructure/services/crypto/**',
-        'src/infrastructure/messaging/outboxEnvelope.ts',
+        'src/infrastructure/gateways/**',
         'src/infrastructure/http/**',
         'src/infrastructure/config.ts',
-        'src/infrastructure/observability/**',
       ],
       thresholds: {
         lines: 100,

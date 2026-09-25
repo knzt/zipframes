@@ -22,10 +22,8 @@ beforeEach(() => {
   delete process.env.JWT_PRIVATE_KEY_FILE;
   delete process.env.LOG_LEVEL;
   delete process.env.SERVICE_VERSION;
-  delete process.env.OUTBOX_MAX_ATTEMPTS;
   delete process.env.PORT;
   delete process.env.CORS_ORIGIN;
-  delete process.env.OUTBOX_INTERVAL_MS;
 });
 
 afterEach(() => {
@@ -47,20 +45,16 @@ describe('loadConfig', () => {
     });
   });
 
-  it('defaults port, cors, outbox interval and the attempt limit when not set', () => {
+  it('defaults port and cors when not set', () => {
     const config = loadConfig();
 
     expect(config.port).toBe(3000);
     expect(config.corsOrigin).toBe('*');
-    expect(config.outboxIntervalMs).toBe(2000);
-    expect(config.outboxMaxAttempts).toBe(30);
   });
 
   it('honours overrides for the optional variables', () => {
     process.env.PORT = '4000';
     process.env.CORS_ORIGIN = 'https://app.zipframes.test';
-    process.env.OUTBOX_INTERVAL_MS = '5000';
-    process.env.OUTBOX_MAX_ATTEMPTS = '10';
     process.env.LOG_LEVEL = 'debug';
     process.env.SERVICE_VERSION = '1.2.3';
 
@@ -68,8 +62,6 @@ describe('loadConfig', () => {
 
     expect(config.port).toBe(4000);
     expect(config.corsOrigin).toBe('https://app.zipframes.test');
-    expect(config.outboxIntervalMs).toBe(5000);
-    expect(config.outboxMaxAttempts).toBe(10);
     expect(config.logLevel).toBe('debug');
     expect(config.serviceVersion).toBe('1.2.3');
   });
@@ -120,16 +112,10 @@ describe('loadConfig', () => {
     expect(() => loadConfig()).toThrow('JWT_AUDIENCE');
   });
 
-  it('rejects a non-positive outbox attempt limit', () => {
-    process.env.OUTBOX_MAX_ATTEMPTS = '0';
+  it('rejects a non-positive port', () => {
+    process.env.PORT = '0';
 
-    expect(() => loadConfig()).toThrow('OUTBOX_MAX_ATTEMPTS');
-  });
-
-  it('rejects a non-positive outbox interval', () => {
-    process.env.OUTBOX_INTERVAL_MS = '0';
-
-    expect(() => loadConfig()).toThrow('OUTBOX_INTERVAL_MS');
+    expect(() => loadConfig()).toThrow('PORT');
   });
 
   it('rejects an empty private key file', () => {
@@ -166,10 +152,10 @@ describe('loadConfig', () => {
     expect(() => loadConfig()).toThrow('PORT');
   });
 
-  it('treats a blank attempt limit as the default', () => {
-    process.env.OUTBOX_MAX_ATTEMPTS = '';
+  it('treats a blank port as the default', () => {
+    process.env.PORT = '';
 
-    expect(loadConfig().outboxMaxAttempts).toBe(30);
+    expect(loadConfig().port).toBe(3000);
   });
 
   it('rejects an unknown log level', () => {

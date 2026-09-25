@@ -6,7 +6,6 @@ import type { Result } from '@zipframes/core';
 import type {
   UserRepository,
   UserRepositoryEmailTakenError,
-  UserRepositoryOutboxEventWrite,
 } from '../../../application/interfaces/repositories/UserRepository.js';
 import { asUserId } from '../../../domain/entities/user.js';
 import type { User } from '../../../domain/entities/user.js';
@@ -38,35 +37,18 @@ export class PrismaUserRepository implements UserRepository {
     return row === null ? null : toDomain(row);
   }
 
-  async save(
-    user: User,
-    outbox: UserRepositoryOutboxEventWrite,
-  ): Promise<Result<void, UserRepositoryEmailTakenError>> {
+  async save(user: User): Promise<Result<void, UserRepositoryEmailTakenError>> {
     try {
-      await this.prisma.$transaction([
-        this.prisma.user.create({
-          data: {
-            id: user.id,
-            name: user.name,
-            email: user.email,
-            passwordHash: user.passwordHash,
-            createdAt: user.createdAt,
-            updatedAt: user.updatedAt,
-          },
-        }),
-        this.prisma.outboxEvent.create({
-          data: {
-            id: outbox.id,
-            aggregateType: outbox.aggregateType,
-            aggregateId: outbox.aggregateId,
-            eventType: outbox.eventType,
-            version: outbox.version,
-            payload: outbox.payload as Prisma.InputJsonValue,
-            correlationId: outbox.correlationId,
-            occurredAt: outbox.occurredAt,
-          },
-        }),
-      ]);
+      await this.prisma.user.create({
+        data: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          passwordHash: user.passwordHash,
+          createdAt: user.createdAt,
+          updatedAt: user.updatedAt,
+        },
+      });
       return ok(undefined);
     } catch (error) {
       if (

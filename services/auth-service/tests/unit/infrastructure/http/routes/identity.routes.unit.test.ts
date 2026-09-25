@@ -41,7 +41,7 @@ const buildApp = async (overrides?: {
   });
   registerHealthRoutes(app, {
     isReady: overrides?.isReady ?? (async () => ({ ready: true })),
-    renderMetrics: overrides?.renderMetrics ?? (async () => 'outbox_exhausted_total 0\n'),
+    renderMetrics: overrides?.renderMetrics ?? (async () => 'nodejs_version_info 1\n'),
   });
 
   return app;
@@ -255,7 +255,7 @@ describe('health and metrics', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.headers['content-type']).toContain('text/plain');
-    expect(response.body).toContain('outbox_exhausted_total');
+    expect(response.body).toContain('nodejs_version_info');
   });
 });
 

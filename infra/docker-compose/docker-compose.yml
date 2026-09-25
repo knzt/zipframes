@@ -170,8 +170,6 @@ services:
       JWT_ISSUER: https://auth.zipframes.local
       JWT_AUDIENCE: zipframes
       PORT: '3000'
-      OUTBOX_INTERVAL_MS: '2000'
-      OUTBOX_MAX_ATTEMPTS: '30'
       LOG_LEVEL: info
       SERVICE_VERSION: '0.1.0'
     volumes:

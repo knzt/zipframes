@@ -19,9 +19,9 @@ const invalidCredentials: LoginUseCaseError = {
 
 export class LoginUseCase {
   constructor(
-    private readonly users: UserRepository,
-    private readonly hasher: PasswordHasher,
-    private readonly tokens: TokenIssuer,
+    private readonly userRepository: UserRepository,
+    private readonly passwordHasher: PasswordHasher,
+    private readonly tokenIssuer: TokenIssuer,
   ) {}
 
   async execute(input: LoginUseCaseInput): Promise<Result<LoginUseCaseOutput, LoginUseCaseError>> {
@@ -30,17 +30,17 @@ export class LoginUseCase {
       return err(invalidCredentials);
     }
 
-    const user = await this.users.findByEmail(email.value);
+    const user = await this.userRepository.findByEmail(email.value);
     if (user === null) {
       return err(invalidCredentials);
     }
 
-    const matches = await this.hasher.verify(input.password, user.passwordHash);
+    const matches = await this.passwordHasher.verify(input.password, user.passwordHash);
     if (!matches) {
       return err(invalidCredentials);
     }
 
-    const { token, expiresInSeconds } = await this.tokens.issue(user.id);
+    const { token, expiresInSeconds } = await this.tokenIssuer.issue(user.id);
 
     return ok({
       accessToken: token,

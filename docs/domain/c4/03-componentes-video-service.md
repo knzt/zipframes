@@ -27,7 +27,7 @@ flowchart TB
     subgraph app["Use Cases"]
       direction LR
       uc["RequestUpload<br/>ConfirmUpload<br/>ListUserVideos<br/>GetVideo<br/>GetDownloadUrl<br/>ApplyProcessingEvent"]
-      interfaces["<b>Interfaces</b><br/>VideoRepository<br/>EventOutbox<br/>ProcessedEventStore<br/>ObjectStorage<br/>VideoListCache<br/>Clock, IdGenerator"]
+      interfaces["<b>Interfaces</b><br/>VideoRepository<br/>EventPublisher<br/>ProcessedEventStore<br/>ObjectStorage<br/>VideoListCache<br/>Clock, IdGenerator"]
     end
 
     subgraph dom["Entities"]
@@ -39,11 +39,10 @@ flowchart TB
     subgraph adout["Interface Adapters: saída"]
       direction LR
       repo["PrismaVideoRepository"]
-      outbox["PrismaEventOutbox"]
+      events["AmqpEventPublisher"]
       inbox["PrismaProcessedEventStore"]
       objstore["S3ObjectStorage"]
       listcache["RedisVideoListCache"]
-      relay["OutboxRelay"]
     end
 
     subgraph fwout["Frameworks & Drivers: saída"]
@@ -85,14 +84,14 @@ flowchart TB
   classDef domc fill:#f3d0d0,stroke:#b35c5c,color:#2e1515
   class ingress,authsvc,brokerin,db,storage,cache,brokerout ext
   class fastify,amqpin,prismaclient,s3client,redisclient,amqpout fwc
-  class guard,ctrl,consumer,repo,outbox,inbox,objstore,listcache,relay adc
+  class guard,ctrl,consumer,repo,events,inbox,objstore,listcache adc
   class uc,interfaces appc
   class video,vos domc
 ```
 
 O diagrama segue o caminho de uma requisição em tempo de execução: entra pelos frameworks, passa pelos controllers e consumers, chega aos use cases e às entidades, e sai pelas interfaces que o caso de uso declara até as implementações e seus clientes. A coluna da tabela abaixo repete o nome da caixa do diagrama. Esse nome não é uma pasta do repositório.
 
-No código dos serviços que já existem, o caso de uso e a interface que ele declara ficam juntos em `application/`. A classe que implementa a interface fica em `infrastructure/` e importa essa interface; o caso de uso não importa a implementação. É isso que permite gravar no banco sem conhecer o Prisma. O diagrama acima separa caixas para ler o fluxo; essa separação não é uma camada a mais no repositório. O RabbitMQ aparece duas vezes apenas para separar consumo e publicação. As interfaces seguem `application/interfaces/`.
+No código dos serviços que já existem, o caso de uso e a interface que ele declara ficam juntos em `application/`. A classe que implementa a interface fica em `infrastructure/` e importa essa interface; o caso de uso não importa a implementação. É isso que permite gravar no banco sem conhecer o Prisma. O diagrama acima separa caixas para ler o fluxo; essa separação não é uma camada a mais no repositório. O RabbitMQ aparece duas vezes apenas para separar consumo e publicação. As interfaces seguem `application/interfaces/`. Quando o video-service existir, ele publica como o auth-service e o processor-worker: repositório e depois `EventPublisher`, sem tabela outbox e sem relay.
 
 ## Componentes
 
@@ -101,7 +100,7 @@ No código dos serviços que já existem, o caso de uso e a interface que ele de
 | Entities             | `Video`                       | Mantém o estado do vídeo e aplica as regras de transição                                                    |
 | Entities             | Value objects                 | Validam e representam status, identificadores, nome de arquivo e chaves                                     |
 | Use Cases            | `RequestUpload`               | Valida nome, tipo e tamanho, cria o vídeo e devolve a URL de upload                                         |
-| Use Cases            | `ConfirmUpload`               | Confere o objeto, coloca o vídeo na fila e registra `video.uploaded` no outbox                              |
+| Use Cases            | `ConfirmUpload`               | Confere o objeto, grava o vídeo e publica `video.uploaded` pelo `EventPublisher`                            |
 | Use Cases            | `ListUserVideos` e `GetVideo` | Consultam os vídeos do dono, usando o cache na listagem                                                     |
 | Use Cases            | `GetDownloadUrl`              | Verifica se o vídeo está `DONE` e devolve a URL do zip                                                      |
 | Use Cases            | `ApplyProcessingEvent`        | Aplica os eventos do worker de forma idempotente e invalida o cache                                         |
@@ -109,7 +108,7 @@ No código dos serviços que já existem, o caso de uso e a interface que ele de
 | Interface Adapters   | `JwtAuthGuard`                | Extrai e valida o token e disponibiliza o `ownerId`                                                         |
 | Interface Adapters   | `VideoController`             | Converte HTTP em chamadas aos use cases e os resultados em respostas                                        |
 | Interface Adapters   | `ProcessingStatusConsumer`    | Valida as mensagens contra os contratos e chama `ApplyProcessingEvent`                                      |
-| Interface Adapters   | `OutboxRelay`                 | Lê eventos pendentes do outbox, publica com confirmação e marca como publicados                             |
+| Interface Adapters   | `AmqpEventPublisher`          | Monta o envelope e publica no exchange `zipframes.events`                                                   |
 | Interface Adapters   | Repositórios, storage e cache | Implementam as interfaces com Prisma, S3 e Redis, com mappers entre o modelo de domínio e o de persistência |
 | Frameworks & Drivers | Servidor e clientes           | Configuração do Fastify, do Prisma Client, da conexão AMQP e dos clientes S3 e Redis                        |
 

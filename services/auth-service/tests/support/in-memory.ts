@@ -2,9 +2,12 @@ import { err, ok } from '@zipframes/core';
 import type { Result } from '@zipframes/core';
 
 import type {
+  EventPublisher,
+  EventPublisherInput,
+} from '../../src/application/interfaces/gateways/EventPublisher.js';
+import type {
   UserRepository,
   UserRepositoryEmailTakenError,
-  UserRepositoryOutboxEventWrite,
 } from '../../src/application/interfaces/repositories/UserRepository.js';
 import type { Clock } from '../../src/application/interfaces/services/Clock.js';
 import type { IdGenerator } from '../../src/application/interfaces/services/IdGenerator.js';
@@ -19,22 +22,30 @@ import type { PasswordHash } from '../../src/domain/valueObjects/password.js';
  */
 export class InMemoryUserRepository implements UserRepository {
   readonly users = new Map<string, User>();
-  readonly events: UserRepositoryOutboxEventWrite[] = [];
 
   findByEmail(email: string): Promise<User | null> {
     return Promise.resolve(this.users.get(email) ?? null);
   }
 
-  save(
-    user: User,
-    outbox: UserRepositoryOutboxEventWrite,
-  ): Promise<Result<void, UserRepositoryEmailTakenError>> {
+  save(user: User): Promise<Result<void, UserRepositoryEmailTakenError>> {
     if (this.users.has(user.email)) {
       return Promise.resolve(err({ code: 'EMAIL_TAKEN' as const }));
     }
     this.users.set(user.email, user);
-    this.events.push(outbox);
     return Promise.resolve(ok(undefined));
+  }
+}
+
+export class InMemoryEventPublisher implements EventPublisher {
+  readonly published: EventPublisherInput[] = [];
+  failWith: Error | null = null;
+
+  publish(input: EventPublisherInput): Promise<void> {
+    if (this.failWith !== null) {
+      return Promise.reject(this.failWith);
+    }
+    this.published.push(input);
+    return Promise.resolve();
   }
 }
 
