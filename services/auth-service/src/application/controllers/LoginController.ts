@@ -1,4 +1,4 @@
-import { PROBLEM_CONTENT_TYPE, problemDetails, type ProblemDetails } from '@zipframes/core';
+import { type PROBLEM_CONTENT_TYPE, problemResponse, type ProblemDetails } from '@zipframes/core';
 import { authService, parseSchema } from '@zipframes/schemas';
 import type { z } from 'zod';
 
@@ -31,20 +31,12 @@ export class LoginController {
   async handle(request: LoginControllerRequest): Promise<LoginControllerResponse> {
     const body = parseSchema(authService.loginRequestSchema, request.body);
     if (!body.ok) {
-      return {
-        status: 401,
-        contentType: PROBLEM_CONTENT_TYPE,
-        body: problemDetails(401, 'Invalid credentials', undefined, request.correlationId),
-      };
+      return problemResponse(401, 'Invalid credentials', undefined, request.correlationId);
     }
 
     const result = await this.loginUseCase.execute(body.value);
     if (!result.ok) {
-      return {
-        status: 401,
-        contentType: PROBLEM_CONTENT_TYPE,
-        body: problemDetails(401, 'Invalid credentials', undefined, request.correlationId),
-      };
+      return problemResponse(401, 'Invalid credentials', undefined, request.correlationId);
     }
 
     return {
