@@ -45,7 +45,7 @@ const buildApp = async (overrides?: {
   registerHealthRoutes(app, {
     isReady: overrides?.isReady ?? (async () => ({ ready: true })),
     renderMetrics: overrides?.renderMetrics ?? (async () => 'nodejs_version_info 1\n'),
-    logger: overrides?.logger,
+    ...(overrides?.logger === undefined ? {} : { logger: overrides.logger }),
   });
 
   return app;

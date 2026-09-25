@@ -105,7 +105,7 @@ describe('RegisterUserController', () => {
     const execute = vi.fn(async () => ({
       ok: false as const,
       error: new Error('unexpected'),
-    }));
+    })) as unknown as RegisterUserUseCase['execute'];
     const controller = controllerFor(execute);
 
     await expect(
