@@ -41,7 +41,8 @@ describe('createAmqpEventPublisher', () => {
       { exchange: 'zipframes.events', routingKey: 'user.registered' },
     );
 
-    const envelope = publish.mock.calls[0]?.[0];
-    expect(authService.userRegisteredEventSchema.safeParse(envelope).success).toBe(true);
+    const firstCall = publish.mock.calls[0] as unknown[] | undefined;
+    expect(firstCall).toBeDefined();
+    expect(authService.userRegisteredEventSchema.safeParse(firstCall?.[0]).success).toBe(true);
   });
 });
