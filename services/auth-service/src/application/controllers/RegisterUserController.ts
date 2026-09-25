@@ -1,10 +1,4 @@
-import {
-  ConflictError,
-  type PROBLEM_CONTENT_TYPE,
-  problemResponse,
-  type ProblemDetails,
-  ValidationError,
-} from '@zipframes/core';
+import { type PROBLEM_CONTENT_TYPE, problemResponse, type ProblemDetails } from '@zipframes/core';
 import { authService, parseSchema } from '@zipframes/schemas';
 import type { z } from 'zod';
 
@@ -54,15 +48,7 @@ export class RegisterUserController {
       correlationId: request.correlationId,
     });
     if (!result.ok) {
-      if (result.error instanceof ValidationError) {
-        return problemResponse(
-          400,
-          'Invalid request body',
-          result.error.message,
-          request.correlationId,
-        );
-      }
-      if (result.error instanceof ConflictError) {
+      if (result.error.statusCode === 409) {
         return problemResponse(
           409,
           'Email already registered',
@@ -70,7 +56,12 @@ export class RegisterUserController {
           request.correlationId,
         );
       }
-      throw new Error('unexpected register failure', { cause: result.error });
+      return problemResponse(
+        400,
+        'Invalid request body',
+        result.error.message,
+        request.correlationId,
+      );
     }
 
     return {

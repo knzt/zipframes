@@ -57,16 +57,17 @@ export const createHttpServer = async (options: HttpServerOptions): Promise<Fast
       );
     }
 
+    const httpError =
+      error instanceof InternalServerError
+        ? error
+        : new InternalServerError('UNEXPECTED', error.message, { cause: error });
     options.logger.error('unhandled http error', {
-      err:
-        error instanceof InternalServerError
-          ? error
-          : new InternalServerError('UNEXPECTED', error.message, { cause: error }),
+      err: httpError,
       correlationId,
     });
     return sendProblem(
       reply,
-      problemResponse(500, 'Internal server error', undefined, correlationId),
+      problemResponse(httpError.statusCode, 'Internal server error', undefined, correlationId),
     );
   });
 

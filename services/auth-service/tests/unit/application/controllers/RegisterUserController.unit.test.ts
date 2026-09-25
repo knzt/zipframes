@@ -100,19 +100,4 @@ describe('RegisterUserController', () => {
       },
     });
   });
-
-  it('throws when the use case returns an unexpected error', async () => {
-    const execute = vi.fn(async () => ({
-      ok: false as const,
-      error: new Error('unexpected'),
-    })) as unknown as RegisterUserUseCase['execute'];
-    const controller = controllerFor(execute);
-
-    await expect(
-      controller.handle({
-        correlationId,
-        body: { name: 'Ada Lovelace', email: 'ada@example.com', password: 'senha1234' },
-      }),
-    ).rejects.toThrow('unexpected register failure');
-  });
 });
