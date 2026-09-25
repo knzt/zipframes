@@ -6,6 +6,7 @@ RUN apt-get update \
   && npm install -g pnpm@12.6.0 --allow-scripts=pnpm
 
 # Context is the repository root so tsconfig.base.json is available.
+# Ignore rules for that context are the root .dockerignore.
 # The install uses only this service's lockfile.
 WORKDIR /src
 COPY tsconfig.base.json ./tsconfig.base.json

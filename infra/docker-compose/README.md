@@ -1,43 +1,41 @@
 # Infraestrutura local
 
-Sobe tudo de que os serviços do ZipFrames precisam para rodar na máquina: bancos, broker, cache, object storage e captura de e-mails.
-
-## Subir
+`pnpm infra:up` sobe o que os dois processos precisam para rodar na máquina, e também containers que nenhum código daqui usa. Não constrói imagem de `auth-service` nem de `processor-worker`.
 
 ```bash
-cp infra/docker-compose/.env.example infra/docker-compose/.env
-docker compose -f infra/docker-compose/docker-compose.yml up -d
+pnpm infra:up
 ```
 
-Na raiz do monorepo, os atalhos equivalentes são `pnpm infra:up`, `pnpm infra:down`, `pnpm infra:logs` e `pnpm infra:reset`.
+O atalho é `docker compose -f infra/docker-compose/docker-compose.yml up -d`. O Compose lê `infra/docker-compose/.env` se o arquivo existir. Os `${VAR:-default}` do YAML repetem [`infra/docker-compose/.env.example`](.env.example), então a cópia é opcional.
 
-## Serviços e portas
+`pnpm infra:down` para tudo, inclusive o profile `apps`. `pnpm infra:reset` apaga os volumes e sobe de novo só a infra. `pnpm infra:logs` segue o log.
 
-| Serviço            | Porta | Acesso                                                                 |
-| ------------------ | ----- | ---------------------------------------------------------------------- |
-| auth-db            | 5432  | `postgres://zipframes:zipframes@localhost:5432/auth_db`                |
-| video-db           | 5433  | `postgres://zipframes:zipframes@localhost:5433/video_db`               |
-| notification-db    | 5434  | `postgres://zipframes:zipframes@localhost:5434/notification_db`        |
-| RabbitMQ (AMQP)    | 5672  | `amqp://zipframes:zipframes@localhost:5672`                            |
-| RabbitMQ (painel)  | 15672 | http://localhost:15672                                                 |
-| Redis              | 6379  | `redis://localhost:6379`                                               |
-| SeaweedFS (S3)     | 8333  | `http://localhost:8333`, bucket `videos`                               |
-| SeaweedFS (master) | 9333  | http://localhost:9333                                                  |
-| SeaweedFS (filer)  | 8888  | http://localhost:8888                                                  |
-| Mailpit (SMTP)     | 1025  | `smtp://localhost:1025`                                                |
-| Mailpit (web)      | 8025  | http://localhost:8025                                                  |
-| auth-service       | 3000  | http://localhost:3000/health/ready                                     |
-| processor-worker   | 8081  | http://localhost:8081/health/ready (também `/health/live`, `/metrics`) |
+## O que sobe com `infra:up`
 
-As três instâncias de PostgreSQL existem para manter o isolamento real entre serviços
+| Serviço            | Porta no host | Para quê                                                                  |
+| ------------------ | ------------- | ------------------------------------------------------------------------- |
+| auth-db            | 5432          | Postgres do auth. `postgres://zipframes:zipframes@localhost:5432/auth_db` |
+| video-db           | 5433          | Postgres sem processo neste repositório                                   |
+| notification-db    | 5434          | Postgres sem processo neste repositório                                   |
+| RabbitMQ (AMQP)    | 5672          | `amqp://zipframes:zipframes@localhost:5672`                               |
+| RabbitMQ (painel)  | 15672         | http://localhost:15672                                                    |
+| Redis              | 6379          | sem cliente neste repositório                                             |
+| SeaweedFS (S3)     | 8333          | `http://localhost:8333`, bucket `videos`                                  |
+| SeaweedFS (master) | 9333          | http://localhost:9333/cluster/healthz                                     |
+| SeaweedFS (filer)  | 8888          | http://localhost:8888                                                     |
+| Mailpit (SMTP)     | 1025          | sem remetente neste repositório                                           |
+| Mailpit (web)      | 8025          | http://localhost:8025                                                     |
 
-## Verificar
+O `storage-init` cria o bucket `videos` e termina. `Exited (0)` é o estado esperado. As credenciais que ele usa estão em [`seaweedfs/s3.json`](seaweedfs/s3.json) (`zipframes` / `zipframes-local-secret`). Esse JSON não interpola o `.env`.
+
+## Conferir a infra
 
 ```bash
-# estado dos containers, com healthcheck
 docker compose -f infra/docker-compose/docker-compose.yml ps
 
-# o bucket foi criado?
+curl -fsS http://localhost:15672
+curl -fsS http://localhost:9333/cluster/healthz
+
 docker run --rm --network zipframes \
   -e AWS_ACCESS_KEY_ID=zipframes \
   -e AWS_SECRET_ACCESS_KEY=zipframes-local-secret \
@@ -45,30 +43,34 @@ docker run --rm --network zipframes \
   amazon/aws-cli:2.27.30 --endpoint-url http://storage:8333 s3 ls
 ```
 
-O container `storage-init` cria o bucket `videos` na primeira subida e encerra. Vê-lo como `Exited (0)` é o comportamento esperado.
+`auth-db` saudável responde no healthcheck `pg_isready`. O RabbitMQ usa `rabbitmq-diagnostics -q ping`. O Redis usa `redis-cli ping`. O SeaweedFS usa `wget` contra `http://127.0.0.1:9333/cluster/healthz` dentro da imagem `chrislusf/seaweedfs:3.80`.
 
-O `processor-worker` sobe junto. Antes do build da imagem, no serviço:
+Com a infra no ar, o caminho dos processos na máquina está no [README da raiz](../../README.md): copiar o `.env` de cada serviço, `db:generate` e `db:deploy` no auth, `pnpm dev` nos dois.
+
+## Processos dentro de container
+
+O profile `apps` constrói e sobe os dois. O worker só entra na imagem se `dist/` e `.runtime/node_modules` já existirem no contexto. O auth instala o lockfile dele no build e lê `NODE_AUTH_TOKEN` como secret.
 
 ```bash
+export NODE_AUTH_TOKEN
 pnpm --dir services/processor-worker build
 pnpm --dir services/processor-worker stage-runtime
+pnpm infra:apps
 ```
 
-`stage-runtime` monta os `node_modules` de produção já instalados. O build da imagem não baixa `@zipframes/*` de novo. Com RabbitMQ e o bucket saudáveis, `GET /health/ready` responde 200.
-
-O `auth-service` também sobe junto. A imagem instala o lockfile do próprio serviço (`services/auth-service/pnpm-lock.yaml`). O contexto do build é a raiz para o `tsconfig.base.json` entrar na imagem, então `NODE_AUTH_TOKEN` precisa estar exportado. A chave RS256 de desenvolvimento está em `infra/docker-compose/auth/jwt-dev.pem` e só vale para esta máquina. O processo aplica as migrations e então escuta; `GET /health/ready` responde 200 com o Postgres e o RabbitMQ alcançáveis.
-
-## Zerar tudo
+`pnpm infra:apps` é `docker compose ... --profile apps up -d --build`. O container do auth aplica as migrations na subida (`prisma migrate deploy`) e escuta na porta 3000. O worker escuta na 8081. A chave montada no auth é `infra/docker-compose/auth/jwt-dev.pem`, com `JWT_KID=auth-dev-1`.
 
 ```bash
-docker compose -f infra/docker-compose/docker-compose.yml down -v
+curl -fsS http://localhost:3000/health/ready
+curl -fsS http://localhost:8081/health/ready
 ```
 
-O `-v` apaga os volumes, ou seja, todos os dados e arquivos enviados.
+`GET /health/ready` do auth exige Postgres e RabbitMQ. O do worker exige RabbitMQ e o bucket. `GET /health/live` e `GET /metrics` existem nos dois. `GET /docs` publica o OpenAPI.
 
-## Observações
+Não rode o mesmo processo na máquina e no container ao mesmo tempo: os dois usam as portas 3000 e 8081.
 
-- **As credenciais aqui são apenas de desenvolvimento.** Em Kubernetes elas vêm de Secrets.
-- **`seaweedfs/s3.json` não interpola variáveis de ambiente.** Ao mudar `STORAGE_ACCESS_KEY` ou `STORAGE_SECRET_KEY` no `.env`, ajuste o mesmo valor nesse arquivo.
-- **O volume server do SeaweedFS não é publicado** para não ocupar a porta 8080 da máquina. O acesso acontece pelo gateway S3, na 8333.
-- **Prometheus, Grafana e Jaeger não estão aqui.** Eles entram na fase de observabilidade, em um Compose próprio, para não pesar no dia a dia.
+## O que este Compose não é
+
+- Não substitui o Kubernetes. `infra/k8s/` não cria banco, broker nem storage. O Secret de exemplo fica de fora do Kustomize. O `ScaledObject` do worker exige o CRD do KEDA.
+- As credenciais são de desenvolvimento. Não as reuse fora desta máquina.
+- O volume server do SeaweedFS não é publicado, para não ocupar a porta 8080. O acesso é o gateway S3, na 8333.

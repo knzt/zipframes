@@ -1,97 +1,157 @@
 # ZipFrames
 
-Sistema de processamento de vídeos entregue à **FIAP X**, desenvolvido no hackathon da POSTECH SOAT (Fase 5).
+Dois processos neste repositório. O `auth-service` cadastra usuários e emite JWT RS256. O `processor-worker` consome `video.uploaded`, extrai um frame por segundo com `ffmpeg` e grava um zip no storage. Não há serviço de upload, notificação nem cliente web aqui. Sem alguém publicando `video.uploaded`, o worker sobe e fica ocioso.
 
-Recebe vídeos enviados por usuários autenticados, extrai um frame por segundo com `ffmpeg` e entrega os frames em um arquivo `.zip`. O processamento é assíncrono, escalável e observável.
-
-## Arquitetura
-
-Microsserviços com Clean Architecture, comunicação por eventos via RabbitMQ, object storage compatível com S3 (SeaweedFS), autenticação com JWT RS256 e deploy em Kubernetes com escala automática pelo tamanho da fila (KEDA).
-
-A documentação completa de arquitetura está em [`docs/`](docs/).
-
-## Monorepo
+## Organização
 
 ```
 zipframes/
-├── services/          # microsserviços independentes
-│   ├── auth-service/
-│   ├── video-service/
-│   ├── processor-worker/
-│   ├── notification-service/
-│   └── web-client/
-├── infra/             # Docker Compose, Kubernetes e Argo CD
-├── docs/              # arquitetura, C4 e ADRs
-└── tests/             # testes e2e e de carga
+├── services/auth-service/       # identidade, Postgres e outbox
+├── services/processor-worker/   # frames e zip, sem banco
+├── infra/docker-compose/        # Postgres, RabbitMQ, SeaweedFS e o resto da máquina
+├── infra/k8s/                   # manifests dos dois processos; não inclui a infra
+└── docs/                        # arquitetura e contratos
 ```
 
-Cada serviço tem `package.json`, `pnpm-lock.yaml`, `Dockerfile`, migrations e testes próprios. **Nenhum serviço importa código de outro serviço.** Não há um lockfile compartilhado: a raiz só trava o tooling do repositório (lint, format, hooks); cada serviço instala e trava as próprias dependências. As dependências `@zipframes/*` vêm do registro, não de `file:`.
+Cada serviço tem o próprio `package.json` e `pnpm-lock.yaml`. A raiz só instala lint, format e hooks. Nenhum serviço importa código do outro. `@zipframes/*` vem do GitHub Packages, na versão declarada no `package.json` do serviço.
 
-O código compartilhado não vive aqui: ele é publicado como pacotes npm (`@zipframes/*`) a partir de um repositório próprio, e cada serviço declara a versão que usa. Assim um serviço só adota uma mudança quando escolhe subir de versão, em vez de ser afetado no mesmo instante.
+| Pacote                     | Uso neste repositório           |
+| -------------------------- | ------------------------------- |
+| `@zipframes/core`          | `Result`, erros e readiness     |
+| `@zipframes/schemas`       | contratos HTTP e de evento      |
+| `@zipframes/value-objects` | e-mail e nome no cadastro       |
+| `@zipframes/communication` | publicar e consumir no RabbitMQ |
+| `@zipframes/logger`        | log e correlation id            |
+| `@zipframes/telemetry`     | métricas Prometheus             |
+| `@zipframes/authenticator` | só nos testes do auth           |
+| `@zipframes/test-toolkit`  | testes de integração            |
 
-| Pacote                     | Conteúdo                                                                                                          |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `@zipframes/schemas`       | Contratos de eventos e de API, usados por mais de um serviço ou por consumidores externos                         |
-| `@zipframes/value-objects` | Value objects genéricos (e-mail, CPF, CNPJ, telefone, CEP, endereço) e o value object base para criar os próprios |
-| `@zipframes/core`          | `Result`, branded types e erros base                                                                              |
-| `@zipframes/messaging`     | Publisher, consumer, retry e DLQ                                                                                  |
-| `@zipframes/observability` | Logger, métricas e tracing                                                                                        |
-| `@zipframes/http-auth`     | Validação de JWT via JWKS                                                                                         |
+`@zipframes/core` está fixo em `0.3.0-pr35-20260925144859` e `@zipframes/test-toolkit` em `0.2.1-pr33-20260925031024`. São snapshots de pull request, não uma release estável.
 
-Os pacotes trazem **forma**, nunca **política**: validam o que é universal (um CPF é válido em qualquer sistema) e deixam para o serviço as regras que pertencem ao seu contexto, como a política de senha ou as extensões de vídeo aceitas.
+## Como os processos se relacionam
+
+O auth grava o usuário e a linha de outbox na mesma transação e publica `user.registered` no exchange `zipframes.events`. O worker não consome esse evento. Ele escuta a fila `processor.video.uploaded`, ligada a `video.uploaded`. Quem publicaria esse evento não está neste repositório.
+
+Os dois não se chamam por HTTP na subida. O auth precisa do Postgres (`auth_db`) e do RabbitMQ. O worker precisa do RabbitMQ, do bucket `videos` e de `ffmpeg` no `PATH` quando roda fora da imagem. A ordem entre os dois processos não importa.
+
+## Tecnologias presentes no código
+
+- Node.js 26, TypeScript 5, pnpm 12.6.0
+- Fastify, Zod, Prisma (só no auth)
+- RabbitMQ (`amqplib`) e SeaweedFS pela API S3 (`@aws-sdk/client-s3`)
+- JWT RS256 (`jose`) e senha com bcrypt
+- Vitest. A integração sobe broker e storage com `@zipframes/test-toolkit` e precisa de Docker
+- `GET /metrics` em texto Prometheus (`prom-client`)
+
+Não há OpenTelemetry, Grafana, Jaeger, Redis client nem Nodemailer no código. O Compose sobe `video-db`, `notification-db`, Redis e Mailpit; nenhum processo daqui conecta neles.
 
 ## Pré-requisitos
 
-- Node.js 26+
-- pnpm 12+
-- Docker e Docker Compose
-
-## Desenvolvimento local
+- Node.js 26 (`.nvmrc` e `.node-version`). O Node 26.10 não traz o `corepack`.
+- pnpm 12.6.0, o valor de `packageManager` na raiz e nos dois serviços:
 
 ```bash
-# tooling do repositório (eslint, prettier, husky)
-pnpm install
-
-# cada serviço tem o próprio lockfile — instale dentro dele
-# O pnpm 12 não expande ${NODE_AUTH_TOKEN} no .npmrc versionado.
-# No ~/.npmrc: //npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}
-cd services/processor-worker
-pnpm install
-
-# subir a infraestrutura (Postgres, RabbitMQ, Redis, SeaweedFS, Mailpit)
-pnpm infra:up
-
-# build / testes do worker (a partir da raiz ou do serviço)
-pnpm --dir services/processor-worker test
+npm install -g pnpm@12.6.0 --allow-scripts=pnpm
 ```
 
-## Convenções
+O npm 11 que vem com o Node 26 não executa o script de instalação do pnpm sem `--allow-scripts=pnpm`. A imagem do auth usa o mesmo comando.
 
-- **Commits:** [Conventional Commits](https://www.conventionalcommits.org/), validados pelo commitlint no hook `commit-msg`.
-- **Formatação:** Prettier, aplicada no hook `pre-commit` via lint-staged.
-- **Lint:** ESLint com typescript-eslint em modo strict, com a regra de camadas da Clean Architecture verificada no CI.
-- **Branches:** `feat/`, `fix/`, `docs/`, `chore/`, `ci/`, `test/`, `refactor/` saindo da `main`.
+- Docker, para a infra e para os testes de integração
+- `ffmpeg` no `PATH`, se o worker rodar na máquina e não na imagem
+- Token do GitHub com `read:packages` para `@zipframes/*`
 
-## CI
+O pnpm 12 não expande `${NODE_AUTH_TOKEN}` no `.npmrc` versionado. No `~/.npmrc`:
 
-Cada serviço é construído, testado e empacotado no próprio workflow (`.github/workflows/auth-service.yml` e `processor-worker.yml`), com filtro de caminho. Os dois chamam `.github/workflows/service-ci.yml`. O workflow da raiz só formata o repositório e valida o AsyncAPI. A imagem fica com a tag local já usada nos manifests (`zipframes-auth-service:local`, `zipframes-processor-worker:local`) e não é publicada.
+```
+//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}
+```
 
-## Stack
+Exporte `NODE_AUTH_TOKEN` no shell antes de `pnpm install` dentro de cada serviço.
 
-| Camada           | Tecnologia                                            |
-| ---------------- | ----------------------------------------------------- |
-| Linguagem        | Node.js 26 + TypeScript 5 (strict)                    |
-| HTTP             | Fastify (API e saúde, em todo serviço)                |
-| Validação        | Zod                                                   |
-| ORM / migrations | Prisma                                                |
-| Mensageria       | RabbitMQ + amqplib                                    |
-| Object storage   | SeaweedFS (API S3)                                    |
-| Cache            | Redis + ioredis                                       |
-| E-mail           | Nodemailer                                            |
-| Banco de dados   | PostgreSQL (uma instância por serviço)                |
-| Testes           | Vitest + Testcontainers                               |
-| Monorepo         | um `pnpm-lock.yaml` por serviço                       |
-| Containers       | Docker + Kubernetes (kind)                            |
-| Escala           | KEDA (worker escala pelo tamanho da fila)             |
-| CD               | Argo CD (GitOps), imagens locais, sem deploy em nuvem |
-| Observabilidade  | OpenTelemetry + Prometheus + Grafana + Jaeger         |
+## Ambiente
+
+Copie o exemplo para `.env` ao lado. O processo não lê o `.example`.
+
+| Arquivo                                  | Quem lê                                                                                               |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `infra/docker-compose/.env.example`      | O Compose, em `infra/docker-compose/.env`. Os defaults do YAML repetem o exemplo; a cópia é opcional. |
+| `services/auth-service/.env.example`     | `pnpm dev` e `pnpm start` do auth, via `--env-file=.env` no diretório do serviço.                     |
+| `services/processor-worker/.env.example` | O mesmo, no worker.                                                                                   |
+
+A chave de desenvolvimento está em `infra/docker-compose/auth/jwt-dev.pem`. O `.env` do auth aponta para ela com caminho relativo ao diretório do serviço. Use `pnpm --dir` a partir da raiz.
+
+Credenciais locais, iguais no exemplo e em `infra/docker-compose/seaweedfs/s3.json`:
+
+- Postgres `zipframes` / `zipframes`, banco `auth_db`, porta 5432
+- RabbitMQ `zipframes` / `zipframes`, AMQP 5672, painel http://localhost:15672
+- S3 access key `zipframes`, secret `zipframes-local-secret`, bucket `videos`, `http://localhost:8333`
+
+`s3.json` não interpola variável. Se mudar a chave no `.env` do Compose, mude o JSON também. `JWT_KID` na máquina e no Compose é `auth-dev-1`. O ConfigMap de Kubernetes usa `auth-1`.
+
+## Subir na máquina
+
+```bash
+cp services/auth-service/.env.example services/auth-service/.env
+cp services/processor-worker/.env.example services/processor-worker/.env
+
+pnpm install
+pnpm --dir services/auth-service install
+pnpm --dir services/processor-worker install
+
+pnpm infra:up
+
+pnpm --dir services/auth-service db:generate
+pnpm --dir services/auth-service db:deploy
+pnpm --dir services/auth-service dev
+```
+
+Em outro terminal:
+
+```bash
+pnpm --dir services/processor-worker dev
+```
+
+`pnpm infra:up` sobe só a infra. Não constrói imagem de serviço. `db:deploy` aplica a migration que já existe (`20260101000000_init`). `db:migrate` é `prisma migrate dev`, para mudar o schema, não para a primeira subida.
+
+Conferir:
+
+```bash
+curl -fsS http://localhost:3000/health/ready
+curl -fsS http://localhost:3000/.well-known/jwks.json
+curl -fsS -X POST http://localhost:3000/register \
+  -H 'content-type: application/json' \
+  -d '{"name":"Ada Lovelace","email":"ada@example.com","password":"senha1234"}'
+
+curl -fsS http://localhost:8081/health/ready
+curl -fsS http://localhost:9333/cluster/healthz
+```
+
+A senha do exemplo tem letra e dígito, entre 8 e 72 caracteres. `GET /health/ready` do auth responde 200 com Postgres e RabbitMQ alcançáveis, e 503 com `reason` se um dos dois falhar. O do worker responde 200 com RabbitMQ e o bucket alcançáveis. `GET /health/live` só diz que o processo está de pé. `GET /docs` é o OpenAPI gerado. `GET /metrics` é o texto Prometheus.
+
+Portas, Mailpit e o caminho em que os dois processos rodam dentro de container estão em [`infra/docker-compose/README.md`](infra/docker-compose/README.md).
+
+## Testes
+
+Na raiz: `pnpm format` e `pnpm lint`. Em cada serviço, `pnpm test:unit` não precisa de Docker. `pnpm test` roda a unidade e depois a integração, e a integração precisa de Docker. O teste de integração do worker usa o binário do `ffmpeg-static`, não o `ffmpeg` do sistema.
+
+```bash
+pnpm --dir services/auth-service test:unit
+pnpm --dir services/processor-worker test:unit
+```
+
+## Build
+
+Os pacotes `@zipframes/*` não são buildados neste repositório. Cada serviço:
+
+```bash
+pnpm --dir services/auth-service build
+pnpm --dir services/processor-worker build
+```
+
+A imagem do worker não baixa dependência. Antes dela, `pnpm --dir services/processor-worker stage-runtime` copia os `node_modules` de produção para `.runtime/`. A imagem do auth instala o lockfile do serviço durante o build e exige `NODE_AUTH_TOKEN`.
+
+## Limitações
+
+- Não há fluxo de upload. O worker não recebe vídeo enquanto ninguém publicar `video.uploaded`.
+- `infra/k8s/` não declara Postgres, RabbitMQ nem SeaweedFS. O Secret de exemplo não entra no Kustomize. O worker declara um `ScaledObject` do KEDA. Sem cluster, CRDs e imagens já carregadas, esses manifests não sobem o sistema.
+- As imagens ficam locais. Os manifests do Argo CD apontam para `infra/k8s/` e não são um ambiente local pronto.

@@ -33,24 +33,23 @@ tests/integration   # fluxo de video.uploaded contra RabbitMQ e SeaweedFS (sem m
 
 ## Rodar local
 
-Infraestrutura e o worker, na rede Docker:
+`pnpm infra:up` sobe RabbitMQ e o SeaweedFS. Não sobe este processo. Na máquina, com `ffmpeg` no `PATH`, `pnpm dev` lê `services/processor-worker/.env`:
 
 ```bash
-cp infra/docker-compose/.env.example infra/docker-compose/.env
-pnpm --dir services/processor-worker build
-pnpm --dir services/processor-worker stage-runtime
+cp services/processor-worker/.env.example services/processor-worker/.env
+pnpm --dir services/processor-worker install
 pnpm infra:up
+pnpm --dir services/processor-worker dev
 ```
 
 `GET http://localhost:8081/health/ready` responde 200 quando o processo alcança o RabbitMQ e o bucket.
 
-Fora do container, com `ffmpeg` no PATH:
+Para a imagem, o contexto precisa de `dist/` e de `.runtime/node_modules` antes do build:
 
 ```bash
-cp services/processor-worker/.env.example services/processor-worker/.env
-cd services/processor-worker
-pnpm install
-pnpm dev
+pnpm --dir services/processor-worker build
+pnpm --dir services/processor-worker stage-runtime
+pnpm infra:apps
 ```
 
 O lockfile deste serviço é `services/processor-worker/pnpm-lock.yaml`. `pnpm install` precisa de `NODE_AUTH_TOKEN` para os pacotes `@zipframes/*`. O pnpm 12 só expande esse token num `.npmrc` de usuário (`//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}`), não no arquivo versionado.

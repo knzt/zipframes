@@ -14,8 +14,8 @@
     "test:watch": "vitest --config vitest.unit.config.ts",
     "test:coverage": "vitest run --config vitest.unit.config.ts --coverage",
     "lint": "eslint .",
-    "dev": "tsx watch src/main/index.ts",
-    "start": "node dist/main/index.js",
+    "dev": "node --env-file=.env --import tsx --watch src/main/index.ts",
+    "start": "node --env-file=.env dist/main/index.js",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy"

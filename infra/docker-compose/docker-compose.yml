@@ -146,8 +146,10 @@ services:
     networks: [zipframes]
     restart: 'no'
 
+  # Profile `apps`: `docker compose up` não constrói nem sobe os processos.
   # ─── Identidade ─────────────────────────────────────────────
   auth-service:
+    profiles: [apps]
     build:
       context: ../..
       dockerfile: services/auth-service/Dockerfile
@@ -164,7 +166,7 @@ services:
       AUTH_DATABASE_URL: postgresql://${AUTH_DB_USER:-zipframes}:${AUTH_DB_PASSWORD:-zipframes}@auth-db:5432/${AUTH_DB_NAME:-auth_db}
       AMQP_URL: amqp://${RABBITMQ_USER:-zipframes}:${RABBITMQ_PASSWORD:-zipframes}@rabbitmq:5672
       JWT_PRIVATE_KEY_FILE: /run/secrets/jwt-dev.pem
-      JWT_KID: dev-1
+      JWT_KID: auth-dev-1
       JWT_ISSUER: https://auth.zipframes.local
       JWT_AUDIENCE: zipframes
       PORT: '3000'
@@ -192,6 +194,7 @@ services:
 
   # ─── Processamento ──────────────────────────────────────────
   processor-worker:
+    profiles: [apps]
     build:
       context: ../../services/processor-worker
       dockerfile: Dockerfile
