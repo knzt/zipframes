@@ -138,9 +138,7 @@ describe('repository save failure', () => {
       users: new Map(),
       findByEmail: async () => null,
       save: async () =>
-        Promise.resolve(
-          err(new ConflictError('EMAIL_TAKEN', 'email is already registered')),
-        ),
+        Promise.resolve(err(new ConflictError('EMAIL_TAKEN', 'email is already registered'))),
     };
     const useCase = new RegisterUserUseCase(
       raceRepository,
