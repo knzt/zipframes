@@ -27,6 +27,7 @@ src/
 ```
 tests/
 ├── unit/
+├── integration/            # Postgres real, via test-toolkit
 └── support/                # fakes das interfaces
 ```
 
@@ -36,12 +37,16 @@ As regras de dependência entre camadas estão em [`docs/architecture/layers.md`
 
 O serviço tem o próprio lockfile. Os pacotes `@zipframes/*` vêm do GitHub Packages. O pnpm 12 não expande `${NODE_AUTH_TOKEN}` no `.npmrc` versionado; a linha `//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}` fica no `~/.npmrc`.
 
+`pnpm dev` e `pnpm start` leem `services/auth-service/.env`. O caminho da chave nesse arquivo é relativo a este diretório. `db:deploy` aplica a migration existente. `db:migrate` é `prisma migrate dev`, para alterar o schema.
+
 ```bash
 export NODE_AUTH_TOKEN=<seu token>
+cp services/auth-service/.env.example services/auth-service/.env
 pnpm --dir services/auth-service install
 pnpm infra:up
-pnpm --dir services/auth-service db:migrate
-pnpm --dir services/auth-service test
+pnpm --dir services/auth-service db:generate
+pnpm --dir services/auth-service db:deploy
+pnpm --dir services/auth-service dev
 ```
 
 A imagem e o processo no Compose estão descritos em [`infra/docker-compose/README.md`](../../infra/docker-compose/README.md).
