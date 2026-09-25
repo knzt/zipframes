@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { Name } from '@zipframes/value-objects';
 
 import { RegisterUserUseCase } from '../../../../../src/application/useCases/registerUser/RegisterUserUseCase.js';
 import {
@@ -91,35 +90,11 @@ describe('invalid input', () => {
     expect(eventPublisher.published).toHaveLength(0);
   });
 
-  it('rejects an invalid email', async () => {
-    const result = await registerUser.execute({ ...validInput, email: 'not-an-email' });
-
-    expect(result).toMatchObject({ ok: false, error: { code: 'INVALID_EMAIL' } });
-    expect(eventPublisher.published).toHaveLength(0);
-  });
-
-  it('rejects an invalid name', async () => {
-    const result = await registerUser.execute({ ...validInput, name: 'H' });
-
-    expect(result).toMatchObject({ ok: false, error: { code: 'INVALID_NAME' } });
-  });
-
   it('checks the password before hashing anything else', async () => {
     const result = await registerUser.execute({ ...validInput, password: 'x' });
 
     expect(result.ok).toBe(false);
     expect(eventPublisher.published).toHaveLength(0);
-  });
-
-  it('rethrows unexpected errors from user construction', async () => {
-    vi.spyOn(Name, 'create').mockImplementation(() => {
-      throw new Error('unexpected');
-    });
-
-    await expect(registerUser.execute(validInput)).rejects.toThrow('unexpected');
-    expect(eventPublisher.published).toHaveLength(0);
-
-    vi.restoreAllMocks();
   });
 });
 

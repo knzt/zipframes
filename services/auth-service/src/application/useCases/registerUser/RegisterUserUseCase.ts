@@ -39,21 +39,13 @@ export class RegisterUserUseCase {
     const passwordHash = await this.passwordHasher.hash(password.value);
     const now = this.clock.now();
 
-    let user: User;
-    try {
-      user = new User({
-        id: this.idGenerator.next(),
-        name: input.name,
-        email: input.email,
-        passwordHash,
-        now,
-      });
-    } catch (error) {
-      if (error instanceof ValidationError) {
-        return err(error);
-      }
-      throw error;
-    }
+    const user = new User({
+      id: this.idGenerator.next(),
+      name: input.name,
+      email: input.email,
+      passwordHash,
+      now,
+    });
 
     const existing = await this.userRepository.findByEmail(user.email);
     if (existing !== null) {
