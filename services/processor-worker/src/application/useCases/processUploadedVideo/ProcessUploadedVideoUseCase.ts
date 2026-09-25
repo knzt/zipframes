@@ -1,10 +1,14 @@
 import { isProcessingError, ProcessingError } from '../../../domain/errors/processingError.js';
 import { framesPackageObjectKey } from '../../../domain/policies/framesPackage.js';
-import type { ProcessingJob } from '../../../domain/valueObjects/processingJob.js';
+import type { EventPublisher } from '../../interfaces/gateways/EventPublisher.js';
+import type { FrameExtractor } from '../../interfaces/gateways/FrameExtractor.js';
+import type { ObjectStorage } from '../../interfaces/gateways/ObjectStorage.js';
+import type { ArchiveBuilder } from '../../interfaces/services/ArchiveBuilder.js';
+import type { WorkDirectory } from '../../interfaces/services/WorkDirectory.js';
 import type {
-  ProcessUploadedVideo,
-  ProcessUploadedVideoDependencies,
-} from './processUploadedVideo.dto.js';
+  ProcessUploadedVideoUseCaseInput,
+  ProcessUploadedVideoUseCaseOutput,
+} from './processUploadedVideo.types.js';
 
 interface JobWorkspace {
   readonly rootDir: string;
@@ -33,7 +37,7 @@ const originalVideoName = (originalFileName: string): string => {
 };
 
 const openJobWorkspace = async (
-  workDirectory: ProcessUploadedVideoDependencies['workDirectory'],
+  workDirectory: WorkDirectory,
   videoId: string,
   originalFileName: string,
 ): Promise<JobWorkspace> => {
@@ -86,30 +90,67 @@ const classifyFailure = (error: unknown, timedOut: boolean, timeoutMs: number): 
   );
 };
 
-export const createProcessUploadedVideo = (
-  deps: ProcessUploadedVideoDependencies,
-): ProcessUploadedVideo => {
-  const publishProcessingStarted = async (job: ProcessingJob): Promise<void> => {
-    await deps.events.publish({
+export class ProcessUploadedVideoUseCase {
+  constructor(
+    private readonly storage: ObjectStorage,
+    private readonly extractor: FrameExtractor,
+    private readonly archive: ArchiveBuilder,
+    private readonly workDirectory: WorkDirectory,
+    private readonly events: EventPublisher,
+    private readonly now: () => Date,
+    private readonly processingTimeoutMs: number,
+    private readonly onDiscardOriginalFailed?: (
+      job: ProcessUploadedVideoUseCaseInput,
+      error: unknown,
+    ) => void,
+  ) {}
+
+  async execute(job: ProcessUploadedVideoUseCaseInput): Promise<ProcessUploadedVideoUseCaseOutput> {
+    const workspace = await openJobWorkspace(this.workDirectory, job.videoId, job.originalFileName);
+    const startedAt = this.now().getTime();
+    const deadline = startDeadline(this.processingTimeoutMs);
+
+    try {
+      await this.publishProcessingStarted(job);
+      const packaged = await this.buildFramesPackage(job, workspace, deadline.signal);
+      await this.publishFramesPackaged(job, packaged, startedAt);
+      await this.discardOriginalVideo(job);
+      return 'frames_packaged';
+    } catch (error) {
+      const failure = classifyFailure(error, deadline.timedOut(), this.processingTimeoutMs);
+      if (!failure.retryable) {
+        await this.publishMediaRejected(job, failure);
+        await this.discardOriginalVideo(job);
+        return 'media_rejected';
+      }
+      throw failure;
+    } finally {
+      deadline.cancel();
+      await this.workDirectory.removeDir(workspace.rootDir);
+    }
+  }
+
+  private async publishProcessingStarted(job: ProcessUploadedVideoUseCaseInput): Promise<void> {
+    await this.events.publish({
       eventType: 'video.processing.started',
       correlationId: job.correlationId,
       payload: { videoId: job.videoId, attempt: job.attempt },
     });
-  };
+  }
 
-  const downloadOriginalVideo = async (
-    job: ProcessingJob,
+  private async downloadOriginalVideo(
+    job: ProcessUploadedVideoUseCaseInput,
     workspace: JobWorkspace,
     signal: AbortSignal,
-  ): Promise<void> => {
-    await deps.storage.downloadToFile(job.sourceKey, workspace.originalVideoPath, signal);
-  };
+  ): Promise<void> {
+    await this.storage.downloadToFile(job.sourceKey, workspace.originalVideoPath, signal);
+  }
 
-  const extractFrames = async (
+  private async extractFrames(
     workspace: JobWorkspace,
     signal: AbortSignal,
-  ): Promise<readonly string[]> => {
-    const framePaths = await deps.extractor.extract(
+  ): Promise<readonly string[]> {
+    const framePaths = await this.extractor.extract(
       workspace.originalVideoPath,
       workspace.framesDirectory,
       signal,
@@ -118,33 +159,33 @@ export const createProcessUploadedVideo = (
       throw new ProcessingError(false, 'NO_FRAMES', 'ffmpeg produced no frames');
     }
     return framePaths;
-  };
+  }
 
-  const storeFramesPackage = async (
-    job: ProcessingJob,
+  private async storeFramesPackage(
+    job: ProcessUploadedVideoUseCaseInput,
     workspace: JobWorkspace,
     framePaths: readonly string[],
     signal: AbortSignal,
-  ): Promise<FramesPackageReady> => {
-    await deps.archive.createZip(framePaths, workspace.framesPackagePath);
+  ): Promise<FramesPackageReady> {
+    await this.archive.createZip(framePaths, workspace.framesPackagePath);
     ensureStillRunning(signal);
     const objectKey = framesPackageObjectKey(job.ownerId, job.videoId);
-    await deps.storage.uploadFile(
+    await this.storage.uploadFile(
       objectKey,
       workspace.framesPackagePath,
       'application/zip',
       signal,
     );
     return { objectKey, frameCount: framePaths.length };
-  };
+  }
 
-  const publishFramesPackaged = async (
-    job: ProcessingJob,
+  private async publishFramesPackaged(
+    job: ProcessUploadedVideoUseCaseInput,
     packaged: FramesPackageReady,
     startedAt: number,
-  ): Promise<void> => {
-    const durationMs = Math.max(0, deps.now().getTime() - startedAt);
-    await deps.events.publish({
+  ): Promise<void> {
+    const durationMs = Math.max(0, this.now().getTime() - startedAt);
+    await this.events.publish({
       eventType: 'video.processed',
       correlationId: job.correlationId,
       payload: {
@@ -154,13 +195,13 @@ export const createProcessUploadedVideo = (
         durationMs,
       },
     });
-  };
+  }
 
-  const publishMediaRejected = async (
-    job: ProcessingJob,
+  private async publishMediaRejected(
+    job: ProcessUploadedVideoUseCaseInput,
     failure: ProcessingError,
-  ): Promise<void> => {
-    await deps.events.publish({
+  ): Promise<void> {
+    await this.events.publish({
       eventType: 'video.failed',
       correlationId: job.correlationId,
       payload: {
@@ -171,53 +212,28 @@ export const createProcessUploadedVideo = (
         attempts: job.attempt,
       },
     });
-  };
+  }
 
-  const discardOriginalVideo = async (job: ProcessingJob): Promise<void> => {
+  private async discardOriginalVideo(job: ProcessUploadedVideoUseCaseInput): Promise<void> {
     try {
-      await deps.storage.deleteObject(job.sourceKey);
+      await this.storage.deleteObject(job.sourceKey);
     } catch (error) {
-      deps.onDiscardOriginalFailed?.(job, error);
+      this.onDiscardOriginalFailed?.(job, error);
     }
-  };
+  }
 
-  const buildFramesPackage = async (
-    job: ProcessingJob,
+  private async buildFramesPackage(
+    job: ProcessUploadedVideoUseCaseInput,
     workspace: JobWorkspace,
     signal: AbortSignal,
-  ): Promise<FramesPackageReady> => {
+  ): Promise<FramesPackageReady> {
     ensureStillRunning(signal);
-    await downloadOriginalVideo(job, workspace, signal);
+    await this.downloadOriginalVideo(job, workspace, signal);
     ensureStillRunning(signal);
-    const framePaths = await extractFrames(workspace, signal);
+    const framePaths = await this.extractFrames(workspace, signal);
     ensureStillRunning(signal);
-    const packaged = await storeFramesPackage(job, workspace, framePaths, signal);
+    const packaged = await this.storeFramesPackage(job, workspace, framePaths, signal);
     ensureStillRunning(signal);
     return packaged;
-  };
-
-  return async (job) => {
-    const workspace = await openJobWorkspace(deps.workDirectory, job.videoId, job.originalFileName);
-    const startedAt = deps.now().getTime();
-    const deadline = startDeadline(deps.processingTimeoutMs);
-
-    try {
-      await publishProcessingStarted(job);
-      const packaged = await buildFramesPackage(job, workspace, deadline.signal);
-      await publishFramesPackaged(job, packaged, startedAt);
-      await discardOriginalVideo(job);
-      return 'frames_packaged';
-    } catch (error) {
-      const failure = classifyFailure(error, deadline.timedOut(), deps.processingTimeoutMs);
-      if (!failure.retryable) {
-        await publishMediaRejected(job, failure);
-        await discardOriginalVideo(job);
-        return 'media_rejected';
-      }
-      throw failure;
-    } finally {
-      deadline.cancel();
-      await deps.workDirectory.removeDir(workspace.rootDir);
-    }
-  };
-};
+  }
+}

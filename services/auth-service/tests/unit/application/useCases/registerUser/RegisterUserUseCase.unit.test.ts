@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { makeRegisterUser } from '../../../../../src/application/useCases/registerUser/registerUser.useCase.js';
+import { RegisterUserUseCase } from '../../../../../src/application/useCases/registerUser/RegisterUserUseCase.js';
 import {
   FakeHasher,
   FixedClock,
@@ -9,19 +9,19 @@ import {
 } from '../../../../support/in-memory.js';
 
 let users: InMemoryUserRepository;
-let registerUser: ReturnType<typeof makeRegisterUser>;
+let registerUser: RegisterUserUseCase;
 
 beforeEach(() => {
   users = new InMemoryUserRepository();
-  registerUser = makeRegisterUser({
+  registerUser = new RegisterUserUseCase(
     users,
-    hasher: new FakeHasher(),
-    ids: new SequentialIds(),
-    clock: new FixedClock(),
-  });
+    new FakeHasher(),
+    new SequentialIds(),
+    new FixedClock(),
+  );
 });
 
-const validCommand = {
+const validInput = {
   name: 'Hellen Santos',
   email: 'hellen@example.com',
   password: 'senha1234',
@@ -30,7 +30,7 @@ const validCommand = {
 
 describe('a successful registration', () => {
   it('returns the created user without the password', async () => {
-    const result = await registerUser(validCommand);
+    const result = await registerUser.execute(validInput);
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -43,7 +43,7 @@ describe('a successful registration', () => {
   });
 
   it('stores the hash, never the plaintext password', async () => {
-    await registerUser(validCommand);
+    await registerUser.execute(validInput);
 
     const stored = users.users.get('hellen@example.com');
     expect(stored?.passwordHash).toBe('hashed:senha1234');
@@ -51,7 +51,7 @@ describe('a successful registration', () => {
   });
 
   it('asks the repository to store the user and the registration together', async () => {
-    await registerUser(validCommand);
+    await registerUser.execute(validInput);
 
     expect(users.users.size).toBe(1);
     expect(users.events).toEqual([
@@ -73,7 +73,7 @@ describe('a successful registration', () => {
   });
 
   it('does not put the password hash in the registration fact', async () => {
-    await registerUser(validCommand);
+    await registerUser.execute(validInput);
 
     expect(JSON.stringify(users.events[0])).not.toContain('hashed:');
   });
@@ -81,27 +81,27 @@ describe('a successful registration', () => {
 
 describe('invalid input', () => {
   it('rejects a password that fails the policy', async () => {
-    const result = await registerUser({ ...validCommand, password: 'curta1' });
+    const result = await registerUser.execute({ ...validInput, password: 'curta1' });
 
     expect(result).toMatchObject({ ok: false, error: { code: 'INVALID_INPUT' } });
     expect(users.users.size).toBe(0);
   });
 
   it('rejects an invalid email', async () => {
-    const result = await registerUser({ ...validCommand, email: 'not-an-email' });
+    const result = await registerUser.execute({ ...validInput, email: 'not-an-email' });
 
     expect(result).toMatchObject({ ok: false, error: { code: 'INVALID_INPUT' } });
     expect(users.events).toHaveLength(0);
   });
 
   it('rejects an invalid name', async () => {
-    const result = await registerUser({ ...validCommand, name: 'H' });
+    const result = await registerUser.execute({ ...validInput, name: 'H' });
 
     expect(result).toMatchObject({ ok: false, error: { code: 'INVALID_INPUT' } });
   });
 
   it('checks the password before hashing anything else', async () => {
-    const result = await registerUser({ ...validCommand, password: 'x' });
+    const result = await registerUser.execute({ ...validInput, password: 'x' });
 
     expect(result.ok).toBe(false);
     expect(users.events).toHaveLength(0);
@@ -110,18 +110,18 @@ describe('invalid input', () => {
 
 describe('duplicate email', () => {
   it('reports EMAIL_TAKEN when the address is already registered', async () => {
-    await registerUser(validCommand);
+    await registerUser.execute(validInput);
 
-    const result = await registerUser({ ...validCommand, name: 'Outra Pessoa' });
+    const result = await registerUser.execute({ ...validInput, name: 'Outra Pessoa' });
 
     expect(result).toMatchObject({ ok: false, error: { code: 'EMAIL_TAKEN' } });
     expect(users.users.size).toBe(1);
   });
 
   it('treats addresses differing only by case as the same', async () => {
-    await registerUser(validCommand);
+    await registerUser.execute(validInput);
 
-    const result = await registerUser({ ...validCommand, email: 'HELLEN@EXAMPLE.COM' });
+    const result = await registerUser.execute({ ...validInput, email: 'HELLEN@EXAMPLE.COM' });
 
     expect(result).toMatchObject({ ok: false, error: { code: 'EMAIL_TAKEN' } });
   });

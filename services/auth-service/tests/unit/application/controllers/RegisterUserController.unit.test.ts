@@ -1,17 +1,16 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { makeRegisterUserController } from '../../../../src/application/controllers/registerUser.controller.js';
-import type { makeRegisterUser } from '../../../../src/application/useCases/registerUser/registerUser.useCase.js';
+import { RegisterUserController } from '../../../../src/application/controllers/RegisterUserController.js';
+import type { RegisterUserUseCase } from '../../../../src/application/useCases/registerUser/RegisterUserUseCase.js';
 
 const correlationId = 'corr-register';
 
-const controllerFor = (
-  registerUser: ReturnType<typeof makeRegisterUser>,
-): ReturnType<typeof makeRegisterUserController> => makeRegisterUserController(registerUser);
+const controllerFor = (execute: RegisterUserUseCase['execute']): RegisterUserController =>
+  new RegisterUserController({ execute } as unknown as RegisterUserUseCase);
 
-describe('registerUser controller', () => {
+describe('RegisterUserController', () => {
   it('returns 201 and the parsed body when the use case succeeds', async () => {
-    const registerUser = vi.fn(async () => ({
+    const execute = vi.fn(async () => ({
       ok: true as const,
       value: {
         userId: '0194f3a0-0000-7000-8000-000000000001',
@@ -19,14 +18,14 @@ describe('registerUser controller', () => {
         email: 'ada@example.com',
       },
     }));
-    const handle = controllerFor(registerUser);
+    const controller = controllerFor(execute);
 
-    const response = await handle({
+    const response = await controller.handle({
       correlationId,
       body: { name: 'Ada Lovelace', email: 'ada@example.com', password: 'senha1234' },
     });
 
-    expect(registerUser).toHaveBeenCalledWith({
+    expect(execute).toHaveBeenCalledWith({
       name: 'Ada Lovelace',
       email: 'ada@example.com',
       password: 'senha1234',
@@ -43,28 +42,30 @@ describe('registerUser controller', () => {
   });
 
   it('returns 400 problem details for a body the schema rejects', async () => {
-    const registerUser = vi.fn();
-    const handle = controllerFor(registerUser);
+    const execute = vi.fn();
+    const controller = controllerFor(execute);
 
-    const response = await handle({
+    const response = await controller.handle({
       correlationId,
       body: { name: '', email: 'not-an-email', password: 'x' },
     });
 
-    expect(registerUser).not.toHaveBeenCalled();
-    expect(response.status).toBe(400);
-    expect(response.contentType).toBe('application/problem+json');
-    expect(response.body).toMatchObject({ status: 400, correlationId });
+    expect(execute).not.toHaveBeenCalled();
+    expect(response).toMatchObject({
+      status: 400,
+      contentType: 'application/problem+json',
+      body: { status: 400, correlationId },
+    });
   });
 
   it('returns 400 when the use case rejects the input', async () => {
-    const registerUser = vi.fn(async () => ({
+    const execute = vi.fn(async () => ({
       ok: false as const,
       error: { code: 'INVALID_INPUT' as const, message: 'password needs a digit' },
     }));
-    const handle = controllerFor(registerUser);
+    const controller = controllerFor(execute);
 
-    const response = await handle({
+    const response = await controller.handle({
       correlationId,
       body: { name: 'Ada Lovelace', email: 'ada@example.com', password: 'abcdefgh' },
     });
@@ -78,22 +79,24 @@ describe('registerUser controller', () => {
   });
 
   it('returns 409 when the email is already registered', async () => {
-    const registerUser = vi.fn(async () => ({
+    const execute = vi.fn(async () => ({
       ok: false as const,
       error: { code: 'EMAIL_TAKEN' as const, message: 'email is already registered' },
     }));
-    const handle = controllerFor(registerUser);
+    const controller = controllerFor(execute);
 
-    const response = await handle({
+    const response = await controller.handle({
       correlationId,
       body: { name: 'Ada Lovelace', email: 'ada@example.com', password: 'senha1234' },
     });
 
-    expect(response.status).toBe(409);
-    expect(response.contentType).toBe('application/problem+json');
-    expect(response.body).toMatchObject({
-      title: 'Email already registered',
-      correlationId,
+    expect(response).toMatchObject({
+      status: 409,
+      contentType: 'application/problem+json',
+      body: {
+        title: 'Email already registered',
+        correlationId,
+      },
     });
   });
 });

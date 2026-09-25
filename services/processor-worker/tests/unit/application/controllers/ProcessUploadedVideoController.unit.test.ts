@@ -1,7 +1,8 @@
+import type { VideoUploadedEvent } from '@zipframes/schemas/video-service';
 import { describe, expect, it, vi } from 'vitest';
 
-import { makeProcessUploadedVideoController } from '../../../../src/application/controllers/processUploadedVideo.controller.js';
-import type { VideoUploadedEvent } from '@zipframes/schemas/video-service';
+import { ProcessUploadedVideoController } from '../../../../src/application/controllers/ProcessUploadedVideoController.js';
+import type { ProcessUploadedVideoUseCase } from '../../../../src/application/useCases/processUploadedVideo/ProcessUploadedVideoUseCase.js';
 
 const event: VideoUploadedEvent = {
   eventId: '33333333-3333-4333-8333-333333333333',
@@ -18,15 +19,20 @@ const event: VideoUploadedEvent = {
   },
 };
 
-describe('processUploadedVideo controller', () => {
-  it('maps the decoded envelope onto the use case and returns its result', async () => {
-    const processUploadedVideo = vi.fn(async () => 'frames_packaged' as const);
-    const handle = makeProcessUploadedVideoController({ processUploadedVideo });
+const controllerFor = (
+  execute: ProcessUploadedVideoUseCase['execute'],
+): ProcessUploadedVideoController =>
+  new ProcessUploadedVideoController({ execute } as unknown as ProcessUploadedVideoUseCase);
 
-    const result = await handle(event, 2);
+describe('ProcessUploadedVideoController', () => {
+  it('maps the decoded envelope onto the use case and returns its result', async () => {
+    const execute = vi.fn(async () => 'frames_packaged' as const);
+    const controller = controllerFor(execute);
+
+    const result = await controller.handle({ event, attempt: 2 });
 
     expect(result).toBe('frames_packaged');
-    expect(processUploadedVideo).toHaveBeenCalledWith({
+    expect(execute).toHaveBeenCalledWith({
       videoId: event.payload.videoId,
       ownerId: event.payload.ownerId,
       sourceKey: event.payload.sourceKey,
@@ -38,11 +44,11 @@ describe('processUploadedVideo controller', () => {
   });
 
   it('lets a retryable failure leave the controller for the consumer', async () => {
-    const processUploadedVideo = vi.fn(async () => {
+    const execute = vi.fn(async () => {
       throw new Error('storage down');
     });
-    const handle = makeProcessUploadedVideoController({ processUploadedVideo });
+    const controller = controllerFor(execute);
 
-    await expect(handle(event, 1)).rejects.toThrow('storage down');
+    await expect(controller.handle({ event, attempt: 1 })).rejects.toThrow('storage down');
   });
 });

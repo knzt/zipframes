@@ -3,7 +3,8 @@ import { createLogger } from '@zipframes/logger';
 import { getCorrelationId } from '@zipframes/logger';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { EventPublisher } from '../../../../src/application/interfaces/gateways/eventPublisher.gateway.js';
+import type { ProcessUploadedVideoController } from '../../../../src/application/controllers/ProcessUploadedVideoController.js';
+import type { EventPublisher } from '../../../../src/application/interfaces/gateways/EventPublisher.js';
 import { ProcessingError } from '../../../../src/domain/errors/processingError.js';
 import { createVideoUploadedConsumer } from '../../../../src/infrastructure/messaging/videoUploadedConsumer.js';
 
@@ -52,12 +53,16 @@ const createContext = (
   };
 };
 
+const controllerWith = (
+  handle: ProcessUploadedVideoController['handle'],
+): ProcessUploadedVideoController => ({ handle }) as unknown as ProcessUploadedVideoController;
+
 describe('failure contract: video uploaded consumer', () => {
   it('acks after the use case rejects the media', async () => {
     const events: EventPublisher = { publish: vi.fn(async () => undefined) };
     const context = createContext(1);
     const consumer = createVideoUploadedConsumer({
-      handleUploadedVideo: async () => 'media_rejected',
+      controller: controllerWith(async () => 'media_rejected'),
       events,
       retry: { maxAttempts: 5, baseDelayMs: 10, maxDelayMs: 100 },
       logger: silentLogger,
@@ -77,9 +82,9 @@ describe('failure contract: video uploaded consumer', () => {
     const events: EventPublisher = { publish: vi.fn(async () => undefined) };
     const context = createContext(1);
     const consumer = createVideoUploadedConsumer({
-      handleUploadedVideo: async () => {
+      controller: controllerWith(async () => {
         throw new ProcessingError(true, 'STORAGE_DOWNLOAD_FAILED', 'down');
-      },
+      }),
       events,
       retry: { maxAttempts: 5, baseDelayMs: 10, maxDelayMs: 100 },
       logger: silentLogger,
@@ -99,9 +104,9 @@ describe('failure contract: video uploaded consumer', () => {
     const events: EventPublisher = { publish: vi.fn(async () => undefined) };
     const context = createContext(5);
     const consumer = createVideoUploadedConsumer({
-      handleUploadedVideo: async () => {
+      controller: controllerWith(async () => {
         throw new ProcessingError(true, 'FFMPEG_FAILED', 'busy');
-      },
+      }),
       events,
       retry: { maxAttempts: 5, baseDelayMs: 10, maxDelayMs: 100 },
       logger: silentLogger,
@@ -130,7 +135,7 @@ describe('failure contract: video uploaded consumer', () => {
     const events: EventPublisher = { publish: vi.fn(async () => undefined) };
     const context = createContext(1);
     const consumer = createVideoUploadedConsumer({
-      handleUploadedVideo: async () => 'frames_packaged',
+      controller: controllerWith(async () => 'frames_packaged'),
       events,
       retry: { maxAttempts: 5, baseDelayMs: 10, maxDelayMs: 100 },
       logger: silentLogger,
@@ -154,10 +159,10 @@ describe('failure contract: video uploaded consumer', () => {
     let seen: string | undefined;
     const context = createContext(1);
     const consumer = createVideoUploadedConsumer({
-      handleUploadedVideo: async () => {
+      controller: controllerWith(async () => {
         seen = getCorrelationId();
         return 'frames_packaged';
-      },
+      }),
       events: { publish: async () => undefined },
       retry: { maxAttempts: 5, baseDelayMs: 10, maxDelayMs: 100 },
       logger: silentLogger,
@@ -174,9 +179,9 @@ describe('failure contract: video uploaded consumer', () => {
     const events: EventPublisher = { publish: vi.fn(async () => undefined) };
     const context = createContext(1);
     const consumer = createVideoUploadedConsumer({
-      handleUploadedVideo: async () => {
+      controller: controllerWith(async () => {
         throw new Error('socket hang up');
-      },
+      }),
       events,
       retry: { maxAttempts: 5, baseDelayMs: 10, maxDelayMs: 100 },
       logger: silentLogger,
@@ -195,11 +200,11 @@ describe('failure contract: video uploaded consumer', () => {
     const events: EventPublisher = { publish: vi.fn(async () => undefined) };
     const context = createContext(5);
     const consumer = createVideoUploadedConsumer({
-      handleUploadedVideo: async () => {
-        // Exercita o ramo em que o esgotamento não carrega um Error.
+      controller: controllerWith(async () => {
+        // Exercises the branch where exhaustion does not carry an Error.
         // eslint-disable-next-line @typescript-eslint/only-throw-error
         throw 'offline';
-      },
+      }),
       events,
       retry: { maxAttempts: 5, baseDelayMs: 10, maxDelayMs: 100 },
       logger: silentLogger,

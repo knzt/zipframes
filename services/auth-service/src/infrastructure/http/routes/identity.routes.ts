@@ -4,24 +4,14 @@ import type { JWK } from 'jose';
 import { createCorrelationId, runWithCorrelationId } from '@zipframes/logger';
 import { authService } from '@zipframes/schemas';
 
-import type { LoginControllerResponse } from '../../../application/controllers/login.controller.js';
-import type { RegisterUserControllerResponse } from '../../../application/controllers/registerUser.controller.js';
+import type { LoginController } from '../../../application/controllers/LoginController.js';
+import type { RegisterUserController } from '../../../application/controllers/RegisterUserController.js';
+import type { HttpReply } from '../httpReply.js';
 import { jsonSchemaOf } from '../openapi.js';
 
-type ControllerResponse = RegisterUserControllerResponse | LoginControllerResponse;
-
-export interface IdentityControllerRequest {
-  readonly body: unknown;
-  readonly correlationId: string;
-}
-
-export type IdentityController = (
-  request: IdentityControllerRequest,
-) => Promise<ControllerResponse>;
-
 export interface IdentityRoutesDependencies {
-  readonly registerUser: IdentityController;
-  readonly login: IdentityController;
+  readonly registerUserController: RegisterUserController;
+  readonly loginController: LoginController;
   readonly jwks: readonly JWK[];
 }
 
@@ -55,10 +45,7 @@ const correlationIdOf = (headerValue: string | string[] | undefined): string => 
   return createCorrelationId();
 };
 
-const sendControllerResult = async (
-  reply: FastifyReply,
-  result: ControllerResponse,
-): Promise<void> => {
+const sendControllerResult = async (reply: FastifyReply, result: HttpReply): Promise<void> => {
   const outgoing = reply.code(result.status);
   if (result.contentType !== undefined) {
     void outgoing.header('content-type', result.contentType);
@@ -90,7 +77,10 @@ export const registerIdentityRoutes = (
     async (request, reply) => {
       const correlationId = correlationIdOf(request.headers[CORRELATION_HEADER]);
       await runWithCorrelationId(correlationId, async () => {
-        const result = await deps.registerUser({ body: request.body, correlationId });
+        const result = await deps.registerUserController.handle({
+          body: request.body,
+          correlationId,
+        });
         await sendControllerResult(reply, result);
       });
     },
@@ -112,7 +102,10 @@ export const registerIdentityRoutes = (
     async (request, reply) => {
       const correlationId = correlationIdOf(request.headers[CORRELATION_HEADER]);
       await runWithCorrelationId(correlationId, async () => {
-        const result = await deps.login({ body: request.body, correlationId });
+        const result = await deps.loginController.handle({
+          body: request.body,
+          correlationId,
+        });
         await sendControllerResult(reply, result);
       });
     },

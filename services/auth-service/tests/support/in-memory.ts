@@ -2,14 +2,14 @@ import { err, ok } from '@zipframes/core';
 import type { Result } from '@zipframes/core';
 
 import type {
-  EmailTakenError,
-  OutboxEventWrite,
   UserRepository,
-} from '../../src/application/interfaces/repositories/user.repository.js';
-import type { Clock } from '../../src/application/interfaces/services/clock.service.js';
-import type { IdGenerator } from '../../src/application/interfaces/services/idGenerator.service.js';
-import type { PasswordHasher } from '../../src/application/interfaces/services/passwordHasher.service.js';
-import type { TokenIssuer } from '../../src/application/interfaces/services/tokenIssuer.service.js';
+  UserRepositoryEmailTakenError,
+  UserRepositoryOutboxEventWrite,
+} from '../../src/application/interfaces/repositories/UserRepository.js';
+import type { Clock } from '../../src/application/interfaces/services/Clock.js';
+import type { IdGenerator } from '../../src/application/interfaces/services/IdGenerator.js';
+import type { PasswordHasher } from '../../src/application/interfaces/services/PasswordHasher.js';
+import type { TokenIssuer } from '../../src/application/interfaces/services/TokenIssuer.js';
 import type { User, UserId } from '../../src/domain/entities/user.js';
 import type { PasswordHash } from '../../src/domain/valueObjects/password.js';
 
@@ -19,13 +19,16 @@ import type { PasswordHash } from '../../src/domain/valueObjects/password.js';
  */
 export class InMemoryUserRepository implements UserRepository {
   readonly users = new Map<string, User>();
-  readonly events: OutboxEventWrite[] = [];
+  readonly events: UserRepositoryOutboxEventWrite[] = [];
 
   findByEmail(email: string): Promise<User | null> {
     return Promise.resolve(this.users.get(email) ?? null);
   }
 
-  save(user: User, outbox: OutboxEventWrite): Promise<Result<void, EmailTakenError>> {
+  save(
+    user: User,
+    outbox: UserRepositoryOutboxEventWrite,
+  ): Promise<Result<void, UserRepositoryEmailTakenError>> {
     if (this.users.has(user.email)) {
       return Promise.resolve(err({ code: 'EMAIL_TAKEN' as const }));
     }

@@ -26,7 +26,7 @@
     "@fastify/swagger-ui": "^5.2.3",
     "@prisma/client": "^6.2.1",
     "@zipframes/communication": "^0.1.0",
-    "@zipframes/core": "^0.2.0",
+    "@zipframes/core": "0.3.0-pr35-20260925144859",
     "@zipframes/logger": "^0.1.0",
     "@zipframes/schemas": "^0.1.0",
     "@zipframes/telemetry": "^0.1.0",

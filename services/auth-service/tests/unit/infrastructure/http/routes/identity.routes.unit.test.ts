@@ -1,22 +1,41 @@
 import type { FastifyInstance } from 'fastify';
 import { describe, expect, it, vi } from 'vitest';
 
+import type {
+  LoginController,
+  LoginControllerRequest,
+} from '../../../../../src/application/controllers/LoginController.js';
+import type {
+  RegisterUserController,
+  RegisterUserControllerRequest,
+} from '../../../../../src/application/controllers/RegisterUserController.js';
+import type { HttpReply } from '../../../../../src/infrastructure/http/httpReply.js';
 import { registerHealthRoutes } from '../../../../../src/infrastructure/http/routes/health.routes.js';
 import { registerIdentityRoutes } from '../../../../../src/infrastructure/http/routes/identity.routes.js';
-import type { IdentityController } from '../../../../../src/infrastructure/http/routes/identity.routes.js';
 import { createHttpServer } from '../../../../../src/infrastructure/http/server.js';
 
+const asRegisterUserController = (
+  handle: (request: RegisterUserControllerRequest) => Promise<HttpReply>,
+): RegisterUserController => ({ handle }) as unknown as RegisterUserController;
+
+const asLoginController = (
+  handle: (request: LoginControllerRequest) => Promise<HttpReply>,
+): LoginController => ({ handle }) as unknown as LoginController;
+
 const buildApp = async (overrides?: {
-  registerUser?: IdentityController;
-  login?: IdentityController;
+  registerUserController?: RegisterUserController;
+  loginController?: LoginController;
   isReady?: () => Promise<{ ready: boolean; reason?: string }>;
   renderMetrics?: () => Promise<string>;
 }): Promise<FastifyInstance> => {
   const app = await createHttpServer({ corsOrigin: '*' });
 
   registerIdentityRoutes(app, {
-    registerUser: overrides?.registerUser ?? (async () => ({ status: 201, body: {} })),
-    login: overrides?.login ?? (async () => ({ status: 200, body: {} })),
+    registerUserController:
+      overrides?.registerUserController ??
+      asRegisterUserController(async () => ({ status: 201, body: {} })),
+    loginController:
+      overrides?.loginController ?? asLoginController(async () => ({ status: 200, body: {} })),
     jwks: [{ kty: 'RSA', kid: 'k1', alg: 'RS256', use: 'sig', n: 'abc', e: 'AQAB' }],
   });
   registerHealthRoutes(app, {
@@ -29,11 +48,11 @@ const buildApp = async (overrides?: {
 
 describe('identity route binding', () => {
   it('forwards the register body and correlation id, then sends the controller result', async () => {
-    const registerUser = vi.fn(async () => ({
+    const handle = vi.fn(async () => ({
       status: 201,
       body: { userId: 'user-1', name: 'Ada', email: 'ada@example.com' },
     }));
-    const app = await buildApp({ registerUser });
+    const app = await buildApp({ registerUserController: asRegisterUserController(handle) });
 
     const response = await app.inject({
       method: 'POST',
@@ -42,7 +61,7 @@ describe('identity route binding', () => {
       payload: { name: 'Ada', email: 'ada@example.com', password: 'senha1234' },
     });
 
-    expect(registerUser).toHaveBeenCalledWith({
+    expect(handle).toHaveBeenCalledWith({
       body: { name: 'Ada', email: 'ada@example.com', password: 'senha1234' },
       correlationId: 'corr-xyz',
     });
@@ -56,12 +75,14 @@ describe('identity route binding', () => {
   });
 
   it('sets the problem content type when the controller returns one', async () => {
-    const registerUser = vi.fn(async () => ({
-      status: 409,
-      contentType: 'application/problem+json',
-      body: { status: 409, title: 'Email already registered' },
-    }));
-    const app = await buildApp({ registerUser });
+    const registerUserController = asRegisterUserController(
+      vi.fn(async () => ({
+        status: 409,
+        contentType: 'application/problem+json',
+        body: { status: 409, title: 'Email already registered' },
+      })),
+    );
+    const app = await buildApp({ registerUserController });
 
     const response = await app.inject({
       method: 'POST',
@@ -76,12 +97,12 @@ describe('identity route binding', () => {
   });
 
   it('mints a correlation id when the header is empty', async () => {
-    const registerUser = vi.fn(async (request: { body: unknown; correlationId: string }) => {
+    const handle = vi.fn(async (request: { body: unknown; correlationId: string }) => {
       expect(request.correlationId).toEqual(expect.any(String));
       expect(request.correlationId).not.toBe('');
       return { status: 400, body: { status: 400 } };
     });
-    const app = await buildApp({ registerUser });
+    const app = await buildApp({ registerUserController: asRegisterUserController(handle) });
 
     await app.inject({
       method: 'POST',
@@ -90,16 +111,16 @@ describe('identity route binding', () => {
       payload: {},
     });
 
-    expect(registerUser).toHaveBeenCalledOnce();
+    expect(handle).toHaveBeenCalledOnce();
     await app.close();
   });
 
   it('forwards the login body and sends the controller result', async () => {
-    const login = vi.fn(async () => ({
+    const handle = vi.fn(async () => ({
       status: 200,
       body: { accessToken: 'token', tokenType: 'Bearer', expiresIn: 900 },
     }));
-    const app = await buildApp({ login });
+    const app = await buildApp({ loginController: asLoginController(handle) });
 
     const response = await app.inject({
       method: 'POST',
@@ -108,7 +129,7 @@ describe('identity route binding', () => {
       payload: { email: 'ada@example.com', password: 'senha1234' },
     });
 
-    expect(login).toHaveBeenCalledWith({
+    expect(handle).toHaveBeenCalledWith({
       body: { email: 'ada@example.com', password: 'senha1234' },
       correlationId: 'corr-login',
     });

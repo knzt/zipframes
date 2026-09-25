@@ -2,7 +2,7 @@ import { mkdir, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 
-import type { WorkDirectory } from '../../../application/interfaces/services/workDirectory.service.js';
+import type { WorkDirectory } from '../../../application/interfaces/services/WorkDirectory.js';
 
 export const createFsWorkDirectory = (baseDir: string): WorkDirectory => ({
   createTempDir: async (prefix) => {

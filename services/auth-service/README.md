@@ -12,10 +12,11 @@ O contrato HTTP é o documento gerado em `GET /docs` (ver [`docs/architecture/ht
 src/
 ├── domain/                 # User, Password, UserRegistered
 ├── application/
-│   ├── useCases/           # registerUser, login
+│   ├── controllers/        # LoginController, RegisterUserController
+│   ├── useCases/           # LoginUseCase, RegisterUserUseCase
 │   └── interfaces/         # interface adapters declarados pelo caso de uso
 ├── infrastructure/
-│   ├── http/               # Fastify, rotas e OpenAPI gerado
+│   ├── http/               # Fastify, rotas, OpenAPI gerado e HttpReply
 │   ├── repositories/prisma/
 │   ├── services/crypto/
 │   ├── messaging/

@@ -12,18 +12,18 @@ Consumir `video.uploaded`, extrair frames (1 fps, PNG), empacotar em zip (store)
 
 As dependências apontam para dentro. `application/` junta o que o livro separa: casos de uso e interface adapters. O caso de uso fica em `application/useCases/` e a interface que ele declara fica em `application/interfaces/`; a classe que implementa essa interface fica em `infrastructure/`. O raciocínio dessa decisão está em [layers.md](../layers.md).
 
-O consumer em `infrastructure/messaging` lê `video.uploaded` e chama `processUploadedVideo`. O caso de uso chama `ObjectStorage`, `FrameExtractor` e `EventPublisher` (`application/interfaces/gateways/`) e `ArchiveBuilder` e `WorkDirectory` (`application/interfaces/services/`). `main/compose.ts` cria as implementações — storage S3, ffmpeg, publisher AMQP, zip e o diretório temporário — e as entrega ao caso de uso. O consumer confirma, agenda nova tentativa ou envia à dead-letter a partir do desfecho. O caso de uso não importa o SDK da AWS, o ffmpeg nem o cliente AMQP.
+O consumer em `infrastructure/messaging` lê `video.uploaded` e chama `ProcessUploadedVideoController`. O controller entrega o envelope já decodificado a `ProcessUploadedVideoUseCase`. O caso de uso chama `ObjectStorage`, `FrameExtractor` e `EventPublisher` (`application/interfaces/gateways/`) e `ArchiveBuilder` e `WorkDirectory` (`application/interfaces/services/`). `main/compose.ts` cria as implementações — storage S3, ffmpeg, publisher AMQP, zip e o diretório temporário — e as entrega ao caso de uso. O consumer confirma, agenda nova tentativa ou envia à dead-letter a partir do desfecho. O caso de uso não importa o SDK da AWS, o ffmpeg nem o cliente AMQP.
 
 ```
 infrastructure  →  application  →  domain
 ```
 
-| Pasta                 | Neste projeto                     | Conteúdo                                                            |
-| --------------------- | --------------------------------- | ------------------------------------------------------------------- |
-| `src/domain/`         | Entidades                         | Value objects, policies e erros (`ProcessingError` com `retryable`) |
-| `src/application/`    | Casos de uso e interface adapters | `processUploadedVideo`, DTOs e interfaces                           |
-| `src/infrastructure/` | Implementação e frameworks        | Consumer AMQP, S3/ffmpeg, zip/fs, health HTTP no Fastify            |
-| `src/main/`           | Composition root                  | Wiring na inicialização                                             |
+| Pasta                 | Neste projeto                     | Conteúdo                                                                  |
+| --------------------- | --------------------------------- | ------------------------------------------------------------------------- |
+| `src/domain/`         | Entidades                         | Value objects, policies e erros (`ProcessingError` com `retryable`)       |
+| `src/application/`    | Casos de uso e interface adapters | `ProcessUploadedVideoUseCase`, controller da mensagem, tipos e interfaces |
+| `src/infrastructure/` | Implementação e frameworks        | Consumer AMQP, S3/ffmpeg, zip/fs, health HTTP no Fastify                  |
+| `src/main/`           | Composition root                  | Wiring na inicialização                                                   |
 
 ### Gateway e service
 
@@ -44,13 +44,13 @@ processor-worker/src/
 │   ├── policies/{frameExtractionPolicy,framesPackage}.ts
 │   └── index.ts
 ├── application/
-│   ├── controllers/processUploadedVideo.controller.ts
+│   ├── controllers/ProcessUploadedVideoController.ts
 │   ├── useCases/processUploadedVideo/
-│   │   ├── processUploadedVideo.useCase.ts
-│   │   └── processUploadedVideo.dto.ts
+│   │   ├── ProcessUploadedVideoUseCase.ts
+│   │   └── processUploadedVideo.types.ts
 │   └── interfaces/
-│       ├── gateways/{objectStorage,eventPublisher,frameExtractor}.gateway.ts
-│       └── services/{archiveBuilder,workDirectory}.service.ts
+│       ├── gateways/{ObjectStorage,EventPublisher,FrameExtractor}.ts
+│       └── services/{ArchiveBuilder,WorkDirectory}.ts
 ├── infrastructure/
 │   ├── http/health.routes.ts
 │   ├── gateways/
@@ -68,9 +68,9 @@ processor-worker/src/
 
 ## Casos de uso
 
-| Caso de uso            | Orquestra                                                                                                                                            |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `processUploadedVideo` | Publica `started` → baixa original → extrai frames → zip → grava pacote → `processed`; mídia rejeitada publica `failed`; falha transitória é lançada |
+| Caso de uso                   | Orquestra                                                                                                                                            |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ProcessUploadedVideoUseCase` | Publica `started` → baixa original → extrai frames → zip → grava pacote → `processed`; mídia rejeitada publica `failed`; falha transitória é lançada |
 
 Timeout: `AbortController` cancela download/ffmpeg; o diretório temporário é removido no `finally`.
 

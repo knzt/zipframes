@@ -10,3 +10,4 @@ allowBuilds:
   ssh2: true
 minimumReleaseAgeExclude:
   - '@zipframes/test-toolkit@0.2.1-pr33-20260925031024'
+  - '@zipframes/core@0.3.0-pr35-20260925144859'
