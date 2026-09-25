@@ -41,6 +41,9 @@ jobs:
   verify:
     name: Test and image
     runs-on: ubuntu-latest
+    # NODE_AUTH_TOKEN is a secret on the Actions environment. A reusable
+    # job uses that environment secret instead of the value passed by the caller.
+    environment: Actions
     env:
       NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
     steps:
