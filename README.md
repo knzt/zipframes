@@ -18,6 +18,7 @@ Cada serviço tem o próprio `package.json` e `pnpm-lock.yaml`. A raiz só insta
 | Pacote                     | Uso neste repositório           |
 | -------------------------- | ------------------------------- |
 | `@zipframes/core`          | `Result`, erros e readiness     |
+| `@zipframes/http`          | `defineHandler` no auth-service |
 | `@zipframes/schemas`       | contratos HTTP e de evento      |
 | `@zipframes/value-objects` | e-mail e nome no cadastro       |
 | `@zipframes/communication` | publicar e consumir no RabbitMQ |
@@ -26,7 +27,7 @@ Cada serviço tem o próprio `package.json` e `pnpm-lock.yaml`. A raiz só insta
 | `@zipframes/authenticator` | só nos testes do auth           |
 | `@zipframes/test-toolkit`  | testes de integração            |
 
-`@zipframes/core` está fixo em `0.3.0-pr35-20260925144859` e `@zipframes/test-toolkit` em `0.2.1-pr33-20260925031024`. São snapshots de pull request, não uma release estável.
+`@zipframes/http` no auth-service está fixo em `0.2.0-pr41-20260926005304` (snapshot de [zipframes-packages#41](https://github.com/zipframes/zipframes-packages/pull/41), dist-tag `pr41`). Os demais `@zipframes/*` usam a release estável no GitHub Packages.
 
 ## Como os processos se relacionam
 

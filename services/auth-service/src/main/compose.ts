@@ -13,6 +13,8 @@ import { LoginUseCase } from '../application/useCases/login/LoginUseCase.js';
 import { RegisterUserUseCase } from '../application/useCases/registerUser/RegisterUserUseCase.js';
 import { loadConfig } from '../infrastructure/loadEnvConfig.js';
 import { createAmqpEventPublisher } from '../infrastructure/gateways/amqpEventPublisher.gateway.js';
+import { createLoginHandler } from '../infrastructure/http/handlers/loginHandler.js';
+import { createRegisterUserHandler } from '../infrastructure/http/handlers/registerUserHandler.js';
 import { createHttpServer } from '../infrastructure/http/server.js';
 import { registerHealthRoutes } from '../infrastructure/http/routes/health.routes.js';
 import { registerIdentityRoutes } from '../infrastructure/http/routes/identity.routes.js';
@@ -89,8 +91,8 @@ export const startAuthService = async (): Promise<{ stop: () => Promise<void> }>
 
   const app = await createHttpServer({ corsOrigin: config.corsOrigin, logger });
   registerIdentityRoutes(app, {
-    registerUserController,
-    loginController,
+    registerUserHandler: createRegisterUserHandler(registerUserController),
+    loginHandler: createLoginHandler(loginController),
     jwks: [keys.publicJwk],
   });
   registerHealthRoutes(app, {

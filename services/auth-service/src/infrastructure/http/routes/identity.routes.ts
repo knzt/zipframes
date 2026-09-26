@@ -1,17 +1,15 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { JWK } from 'jose';
 
+import type { HttpReply, HttpRequest } from '@zipframes/http';
 import { createCorrelationId, runWithCorrelationId } from '@zipframes/logger';
 import { authService } from '@zipframes/schemas';
 
-import type { LoginController } from '../../../application/controllers/LoginController.js';
-import type { RegisterUserController } from '../../../application/controllers/RegisterUserController.js';
-import type { HttpReply } from '../httpReply.js';
 import { jsonSchemaOf } from '../openapi.js';
 
 export interface IdentityRoutesDependencies {
-  readonly registerUserController: RegisterUserController;
-  readonly loginController: LoginController;
+  readonly registerUserHandler: (request: HttpRequest) => Promise<HttpReply>;
+  readonly loginHandler: (request: HttpRequest) => Promise<HttpReply>;
   readonly jwks: readonly JWK[];
 }
 
@@ -45,7 +43,7 @@ const correlationIdOf = (headerValue: string | string[] | undefined): string => 
   return createCorrelationId();
 };
 
-const sendControllerResult = async (reply: FastifyReply, result: HttpReply): Promise<void> => {
+const sendHandlerResult = async (reply: FastifyReply, result: HttpReply): Promise<void> => {
   const outgoing = reply.code(result.status);
   if (result.contentType !== undefined) {
     void outgoing.header('content-type', result.contentType);
@@ -54,7 +52,7 @@ const sendControllerResult = async (reply: FastifyReply, result: HttpReply): Pro
 };
 
 /**
- * Binds the identity HTTP surface. Status and body come from the controllers.
+ * Binds the identity HTTP surface. Status and body come from the handlers.
  */
 export const registerIdentityRoutes = (
   app: FastifyInstance,
@@ -77,11 +75,11 @@ export const registerIdentityRoutes = (
     async (request, reply) => {
       const correlationId = correlationIdOf(request.headers[CORRELATION_HEADER]);
       await runWithCorrelationId(correlationId, async () => {
-        const result = await deps.registerUserController.handle({
+        const result = await deps.registerUserHandler({
           body: request.body,
           correlationId,
         });
-        await sendControllerResult(reply, result);
+        await sendHandlerResult(reply, result);
       });
     },
   );
@@ -102,11 +100,11 @@ export const registerIdentityRoutes = (
     async (request, reply) => {
       const correlationId = correlationIdOf(request.headers[CORRELATION_HEADER]);
       await runWithCorrelationId(correlationId, async () => {
-        const result = await deps.loginController.handle({
+        const result = await deps.loginHandler({
           body: request.body,
           correlationId,
         });
-        await sendControllerResult(reply, result);
+        await sendHandlerResult(reply, result);
       });
     },
   );
