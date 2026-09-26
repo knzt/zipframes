@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { Logger } from '@zipframes/logger';
 
-import { createHttpServer } from '../../../../src/infrastructure/http/server.js';
+import { createHttpServer } from '../../../../../src/infrastructure/http/fastify/server.js';
 
 const INTERNAL_MESSAGE = 'database exploded';
 

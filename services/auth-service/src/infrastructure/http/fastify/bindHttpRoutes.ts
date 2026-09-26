@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 
+import type { HttpRouteDefinition } from '../httpRoute.js';
 import { sendHttpReply, toHttpRequest } from './fastifyAdapter.js';
-import type { HttpRouteDefinition } from './httpRoute.js';
 
 /** Single Fastify `app.route` for the HTTP catalog assembled in `main/handlers`. */
 export const bindHttpRoutes = (

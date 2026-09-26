@@ -109,5 +109,3 @@ export const createHttpServer = async (options: HttpServerOptions): Promise<Fast
 
   return app;
 };
-
-export { bindHttpRoutes } from './bindHttpRoutes.js';

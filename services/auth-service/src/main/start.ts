@@ -2,9 +2,9 @@ import { createReadinessCheck } from '@zipframes/core';
 import { createLogger } from '@zipframes/logger';
 import { createMetrics } from '@zipframes/telemetry';
 
-import { bindHttpRoutes } from '../infrastructure/http/bindHttpRoutes.js';
-import { registerHealthRoutes } from '../infrastructure/http/routes/health.routes.js';
-import { createHttpServer } from '../infrastructure/http/server.js';
+import { bindHttpRoutes } from '../infrastructure/http/fastify/bindHttpRoutes.js';
+import { registerHealthRoutes } from '../infrastructure/http/fastify/health.routes.js';
+import { createHttpServer } from '../infrastructure/http/fastify/server.js';
 import { loadConfig } from '../infrastructure/loadEnvConfig.js';
 import { createAmqpPing } from '../infrastructure/messaging/amqpConnection.js';
 import { assertTopology } from '../infrastructure/messaging/topology.js';

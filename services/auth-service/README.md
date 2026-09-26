@@ -16,7 +16,7 @@ src/
 │   └── interfaces/         # ports declarados pelo caso de uso
 ├── interface-adapters/     # LoginController, RegisterUserController
 ├── infrastructure/
-│   ├── http/               # Fastify, bindHttpRoutes, OpenAPI gerado, health
+│   ├── http/               # HttpRouteDefinition, schemas; Fastify em http/fastify/
 │   ├── repositories/prisma/
 │   ├── gateways/           # EventPublisher AMQP
 │   ├── services/crypto/

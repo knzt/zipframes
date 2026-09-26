@@ -5,7 +5,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import {
   sendHttpReply,
   toHttpRequest,
-} from '../../../../src/infrastructure/http/fastifyAdapter.js';
+} from '../../../../../src/infrastructure/http/fastify/fastifyAdapter.js';
 
 describe('toHttpRequest', () => {
   it('copies body, correlation id and authorization when present', () => {

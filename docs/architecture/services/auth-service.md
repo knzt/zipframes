@@ -12,7 +12,7 @@ Cadastrar usuário, autenticar e emitir JWT RS256. Depois de gravar o usuário, 
 
 As dependências apontam para dentro. Os quatro anéis e o composition root estão em [layers.md](../layers.md).
 
-Neste serviço, Fastify fica em `infrastructure/http/server.ts`. `bindHttpRoutes` é o único `app.route`. O correlation id é calculado no `onRequest` de `server.ts`. Os handlers em `main/handlers/` são `defineHandler` de `@zipframes/http` (JWKS tem o próprio handler): validam o pedido, chamam o controller e devolvem `HttpReply`. `identityRoutes.ts` lista `method`/`path`/`openApi`/`handle`. O controller em `interface-adapters/` chama `RegisterUserUseCase` ou `LoginUseCase` e devolve `Result`. Cadastro usa o `errorHelper` padrão (`statusCode` + `message`). Login passa um `errorHelper` que sempre responde 401. O caso de uso só enxerga as interfaces que declara. `start.ts` abre Prisma/AMQP, deriva o `tokenIssuer` para o JWKS, chama as factories de controller e dá `listen`. `createRegisterUserController({ prisma, amqp, logger })` chama `createRegisterUser`, que instancia repositório, hasher e publisher. O controller não importa Fastify, Prisma nem bcrypt. `@zipframes/authenticator` continua só em teste — o auth emite JWT, não verifica nas rotas de register/login.
+Neste serviço, Fastify fica em `infrastructure/http/fastify/` (`server.ts`, `bindHttpRoutes`, adapter, health, plugins). `bindHttpRoutes` é o único `app.route`. O correlation id é calculado no `onRequest` de `server.ts`. `HttpRouteDefinition`, `jsonSchemaOf` e o schema de problem+json ficam em `infrastructure/http/`, fora da pasta do driver. Os handlers em `main/handlers/` são `defineHandler` de `@zipframes/http` (JWKS tem o próprio handler): validam o pedido, chamam o controller e devolvem `HttpReply`. `identityRoutes.ts` lista `method`/`path`/`openApi`/`handle`. O controller em `interface-adapters/` chama `RegisterUserUseCase` ou `LoginUseCase` e devolve `Result`. Cadastro usa o `errorHelper` padrão (`statusCode` + `message`). Login passa um `errorHelper` que sempre responde 401. O caso de uso só enxerga as interfaces que declara. `start.ts` abre Prisma/AMQP, deriva o `tokenIssuer` para o JWKS, chama as factories de controller e dá `listen`. `createRegisterUserController({ prisma, amqp, logger })` chama `createRegisterUser`, que instancia repositório, hasher e publisher. O controller não importa Fastify, Prisma nem bcrypt. `@zipframes/authenticator` continua só em teste — o auth emite JWT, não verifica nas rotas de register/login.
 
 ```
 main  →  interface-adapters / infrastructure  →  application  →  domain
@@ -46,7 +46,7 @@ auth-service/src/
 │       └── services/{PasswordHasher,TokenIssuer}.ts
 ├── interface-adapters/{RegisterUserController.ts, LoginController.ts}
 ├── infrastructure/
-│   ├── http/{openapi.ts, server.ts, bindHttpRoutes.ts, httpRoute.ts, fastifyAdapter.ts, problemDetails.schema.ts, routes/health.routes.ts}
+│   ├── http/{httpRoute.ts,openapi.ts,problemDetails.schema.ts,fastify/{server.ts,bindHttpRoutes.ts,fastifyAdapter.ts,health.routes.ts,openapi.ts}}
 │   ├── repositories/prisma/{schema.prisma,migrations/,client.ts,user.repository.ts}
 │   ├── gateways/amqpEventPublisher.gateway.ts
 │   ├── services/crypto/{bcryptPasswordHasher,rs256TokenIssuer,rsaKeys}.ts

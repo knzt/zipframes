@@ -10,9 +10,9 @@ import type { JWK } from 'jose';
 import type { PrismaClient } from '@prisma/client';
 
 import type { EventPublisher } from '../../src/application/interfaces/gateways/EventPublisher.js';
-import { bindHttpRoutes } from '../../src/infrastructure/http/bindHttpRoutes.js';
-import { registerHealthRoutes } from '../../src/infrastructure/http/routes/health.routes.js';
-import { createHttpServer } from '../../src/infrastructure/http/server.js';
+import { bindHttpRoutes } from '../../src/infrastructure/http/fastify/bindHttpRoutes.js';
+import { registerHealthRoutes } from '../../src/infrastructure/http/fastify/health.routes.js';
+import { createHttpServer } from '../../src/infrastructure/http/fastify/server.js';
 import { createLoginController } from '../../src/main/factories/controllers/login.js';
 import { createRegisterUserController } from '../../src/main/factories/controllers/registerUser.js';
 import { createPrisma } from '../../src/main/factories/externals/prisma.js';

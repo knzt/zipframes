@@ -4,10 +4,10 @@ import { describe, expect, it, vi } from 'vitest';
 import type { HttpReply, HttpRequest } from '@zipframes/http';
 import type { Logger } from '@zipframes/logger';
 
-import { bindHttpRoutes } from '../../../../../src/infrastructure/http/bindHttpRoutes.js';
+import { bindHttpRoutes } from '../../../../../src/infrastructure/http/fastify/bindHttpRoutes.js';
+import { registerHealthRoutes } from '../../../../../src/infrastructure/http/fastify/health.routes.js';
+import { createHttpServer } from '../../../../../src/infrastructure/http/fastify/server.js';
 import type { HttpRouteDefinition } from '../../../../../src/infrastructure/http/httpRoute.js';
-import { registerHealthRoutes } from '../../../../../src/infrastructure/http/routes/health.routes.js';
-import { createHttpServer } from '../../../../../src/infrastructure/http/server.js';
 import type { LoginController } from '../../../../../src/interface-adapters/LoginController.js';
 import type { RegisterUserController } from '../../../../../src/interface-adapters/RegisterUserController.js';
 import { identityRoutes } from '../../../../../src/main/handlers/identityRoutes.js';
