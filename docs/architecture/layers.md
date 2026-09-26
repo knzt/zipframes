@@ -2,19 +2,30 @@
 
 Este documento descreve as regras de dependência entre camadas, verificadas automaticamente pelo [dependency-cruiser](https://github.com/sverweij/dependency-cruiser) no CI e no script `pnpm check:layers`.
 
-A Clean Architecture de Robert C. Martin é a base. A regra que fica do livro é a direção da dependência: uma regra de negócio não importa um detalhe de entrega ou de persistência, e uma pasta mais interna não importa uma mais externa. O desenho do livro são quatro anéis — entidades, casos de uso, interface adapters, frameworks e drivers. Este repositório não desenha esses quatro anéis em quatro pastas.
+A Clean Architecture de Robert C. Martin é a base. A regra que fica do livro é a direção da dependência: uma regra de negócio não importa um detalhe de entrega ou de persistência, e uma pasta mais interna não importa uma mais externa. O desenho do livro são quatro anéis — entidades, casos de uso, interface adapters, frameworks e drivers. Este repositório desenha esses quatro anéis em quatro pastas em `src/`:
 
-A pasta `application/` junta o que o livro separa: casos de uso e interface adapters. Os dois ficam juntos porque a interface só existe para o caso de uso chamar alguma coisa fora dele sem nomear a tecnologia. O caso de uso mora em `application/useCases/`. Ele recebe um comando e conduz a regra da aplicação: cadastrar um usuário, autenticar, processar um vídeo que chegou. Quando precisa de persistência, de um programa externo ou de um relógio, chama uma interface que ele mesmo declara em `application/interfaces/`.
+- `domain/` — entidades, value objects, eventos, erros e policies. Sem injeção. Sem `new` de infra.
+- `application/` — casos de uso e as interfaces (ports) que eles declaram. Só `import type` dos ports.
+- `interface-adapters/` — classes controller. Recebem o caso de uso. Não importam Prisma, S3, Fastify nem `main/`.
+- `infrastructure/` — classes dos drivers (Prisma, amqplib, Fastify, S3, ffmpeg). Recebem o cliente no construtor. Não importam factories nem `main/`.
 
-O controller em `application/controllers/` é o interface adapter da borda. Ele recebe o pedido já traduzido, chama o caso de uso e devolve `Result`. Não importa Fastify, Prisma nem AMQP. A rota HTTP e o consumer AMQP só ligam o framework a esse resultado. As interfaces em `application/interfaces/` continuam sendo o que o caso de uso declara: guardar um `User`, extrair frames, publicar um evento, calcular um hash. A classe que implementa essa interface fica em `infrastructure/`, ao lado do framework que ela usa. O caso de uso não importa essa classe. A classe importa a interface. A seta fica para dentro: `infrastructure` depende de `application`, e `application` depende de `domain`.
+`main/` é o composition root. É o único código que conhece port e concreto, e só na inicialização. O `new` das classes de `interface-adapters/` e `infrastructure/` acontece só nas factories em `main/factories/`. Nenhum arquivo se chama `compose.ts`: o processo sobe em `start.ts`.
 
-A interface fica ao lado do caso de uso, e não ao lado da classe do Prisma, para o caso de uso não precisar importar `infrastructure` só para enxergar o tipo. A regra da aplicação permanece estável quando o driver muda. Um teste do caso de uso entrega um fake. Um driver novo é uma classe nova em `infrastructure/` e a linha em `main/` que a instancia.
+Depois da inicialização, um pedido não procura a infraestrutura: ela já foi injetada. Nenhum use case, controller, gateway ou repositório importa `main/`. A seta fica para dentro:
 
-`main/` é o composition root. É o único código que conhece todas as pastas, e só na inicialização. Ele constrói os objetos de infraestrutura e entrega essas implementações ao caso de uso. Depois disso, um pedido não procura a infraestrutura: ela já foi injetada. No `auth-service`, `compose.ts` só resolve Prisma/AMQP/bcrypt/RS256 e chama `buildIdentityApp`. No `processor-worker`, `compose.ts` faz o mesmo papel: adapters, um único objeto de retry, consumer e listen do Fastify de saúde. O `index.ts` dos dois serviços trata sinal com um guard `stopping` para o shutdown não fechar o canal duas vezes. `runService()` em `@zipframes/core` é candidato a extrair esse laço quando aparecer o terceiro serviço.
+```
+main  →  interface-adapters / infrastructure  →  application  →  domain
+```
 
-No `auth-service`, o Fastify recebe o HTTP em `infrastructure/http`. A rota só liga o framework: path, schema OpenAPI e `sendHttpReply(reply, await handler(toHttpRequest(request)))`. O `onRequest` em `server.ts` calcula o correlation id uma vez, guarda no request e envolve o pedido em `runWithCorrelationId`, para o error handler e as rotas de saúde compartilhem o mesmo id. O handler em `infrastructure/http/handlers/` (`defineHandler` de `@zipframes/http`, ou um handler dedicado como o JWKS) valida o pedido, chama o controller em `application/controllers/` e devolve `HttpReply`. O controller chama `RegisterUserUseCase` ou `LoginUseCase` e devolve `Result`. O caso de uso chama `UserRepository`, `EventPublisher`, `PasswordHasher`, `TokenIssuer` e as outras interfaces que declarou. Essas chamadas caem nos objetos injetados — `PrismaUserRepository`, o gateway AMQP, `BcryptPasswordHasher`, `Rs256TokenIssuer` — e são eles que falam com o Postgres, o RabbitMQ, o bcrypt e a chave RS256. O controller e o caso de uso não importam Fastify nem Prisma. `main/compose.ts` só resolve os adapters e chama `buildIdentityApp`.
+No `auth-service`, `index.ts` trata sinal e chama `startAuthService()`. `start.ts` abre Prisma e AMQP, chama as factories, liga o catálogo HTTP e dá `listen`. Os handlers em `main/handlers/` (`defineHandler` de `@zipframes/http`, ou o JWKS) validam o pedido, chamam o controller e devolvem `HttpReply`. `identityRoutes.ts` lista `method`/`path`/`openApi`/`handle`. `bindHttpRoutes` em `infrastructure/http` é o único `app.route`. Fastify fica em `infrastructure/http/server.ts` — não há `src/app.ts` nem `src/server.ts`. O controller em `interface-adapters/` chama `RegisterUserUseCase` ou `LoginUseCase` e devolve `Result`. O caso de uso chama `UserRepository`, `EventPublisher`, `PasswordHasher`, `TokenIssuer` e as outras interfaces que declarou. Essas chamadas caem nos objetos injetados — `PrismaUserRepository`, `AmqpEventPublisher`, `BcryptPasswordHasher`, `Rs256TokenIssuer`.
 
-No `processor-worker`, o consumer AMQP em `infrastructure/messaging` decodifica `video.uploaded` e chama o controller. O controller entrega o envelope já decodificado a `ProcessUploadedVideoUseCase`. O caso de uso chama `ObjectStorage`, `FrameExtractor`, `EventPublisher`, `ArchiveBuilder` e `WorkDirectory`. As implementações — storage S3, ffmpeg, o publisher AMQP, o zip e o diretório temporário — foram criadas em `main/` e ficam em `infrastructure/gateways/` e `infrastructure/services/`. O consumer confirma, tenta de novo ou envia à dead-letter a partir do desfecho. O controller e o caso de uso não importam o SDK da AWS nem o cliente AMQP.
+No `processor-worker` não há HTTP nem `handlers/`. O consumer AMQP em `infrastructure/messaging` decodifica `video.uploaded` e chama o controller. `start.ts` chama as factories e dá `consume`. O caso de uso chama `ObjectStorage`, `FrameExtractor`, `EventPublisher`, `ArchiveBuilder` e `WorkDirectory`. O cliente S3 nasce em `main/factories/externals/s3.ts` (`new S3Client`); o port é `new S3ObjectStorage(s3)` em `gateways/objectStorage.ts`. Probes de Compose e Kubernetes são exec (`kill -0 1`), não HTTP na 8081.
+
+O `index.ts` dos dois serviços trata sinal com um guard `stopping` para o shutdown não fechar o canal duas vezes. `runService()` em `@zipframes/core` é candidato a extrair esse laço quando aparecer o terceiro serviço.
+
+Injeção é pura: cada factory exporta uma função que faz `new` e devolve o objeto. Sem `let` no módulo. `start.ts` chama cada factory uma vez. Teste chama de novo com fakes.
+
+A interface fica ao lado do caso de uso, e não ao lado da classe do Prisma, para o caso de uso não precisar importar `infrastructure` só para enxergar o tipo. A regra da aplicação permanece estável quando o driver muda. Um teste do caso de uso entrega um fake. Um driver novo é uma classe nova em `infrastructure/` e a factory em `main/` que a instancia.
 
 `domain/` fica no centro: entidades, value objects, eventos de domínio, erros e policies. Não conhece HTTP, banco, fila nem ffmpeg.
 
@@ -25,28 +36,31 @@ A arquitetura interna de cada microsserviço vive em [services/](./services/). O
 As dependências de código apontam **sempre para dentro**. Uma pasta mais interna nunca importa uma mais externa.
 
 ```
-infrastructure  →  application  →  domain
-(mais externo)                    (mais interno)
+infrastructure / interface-adapters  →  application  →  domain
+(mais externo)                                          (mais interno)
 ```
 
-`main/` é o composition root. Ele conhece as outras pastas só para montar o grafo na inicialização.
+`main/` é o composition root. Ele conhece as outras pastas só para montar o grafo na inicialização. Nada em `src/` fora de `main/` importa `main/` (index, start e testes de integração montam o grafo; testes unitários passam fakes).
 
 ### Layout
 
-| Pasta                 | Neste projeto                     | Conteúdo                                                                                                                               |
-| --------------------- | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/domain/`         | Entidades                         | Entidades, value objects, eventos de domínio, erros e policies                                                                         |
-| `src/application/`    | Casos de uso e interface adapters | Casos de uso, controllers da borda, tipos e as interfaces que os casos de uso declaram (`interfaces/{repositories,gateways,services}`) |
-| `src/infrastructure/` | Implementação e frameworks        | Classes que implementam essas interfaces, HTTP, messaging, config, observability                                                       |
-| `src/main/`           | Composition root                  | Wiring na inicialização                                                                                                                |
+| Pasta                     | Neste projeto        | Conteúdo                                                                                                            |
+| ------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `src/domain/`             | Entidades            | Entidades, value objects, eventos de domínio, erros e policies                                                      |
+| `src/application/`        | Casos de uso e ports | Casos de uso, tipos e as interfaces que os casos de uso declaram (`interfaces/{repositories,gateways,services}`)    |
+| `src/interface-adapters/` | Interface adapters   | Classes controller da borda (HTTP ou mensagem)                                                                      |
+| `src/infrastructure/`     | Frameworks e drivers | Classes que implementam as interfaces, HTTP (auth), messaging, config, observability                                |
+| `src/main/`               | Composition root     | `index.ts` (sinais), `start.ts` (sobe e para o processo), `factories/` por responsabilidade, `handlers/` só no auth |
 
-O caso de uso fica em `application/useCases/`. O controller da borda fica em `application/controllers/`. A interface que o caso de uso declara fica em `application/interfaces/`. A classe que implementa essa interface fica em `infrastructure/`, com o framework. O caso de uso não importa a implementação. A implementação importa a interface.
+O caso de uso fica em `application/useCases/`. O controller da borda fica em `interface-adapters/`. A interface que o caso de uso declara fica em `application/interfaces/`. A classe que implementa essa interface fica em `infrastructure/`, com o framework. O caso de uso não importa a implementação. A implementação importa a interface.
 
 A pasta não se chama `ports/`. O nome daqui é `interfaces/`.
 
+Factories em `main/factories/` agrupam por responsabilidade. O arquivo chama o que ele dá `new`: `externals/s3.ts` → `new S3Client`; `gateways/objectStorage.ts` → `new S3ObjectStorage(s3)`. Endpoint novo: um arquivo em `use-cases/`, `controllers/` e (no auth) `handlers/`.
+
 #### Interfaces em `application/interfaces/`
 
-Três categorias em `application/interfaces/`, espelhadas em `infrastructure/`:
+Três categorias em `application/interfaces/`, espelhadas em `infrastructure/` e nas factories de `main/`:
 
 | Categoria       | Critério                                                          | Exemplos                                                                  |
 | --------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------- |
@@ -64,43 +78,47 @@ Pastas em **camelCase**. Arquivos de classe e de interface usam o nome do tipo. 
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | Caso de uso | `application/useCases/registerUser/RegisterUserUseCase.ts`                                                                            |
 | Tipos       | `registerUser.types.ts` (ao lado do caso de uso): `RegisterUserUseCaseInput`, `RegisterUserUseCaseOutput`, `RegisterUserUseCaseError` |
-| Controller  | `application/controllers/RegisterUserController.ts` (chama o caso de uso e devolve `Result`)                                          |
-| HTTP        | `infrastructure/http/handlers/` (`defineHandler` de `@zipframes/http`; a rota Fastify só encaminha `HttpReply`)                       |
+| Controller  | `interface-adapters/RegisterUserController.ts` (chama o caso de uso e devolve `Result`)                                               |
+| HTTP        | `main/handlers/` no auth (`defineHandler` de `@zipframes/http`; `bindHttpRoutes` encaminha `HttpReply`)                               |
 | Repository  | `application/interfaces/repositories/UserRepository.ts`                                                                               |
 | Gateway     | `application/interfaces/gateways/ObjectStorage.ts`                                                                                    |
 | Service     | `application/interfaces/services/PasswordHasher.ts`                                                                                   |
+| Processo    | `main/start.ts` (não `compose.ts`)                                                                                                    |
 
 Cada subpasta pública de `domain/` e `application/` expõe um `index.ts` (barrel).
 
 ### Dependência externa
 
-O código que importa um SDK mora em `src/infrastructure/`. A interface que esse código implementa mora em `application/interfaces/`. `main/` instancia o SDK e entrega a implementação ao caso de uso.
+O código que importa um SDK mora em `src/infrastructure/`. A interface que esse código implementa mora em `application/interfaces/`. `main/factories/` instancia o SDK (`externals/`) e entrega a implementação ao caso de uso.
 
-Tudo o que pertence a um ORM fica na pasta desse repository. Para o Prisma, schema, migrations, client e o repositório concreto ficam juntos em `src/infrastructure/repositories/prisma/`.
+Tudo o que pertence a um ORM fica na pasta desse repository. Para o Prisma, schema, migrations, client helpers e o repositório concreto ficam juntos em `src/infrastructure/repositories/prisma/`. O `new PrismaClient` é a factory `main/factories/externals/prisma.ts`.
 
 ### Falhas: `Result` vs `throw`
 
 - **auth-service** usa `Result<T, E>` (`@zipframes/core`) nas interfaces e nos casos de uso; o controller lê `error.statusCode` para problem+json (400, 409, 401). Login com body inválido continua 401 sem `detail`, mesmo quando o parse seria `ValidationError` 400. Falha inesperada que escapa vira `InternalServerError` → 500 sem `detail`. `User.create` devolve `Result<User, ValidationError>`; o construtor fica privado ao módulo.
 - **processor-worker** lança erros do `@zipframes/core` com `retryable` (`UnavailableError`, `TimeoutError`, `InternalServerError`, …). Na borda do consumer, um único critério: `isRetryableError`.
 
-Conflito de e-mail no cadastro: `findByEmail` + `ConflictError` no caso de uso; o repositório só insere (`create`) e relança erros do Prisma — corrida ou unique inesperado vira 500, não `ConflictError` na infra. Health/readiness e métricas do worker não expõem `error.message` — log interno e `reason` estável na resposta HTTP.
+Conflito de e-mail no cadastro: `findByEmail` + `ConflictError` no caso de uso; o repositório só insere (`create`) e relança erros do Prisma — corrida ou unique inesperado vira 500, não `ConflictError` na infra. Health/readiness e métricas do auth não expõem `error.message` — log interno e `reason` estável na resposta HTTP.
 
 Não misturar os dois estilos dentro do mesmo caso de uso.
 
 ### Health e readiness
 
-O contrato HTTP é um só e o servidor é Fastify. Rotas, corpo da resposta, probes e a documentação gerada estão em [http.md](./http.md).
+O contrato HTTP de saúde vale para processos que escutam HTTP. Hoje isso é o `auth-service`. Rotas, corpo da resposta, probes e a documentação gerada estão em [http.md](./http.md).
 
-Checagens usam `Pingable` + `createReadinessCheck` de `@zipframes/core` (ISP: `ping` não entra nas interfaces de negócio).
+O `processor-worker` não escuta HTTP. Liveness e readiness no Compose e no Kubernetes são probes exec.
+
+Checagens do auth usam `Pingable` + `createReadinessCheck` de `@zipframes/core` (ISP: `ping` não entra nas interfaces de negócio).
 
 ## O que cada pasta pode importar
 
-| Pasta                 | Pode importar                                                                | Nunca pode importar                                               |
-| --------------------- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| `src/domain/`         | Biblioteca padrão, `@types/*`, `@zipframes/core`, `@zipframes/value-objects` | `application/`, `infrastructure/`, `main/`, libs de infra         |
-| `src/application/`    | `domain/`, pacotes `@zipframes/*` de contrato                                | `infrastructure/`, `main/`, Prisma, amqplib, `@aws-sdk`, Fastify… |
-| `src/infrastructure/` | `application/`, `domain/`, bibliotecas de integração                         | `main/`                                                           |
-| `src/main/`           | Todas as camadas                                                             | —                                                                 |
+| Pasta                     | Pode importar                                                                                                | Nunca pode importar                                                                      |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| `src/domain/`             | Biblioteca padrão, `@types/*`, `@zipframes/core`, `@zipframes/value-objects`                                 | `application/`, `interface-adapters/`, `infrastructure/`, `main/`, libs de infra         |
+| `src/application/`        | `domain/`, pacotes `@zipframes/*` de contrato                                                                | `interface-adapters/`, `infrastructure/`, `main/`, Prisma, amqplib, `@aws-sdk`, Fastify… |
+| `src/interface-adapters/` | `application/`, `domain/`, pacotes `@zipframes/*` de contrato                                                | `infrastructure/`, `main/`, Prisma, S3, Fastify, amqplib                                 |
+| `src/infrastructure/`     | `application/`, `domain/`, `interface-adapters/` (tipo do controller no consumer), bibliotecas de integração | `main/`                                                                                  |
+| `src/main/`               | Todas as camadas                                                                                             | —                                                                                        |
 
 O `main/` é a única exceção que conhece todas as camadas para montar o grafo.
 
@@ -133,4 +151,4 @@ pnpm exec depcruise --config .dependency-cruiser.mjs services/auth-service/src
 
 ## Configuração do dependency-cruiser
 
-Arquivo: [`.dependency-cruiser.mjs`](../../.dependency-cruiser.mjs). Regras `forbidden` cobrem `domain/`, `application/`, `infrastructure/` e `main/`.
+Arquivo: [`.dependency-cruiser.mjs`](../../.dependency-cruiser.mjs). Regras `forbidden` cobrem `domain/`, `application/`, `interface-adapters/`, `infrastructure/` e `main/`. Nada em `src/` fora de `main/` importa `main/`.

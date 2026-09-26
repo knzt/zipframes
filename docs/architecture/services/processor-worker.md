@@ -10,29 +10,30 @@ Consumir `video.uploaded`, extrair frames (1 fps, PNG), empacotar em zip (store)
 
 ## Camadas
 
-As dependências apontam para dentro. `application/` junta o que o livro separa: casos de uso e interface adapters. O caso de uso fica em `application/useCases/` e a interface que ele declara fica em `application/interfaces/`; a classe que implementa essa interface fica em `infrastructure/`. O raciocínio dessa decisão está em [layers.md](../layers.md).
+As dependências apontam para dentro. Os quatro anéis e o composition root estão em [layers.md](../layers.md).
 
-O consumer em `infrastructure/messaging` lê `video.uploaded` e chama `ProcessUploadedVideoController`. O controller entrega o envelope já decodificado a `ProcessUploadedVideoUseCase`. O caso de uso chama `ObjectStorage`, `FrameExtractor` e `EventPublisher` (`application/interfaces/gateways/`) e `ArchiveBuilder` e `WorkDirectory` (`application/interfaces/services/`). `main/compose.ts` cria as implementações — storage S3, ffmpeg, publisher AMQP, zip e o diretório temporário — e as entrega ao caso de uso. O consumer confirma, agenda nova tentativa ou envia à dead-letter a partir do desfecho. O caso de uso não importa o SDK da AWS, o ffmpeg nem o cliente AMQP.
+O consumer em `infrastructure/messaging` lê `video.uploaded` e chama `ProcessUploadedVideoController`. O controller entrega o envelope já decodificado a `ProcessUploadedVideoUseCase`. O caso de uso chama `ObjectStorage`, `FrameExtractor` e `EventPublisher` (`application/interfaces/gateways/`) e `ArchiveBuilder` e `WorkDirectory` (`application/interfaces/services/`). `start.ts` chama as factories — `new S3Client` em `externals/s3.ts`, `new S3ObjectStorage(s3)` em `gateways/objectStorage.ts`, ffmpeg, publisher AMQP, zip e o diretório temporário — e dá `consume`. Não há `handlers/` HTTP. O consumer confirma, agenda nova tentativa ou envia à dead-letter a partir do desfecho. O caso de uso não importa o SDK da AWS, o ffmpeg nem o cliente AMQP.
 
 ```
-infrastructure  →  application  →  domain
+main  →  interface-adapters / infrastructure  →  application  →  domain
 ```
 
-| Pasta                 | Neste projeto                     | Conteúdo                                                                                |
-| --------------------- | --------------------------------- | --------------------------------------------------------------------------------------- |
-| `src/domain/`         | Entidades                         | Value objects, policies e erros de domínio (`ValidationError` do core quando aplicável) |
-| `src/application/`    | Casos de uso e interface adapters | `ProcessUploadedVideoUseCase`, controller da mensagem, tipos e interfaces               |
-| `src/infrastructure/` | Implementação e frameworks        | Consumer AMQP, S3/ffmpeg, zip/fs, rotas de saúde no Fastify                             |
-| `src/main/`           | Composition root                  | Wiring na inicialização                                                                 |
+| Pasta                     | Neste projeto        | Conteúdo                                                                                |
+| ------------------------- | -------------------- | --------------------------------------------------------------------------------------- |
+| `src/domain/`             | Entidades            | Value objects, policies e erros de domínio (`ValidationError` do core quando aplicável) |
+| `src/application/`        | Casos de uso e ports | `ProcessUploadedVideoUseCase`, tipos e interfaces                                       |
+| `src/interface-adapters/` | Controllers          | `ProcessUploadedVideoController`                                                        |
+| `src/infrastructure/`     | Drivers              | Consumer AMQP, S3/ffmpeg, zip/fs                                                        |
+| `src/main/`               | Composition root     | `index.ts`, `start.ts`, `factories/` — sem `handlers/`                                  |
 
 ### Gateway e service
 
 | Categoria   | Neste serviço                                                                    |
 | ----------- | -------------------------------------------------------------------------------- |
 | `gateways/` | `ObjectStorage`, `EventPublisher`, `FrameExtractor` (o trabalho sai do processo) |
-| `services/` | `ArchiveBuilder`, `WorkDirectory` (capacidade local, no mesmo processo)          |
+| `services/` | `ArchiveBuilder`, `WorkDirectory`, `Clock`, `IdGenerator` (capacidade local)     |
 
-`ObjectStorage` não inclui `ping`: readiness usa `Pingable` à parte (`createReadinessCheck`).
+`ObjectStorage` não inclui `ping`. `S3ObjectStorage` implementa `Pingable` à parte (ISP). Sem HTTP de readiness neste processo.
 
 ## Mapa de pastas
 
@@ -43,26 +44,30 @@ processor-worker/src/
 │   ├── policies/{frameExtractionPolicy,framesPackage}.ts
 │   └── index.ts
 ├── application/
-│   ├── controllers/ProcessUploadedVideoController.ts
 │   ├── useCases/processUploadedVideo/
 │   │   ├── ProcessUploadedVideoUseCase.ts
 │   │   └── processUploadedVideo.types.ts  ← reexporta `ProcessingJob` / `ProcessingResult` do domínio
 │   └── interfaces/
 │       ├── gateways/{ObjectStorage,EventPublisher,FrameExtractor}.ts
-│       └── services/{ArchiveBuilder,WorkDirectory}.ts
+│       └── services/{ArchiveBuilder,WorkDirectory,Clock,IdGenerator}.ts
+├── interface-adapters/ProcessUploadedVideoController.ts
 ├── infrastructure/
-│   ├── http/{openapi.ts, routes/health.routes.ts}
 │   ├── gateways/
 │   │   ├── storage/s3ObjectStorage.gateway.ts
 │   │   ├── media/ffmpegFrameExtractor.gateway.ts
 │   │   └── amqpEventPublisher.gateway.ts
 │   ├── services/
 │   │   ├── media/zipArchiveBuilder.service.ts
-│   │   └── filesystem/fsWorkDirectory.service.ts
+│   │   ├── filesystem/fsWorkDirectory.service.ts
+│   │   ├── systemClock.ts
+│   │   └── uuidIdGenerator.ts
 │   ├── messaging/{rabbitmqConnection,topology,videoUploadedConsumer}.ts
 │   ├── observability/jobMetrics.ts
 │   └── loadEnvConfig.ts
-└── main/{compose.ts,healthApp.ts,index.ts}
+└── main/
+    ├── index.ts
+    ├── start.ts
+    └── factories/{externals,gateways,services,use-cases,controllers}/
 ```
 
 ## Casos de uso
@@ -112,8 +117,8 @@ flowchart LR
 ## Observabilidade e operação
 
 - Logs estruturados com `correlationId` via ALS.
-- Métricas Prometheus via `@zipframes/telemetry`.
-- HTTP no Fastify, na porta `HEALTH_PORT` (padrão 8081): `GET /health/live`, `GET /health/ready` (AMQP + storage), `GET /metrics`, `GET /docs` e `GET /docs/json`. `createHealthApp` mora em `main/`; `registerHealthRoutes` só registra as rotas. O contrato está em [http.md](../http.md).
+- Métricas Prometheus via `@zipframes/telemetry` (sem scrape HTTP neste processo).
+- Sem Fastify, OpenAPI ou porta 8081. Liveness e readiness no Compose e no Kubernetes são probes exec (`kill -0 1`).
 
 ## Processo
 
@@ -133,6 +138,6 @@ Cobertura mínima no `src/` executável: 80%.
 ## Fora de escopo deste serviço
 
 - Banco de dados e migrations
-- HTTP de negócio / JWT / JWKS (apenas health/metrics)
+- HTTP de negócio / JWT / JWKS / health HTTP
 - Decisão de status do vídeo no agregado `Video` (video-service)
 - Envio de e-mail (notification-service consome `video.failed`)

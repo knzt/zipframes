@@ -8,7 +8,7 @@ import type { RabbitMqHandle } from '@zipframes/test-toolkit';
 import amqp, { type Channel, type GetMessage } from 'amqplib';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { createAmqpEventPublisher } from '../../src/infrastructure/gateways/amqpEventPublisher.gateway.js';
+import { AmqpEventPublisher } from '../../src/infrastructure/gateways/amqpEventPublisher.gateway.js';
 import { connectAmqp } from '../../src/infrastructure/messaging/amqpConnection.js';
 import { createAmqpPublishPort } from '../../src/infrastructure/messaging/amqpPublisher.js';
 import { startIdentityApp } from '../support/identity-app.js';
@@ -46,7 +46,7 @@ describe('POST /register against Postgres and RabbitMQ', () => {
     rabbit = await startRabbitMq();
     const amqpConnection = await connectAmqp(rabbit.amqpUri);
     await amqpConnection.channel.assertExchange(EVENT_EXCHANGE, 'topic', { durable: true });
-    const eventPublisher = createAmqpEventPublisher({
+    const eventPublisher = new AmqpEventPublisher({
       publisher: createPublisher(createAmqpPublishPort(amqpConnection.channel)),
       createId: () => randomUUID(),
       now: () => new Date(),

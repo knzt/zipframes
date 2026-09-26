@@ -2,15 +2,16 @@
 
 Worker stateless que consome `video.uploaded`, extrai frames com `ffmpeg` e publica o resultado.
 
-Arquitetura: [docs/architecture/services/processor-worker.md](../../docs/architecture/services/processor-worker.md). `application/` junta casos de uso e interface adapters.
+Arquitetura: [docs/architecture/services/processor-worker.md](../../docs/architecture/services/processor-worker.md). Quatro anéis em `src/` mais `main/` como composition root.
 
 ## Camadas
 
 ```
-src/domain/            # Value objects, policies, erros
-src/application/       # casos de uso, controller da mensagem e interfaces
-src/infrastructure/    # implementações, consumers, saúde HTTP (Fastify)
-src/main/              # Composition root
+src/domain/               # Value objects, policies, erros
+src/application/          # casos de uso e ports
+src/interface-adapters/   # controller da mensagem
+src/infrastructure/       # implementações e consumer AMQP
+src/main/                 # start.ts e factories (sem handlers HTTP)
 ```
 
 ## O que faz
@@ -19,8 +20,7 @@ src/main/              # Composition root
 - baixa o original do storage (stream), extrai 1 frame/s em PNG e gera um zip (store)
 - publica `video.processing.started`, `video.processed` ou `video.failed`
 - apaga o original ao terminar (sucesso ou falha permanente); falha no delete vira log/métrica
-- saúde no Fastify, na mesma porta: `GET /health/live`, `GET /health/ready`, `GET /metrics`, `GET /docs`
-- **sem banco próprio**
+- **sem HTTP, sem banco próprio**
 
 ## Testes
 
@@ -42,7 +42,7 @@ pnpm infra:up
 pnpm --dir services/processor-worker dev
 ```
 
-`GET http://localhost:8081/health/ready` responde 200 quando o processo alcança o RabbitMQ e o bucket.
+O processo não escuta HTTP. O Compose e o Kubernetes usam probe exec (`kill -0 1`).
 
 Para a imagem, o contexto precisa de `dist/` e de `.runtime/node_modules` antes do build:
 

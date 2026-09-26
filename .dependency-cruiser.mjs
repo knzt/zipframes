@@ -1,17 +1,23 @@
 /** @type {import("dependency-cruiser").IConfiguration} */
 export default {
-  // Clean Architecture is the base (dependencies point inward), not a
-  // one-to-one copy of the four book layers. application/ holds use cases
-  // and interface adapters together.
-  // Folder layout: infrastructure → application → domain (+ main as composition root)
+  // Clean Architecture four rings in src/: domain, application (use cases +
+  // ports), interface-adapters (controllers), infrastructure (drivers).
+  // main/ is the composition root. Dependencies point inward.
+  // Folder layout: main → interface-adapters / infrastructure → application → domain
   forbidden: [
     {
       name: 'domain-não-importa-nada-externo',
-      comment: 'Entities não podem importar application, infrastructure ou main.',
+      comment:
+        'Entities não podem importar application, interface-adapters, infrastructure ou main.',
       severity: 'error',
       from: { path: '/src/domain/' },
       to: {
-        path: ['/src/application/', '/src/infrastructure/', '/src/main/'],
+        path: [
+          '/src/application/',
+          '/src/interface-adapters/',
+          '/src/infrastructure/',
+          '/src/main/',
+        ],
       },
     },
     {
@@ -37,14 +43,14 @@ export default {
     },
 
     {
-      name: 'application-não-importa-infrastructure',
+      name: 'application-não-importa-camadas-externas',
       comment:
-        'application/ (casos de uso e interface adapters) só pode importar domain/ e as interfaces definidas lá ou na própria application/. ' +
-        'Implementações ficam em infrastructure/ e são injetadas pelo main/.',
+        'application/ (casos de uso e ports) só pode importar domain/. ' +
+        'Controllers ficam em interface-adapters/; implementações em infrastructure/, injetadas pelo main/.',
       severity: 'error',
       from: { path: '/src/application/' },
       to: {
-        path: ['/src/infrastructure/', '/src/main/'],
+        path: ['/src/interface-adapters/', '/src/infrastructure/', '/src/main/'],
       },
     },
     {
@@ -56,9 +62,35 @@ export default {
       from: { path: '/src/application/' },
       to: {
         dependencyTypes: ['npm'],
-        // Como acima, comparado com o caminho resolvido. O `node_modules/`
-        // no início ancora o padrão no nome do pacote e evita casar com um
-        // arquivo do próprio serviço que por acaso se chame `prisma.ts`.
+        path: [
+          'node_modules/(@prisma/|prisma/)',
+          'node_modules/amqplib/',
+          'node_modules/ioredis/',
+          'node_modules/@aws-sdk/',
+          'node_modules/nodemailer/',
+          'node_modules/(@fastify/|fastify/)',
+          'node_modules/pino/',
+        ],
+      },
+    },
+
+    {
+      name: 'interface-adapters-não-importa-infrastructure-nem-main',
+      comment:
+        'Controllers em interface-adapters/ recebem o caso de uso. Não importam Prisma, S3, Fastify, factories nem main/.',
+      severity: 'error',
+      from: { path: '/src/interface-adapters/' },
+      to: {
+        path: ['/src/infrastructure/', '/src/main/'],
+      },
+    },
+    {
+      name: 'interface-adapters-não-importa-libs-de-infra',
+      comment: 'interface-adapters/ não importa Fastify, Prisma, amqplib, @aws-sdk…',
+      severity: 'error',
+      from: { path: '/src/interface-adapters/' },
+      to: {
+        dependencyTypes: ['npm'],
         path: [
           'node_modules/(@prisma/|prisma/)',
           'node_modules/amqplib/',
@@ -75,6 +107,15 @@ export default {
       name: 'infrastructure-não-importa-main',
       severity: 'error',
       from: { path: '/src/infrastructure/' },
+      to: { path: '/src/main/' },
+    },
+
+    {
+      name: 'nada-importa-main-exceto-o-próprio-main',
+      comment:
+        'Só src/main/ (index, start, factories, handlers) importa main/. Testes ficam fora de src/.',
+      severity: 'error',
+      from: { path: '/src/', pathNot: '/src/main/' },
       to: { path: '/src/main/' },
     },
 
@@ -107,20 +148,10 @@ export default {
   ],
 
   options: {
-    // Não percorrer o interior de node_modules, mas mantê-lo visível: as
-    // dependências npm precisam aparecer no grafo para que as regras que
-    // proíbem infraestrutura em domain/ e application/ tenham o que
-    // verificar. Excluí-las, como era feito antes, tornava essas regras
-    // inertes — elas existiam e nunca podiam disparar.
     doNotFollow: {
       path: 'node_modules',
     },
     exclude: {
-      // Ancorado no nosso próprio build: um 'dist' solto casaria também com
-      // node_modules/<pacote>/dist/…, que é onde a maioria dos pacotes
-      // publica o entrypoint — inclusive os @zipframes/*. O efeito seria
-      // remover essas dependências do grafo e tornar inertes as regras que
-      // falam sobre elas.
       path: [
         '\\.d\\.ts$',
         '^(services|packages)/[^/]+/dist/',

@@ -10,14 +10,20 @@ import type { JWK } from 'jose';
 import type { PrismaClient } from '@prisma/client';
 
 import type { EventPublisher } from '../../src/application/interfaces/gateways/EventPublisher.js';
-import { createPrismaClient } from '../../src/infrastructure/repositories/prisma/client.js';
-import { PrismaUserRepository } from '../../src/infrastructure/repositories/prisma/user.repository.js';
-import { BcryptPasswordHasher } from '../../src/infrastructure/services/crypto/bcryptPasswordHasher.js';
-import { deriveRsaKeyMaterial } from '../../src/infrastructure/services/crypto/rsaKeys.js';
-import { Rs256TokenIssuer } from '../../src/infrastructure/services/crypto/rs256TokenIssuer.js';
-import { SystemClock } from '../../src/infrastructure/services/systemClock.js';
-import { UuidIdGenerator } from '../../src/infrastructure/services/uuidIdGenerator.js';
-import { buildIdentityApp } from '../../src/main/identityApp.js';
+import { bindHttpRoutes } from '../../src/infrastructure/http/bindHttpRoutes.js';
+import { registerHealthRoutes } from '../../src/infrastructure/http/routes/health.routes.js';
+import { createHttpServer } from '../../src/infrastructure/http/server.js';
+import { createLoginController } from '../../src/main/factories/controllers/login.js';
+import { createRegisterUserController } from '../../src/main/factories/controllers/registerUser.js';
+import { createPrisma } from '../../src/main/factories/externals/prisma.js';
+import { createUserRepository } from '../../src/main/factories/repositories/userRepository.js';
+import { createClock } from '../../src/main/factories/services/clock.js';
+import { createIdGenerator } from '../../src/main/factories/services/idGenerator.js';
+import { createPasswordHasher } from '../../src/main/factories/services/passwordHasher.js';
+import { createTokenIssuer } from '../../src/main/factories/services/tokenIssuer.js';
+import { createLogin } from '../../src/main/factories/use-cases/login.js';
+import { createRegisterUser } from '../../src/main/factories/use-cases/registerUser.js';
+import { identityRoutes } from '../../src/main/handlers/identityRoutes.js';
 import { silentLogger } from './silent-logger.js';
 
 const execFileAsync = promisify(execFile);
@@ -48,9 +54,14 @@ export const startIdentityApp = async (options?: IdentityAppOptions): Promise<Id
     env: { ...process.env, AUTH_DATABASE_URL: postgres.connectionUri },
   });
 
-  const prisma = createPrismaClient(postgres.connectionUri);
+  const prisma = createPrisma(postgres.connectionUri);
   const { privateKey } = await generateKeyPair('RS256');
-  const keys = await deriveRsaKeyMaterial(await exportPKCS8(privateKey), 'key-1');
+  const { tokenIssuer, keys } = await createTokenIssuer({
+    privateKeyPem: await exportPKCS8(privateKey),
+    kid: 'key-1',
+    issuer: ISSUER,
+    audience: AUDIENCE,
+  });
   const eventPublisher: EventPublisher = options?.eventPublisher ?? {
     publish: () => Promise.resolve(),
   };
@@ -65,19 +76,37 @@ export const startIdentityApp = async (options?: IdentityAppOptions): Promise<Id
       });
     });
 
-  const app = await buildIdentityApp({
-    userRepository: new PrismaUserRepository(prisma),
-    passwordHasher: new BcryptPasswordHasher(),
-    tokenIssuer: new Rs256TokenIssuer({ keys, issuer: ISSUER, audience: AUDIENCE }),
+  const userRepository = createUserRepository(prisma);
+  const passwordHasher = createPasswordHasher();
+  const clock = createClock();
+  const idGenerator = createIdGenerator();
+  const registerUser = createRegisterUser({
+    userRepository,
+    passwordHasher,
+    idGenerator,
+    clock,
     eventPublisher,
-    clock: new SystemClock(),
-    idGenerator: new UuidIdGenerator(),
-    jwks: [keys.publicJwk],
+    onPublishFailed,
+  });
+  const login = createLogin({
+    userRepository,
+    passwordHasher,
+    tokenIssuer,
+  });
+
+  const app = await createHttpServer({ corsOrigin: '*', logger });
+  bindHttpRoutes(
+    app,
+    identityRoutes({
+      registerUser: createRegisterUserController(registerUser),
+      login: createLoginController(login),
+      jwks: [keys.publicJwk],
+    }),
+  );
+  registerHealthRoutes(app, {
     isReady: () => Promise.resolve({ ready: true }),
     renderMetrics: () => Promise.resolve(''),
     logger,
-    corsOrigin: '*',
-    onPublishFailed,
   });
   await app.listen({ port: 0, host: '127.0.0.1' });
   const address = app.server.address() as AddressInfo;

@@ -12,16 +12,16 @@ O contrato HTTP é o documento gerado em `GET /docs` (ver [`docs/architecture/ht
 src/
 ├── domain/                 # User, Password, UserRegistered
 ├── application/
-│   ├── controllers/        # LoginController, RegisterUserController
 │   ├── useCases/           # LoginUseCase, RegisterUserUseCase
-│   └── interfaces/         # interface adapters declarados pelo caso de uso
+│   └── interfaces/         # ports declarados pelo caso de uso
+├── interface-adapters/     # LoginController, RegisterUserController
 ├── infrastructure/
-│   ├── http/               # Fastify, rotas só de binding, OpenAPI gerado, handlers (`defineHandler`)
+│   ├── http/               # Fastify, bindHttpRoutes, OpenAPI gerado, health
 │   ├── repositories/prisma/
 │   ├── gateways/           # EventPublisher AMQP
 │   ├── services/crypto/
 │   └── messaging/          # conexão e PublishPort
-└── main/                   # composition root
+└── main/                   # start.ts, factories, handlers (catálogo HTTP)
 ```
 
 ```

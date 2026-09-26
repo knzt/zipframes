@@ -7,16 +7,14 @@ import type { S3Client } from '@aws-sdk/client-s3';
 import { InternalServerError, TimeoutError, UnavailableError } from '@zipframes/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { createS3ObjectStorage } from '../../../../../src/infrastructure/gateways/storage/s3ObjectStorage.gateway.js';
+import { S3ObjectStorage } from '../../../../../src/infrastructure/gateways/storage/s3ObjectStorage.gateway.js';
 
 const config = {
-  endpoint: 'http://localhost:8333',
-  region: 'us-east-1',
-  accessKey: 'key',
-  secretKey: 'secret',
   bucket: 'videos',
-  forcePathStyle: true,
 };
+
+const storageFor = (client: Pick<S3Client, 'send'>): S3ObjectStorage =>
+  new S3ObjectStorage(client as S3Client, config.bucket);
 
 const directories: string[] = [];
 
@@ -30,10 +28,10 @@ const tempDir = async (): Promise<string> => {
   return dir;
 };
 
-describe('createS3ObjectStorage', () => {
+describe('S3ObjectStorage', () => {
   it('downloads an object body to a file', async () => {
     const send = vi.fn(async () => ({ Body: Readable.from(['hello']) }));
-    const storage = createS3ObjectStorage(config, { send } as unknown as S3Client);
+    const storage = storageFor({ send });
     const destination = path.join(await tempDir(), 'object.bin');
 
     await storage.downloadToFile('uploads/a', destination);
@@ -44,7 +42,7 @@ describe('createS3ObjectStorage', () => {
 
   it('uploads a local file', async () => {
     const send = vi.fn(async () => ({}));
-    const storage = createS3ObjectStorage(config, { send } as unknown as S3Client);
+    const storage = storageFor({ send });
     const source = path.join(await tempDir(), 'frame.png');
     await writeFile(source, 'png');
 
@@ -55,7 +53,7 @@ describe('createS3ObjectStorage', () => {
 
   it('deletes an object and pings the bucket', async () => {
     const send = vi.fn(async () => ({}));
-    const storage = createS3ObjectStorage(config, { send } as unknown as S3Client);
+    const storage = storageFor({ send });
 
     await storage.deleteObject('uploads/a');
     await storage.ping();
@@ -64,9 +62,9 @@ describe('createS3ObjectStorage', () => {
   });
 
   it('throws SOURCE_MISSING when the object has no body', async () => {
-    const storage = createS3ObjectStorage(config, {
+    const storage = storageFor({
       send: async () => ({}),
-    } as unknown as S3Client);
+    });
 
     await expect(
       storage.downloadToFile('uploads/a', path.join(await tempDir(), 'missing.bin')),
@@ -74,13 +72,13 @@ describe('createS3ObjectStorage', () => {
   });
 
   it('maps NoSuchKey to SOURCE_MISSING', async () => {
-    const storage = createS3ObjectStorage(config, {
+    const storage = storageFor({
       send: async () => {
         const error = new Error('missing');
         error.name = 'NoSuchKey';
         throw error;
       },
-    } as unknown as S3Client);
+    });
 
     await expect(
       storage.downloadToFile('uploads/a', path.join(await tempDir(), 'missing.bin')),
@@ -88,11 +86,11 @@ describe('createS3ObjectStorage', () => {
   });
 
   it('maps a generic download failure to STORAGE_DOWNLOAD_FAILED', async () => {
-    const storage = createS3ObjectStorage(config, {
+    const storage = storageFor({
       send: async () => {
         throw new Error('timeout');
       },
-    } as unknown as S3Client);
+    });
 
     await expect(
       storage.downloadToFile('uploads/a', path.join(await tempDir(), 'failed.bin')),
@@ -100,7 +98,7 @@ describe('createS3ObjectStorage', () => {
   });
 
   it('aborts a download that is already cancelled', async () => {
-    const storage = createS3ObjectStorage(config, { send: vi.fn() } as unknown as S3Client);
+    const storage = storageFor({ send: vi.fn() });
     const signal = AbortSignal.abort();
 
     await expect(
@@ -110,12 +108,12 @@ describe('createS3ObjectStorage', () => {
 
   it('aborts a download that is cancelled while sending', async () => {
     const controller = new AbortController();
-    const storage = createS3ObjectStorage(config, {
+    const storage = storageFor({
       send: async () => {
         controller.abort();
         throw new Error('aborted');
       },
-    } as unknown as S3Client);
+    });
 
     await expect(
       storage.downloadToFile(
@@ -127,7 +125,7 @@ describe('createS3ObjectStorage', () => {
   });
 
   it('aborts an upload that is already cancelled', async () => {
-    const storage = createS3ObjectStorage(config, { send: vi.fn() } as unknown as S3Client);
+    const storage = storageFor({ send: vi.fn() });
     const source = path.join(await tempDir(), 'frame.png');
     await writeFile(source, 'png');
 
@@ -138,17 +136,17 @@ describe('createS3ObjectStorage', () => {
 
   it('maps upload failures and aborted uploads', async () => {
     const controller = new AbortController();
-    const failing = createS3ObjectStorage(config, {
+    const failing = storageFor({
       send: async () => {
         throw new Error('slow');
       },
-    } as unknown as S3Client);
-    const aborted = createS3ObjectStorage(config, {
+    });
+    const aborted = storageFor({
       send: async () => {
         controller.abort();
         throw new Error('aborted');
       },
-    } as unknown as S3Client);
+    });
     const source = path.join(await tempDir(), 'frame.png');
     await writeFile(source, 'png');
 
@@ -161,11 +159,11 @@ describe('createS3ObjectStorage', () => {
   });
 
   it('maps delete failures', async () => {
-    const storage = createS3ObjectStorage(config, {
+    const storage = storageFor({
       send: async () => {
         throw new Error('denied');
       },
-    } as unknown as S3Client);
+    });
 
     await expect(storage.deleteObject('uploads/a')).rejects.toMatchObject({
       code: 'STORAGE_DELETE_FAILED',
@@ -173,13 +171,13 @@ describe('createS3ObjectStorage', () => {
   });
 
   it('maps NotFound the same way as NoSuchKey', async () => {
-    const storage = createS3ObjectStorage(config, {
+    const storage = storageFor({
       send: async () => {
         const error = new Error('gone');
         error.name = 'NotFound';
         throw error;
       },
-    } as unknown as S3Client);
+    });
 
     await expect(
       storage.downloadToFile('uploads/a', path.join(await tempDir(), 'missing.bin')),

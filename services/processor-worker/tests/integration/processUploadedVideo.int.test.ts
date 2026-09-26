@@ -14,9 +14,9 @@ import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { framesPackageObjectKey } from '../../src/domain/policies/framesPackage.js';
-import { createS3ObjectStorage } from '../../src/infrastructure/gateways/storage/s3ObjectStorage.gateway.js';
+import { S3ObjectStorage } from '../../src/infrastructure/gateways/storage/s3ObjectStorage.gateway.js';
 import { EVENT_EXCHANGE } from '../../src/infrastructure/messaging/topology.js';
-import { startWorker } from '../../src/main/compose.js';
+import { startWorker } from '../../src/main/start.js';
 import { useBundledFfmpeg } from '../support/ffmpeg-bin.js';
 
 const ownerId = 'user-1';
@@ -113,7 +113,6 @@ describe('processUploadedVideo message flow', () => {
   });
 
   it('packages frames for a video.uploaded message and deletes the source', async () => {
-    const healthPort = 18181;
     const workDir = await mkdtemp(path.join(tmpdir(), 'zf-worker-'));
     const sourceKey = `uploads/${ownerId}/${videoId}`;
     const clip = await stat(clipPath);
@@ -139,7 +138,6 @@ describe('processUploadedVideo message flow', () => {
     process.env.MAX_ATTEMPTS = '3';
     process.env.RETRY_BASE_DELAY_MS = '1000';
     process.env.RETRY_MAX_DELAY_MS = '5000';
-    process.env.HEALTH_PORT = String(healthPort);
     process.env.LOG_LEVEL = 'info';
     process.env.SERVICE_VERSION = '0.0.0';
 
@@ -189,14 +187,7 @@ describe('processUploadedVideo message flow', () => {
   });
 
   it('treats a missing source object as a permanent SOURCE_MISSING failure', async () => {
-    const storage = createS3ObjectStorage({
-      endpoint: objectStore.endpoint,
-      region: objectStore.region,
-      accessKey: objectStore.accessKey,
-      secretKey: objectStore.secretKey,
-      bucket,
-      forcePathStyle: true,
-    });
+    const storage = new S3ObjectStorage(client, bucket);
     const destination = path.join(tmpdir(), 'zf-missing-source.mp4');
 
     await expect(

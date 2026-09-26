@@ -4,13 +4,16 @@ import { randomUUID } from 'node:crypto';
 
 import type { WorkDirectory } from '../../../application/interfaces/services/WorkDirectory.js';
 
-export const createFsWorkDirectory = (baseDir: string): WorkDirectory => ({
-  createTempDir: async (prefix) => {
-    const dir = path.join(baseDir, `${prefix}-${randomUUID()}`);
+export class FsWorkDirectory implements WorkDirectory {
+  constructor(private readonly baseDir: string) {}
+
+  async createTempDir(prefix: string): Promise<string> {
+    const dir = path.join(this.baseDir, `${prefix}-${randomUUID()}`);
     await mkdir(dir, { recursive: true });
     return dir;
-  },
-  removeDir: async (dirPath) => {
+  }
+
+  async removeDir(dirPath: string): Promise<void> {
     await rm(dirPath, { recursive: true, force: true });
-  },
-});
+  }
+}

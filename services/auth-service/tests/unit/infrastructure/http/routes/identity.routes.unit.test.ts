@@ -4,13 +4,36 @@ import { describe, expect, it, vi } from 'vitest';
 import type { HttpReply, HttpRequest } from '@zipframes/http';
 import type { Logger } from '@zipframes/logger';
 
-import { createJwksHandler } from '../../../../../src/infrastructure/http/handlers/jwksHandler.js';
+import { bindHttpRoutes } from '../../../../../src/infrastructure/http/bindHttpRoutes.js';
+import type { HttpRouteDefinition } from '../../../../../src/infrastructure/http/httpRoute.js';
 import { registerHealthRoutes } from '../../../../../src/infrastructure/http/routes/health.routes.js';
-import { registerIdentityRoutes } from '../../../../../src/infrastructure/http/routes/identity.routes.js';
 import { createHttpServer } from '../../../../../src/infrastructure/http/server.js';
+import type { LoginController } from '../../../../../src/interface-adapters/LoginController.js';
+import type { RegisterUserController } from '../../../../../src/interface-adapters/RegisterUserController.js';
+import { identityRoutes } from '../../../../../src/main/handlers/identityRoutes.js';
 import { silentLogger } from '../../../../support/silent-logger.js';
 
 type IdentityHandler = (request: HttpRequest) => Promise<HttpReply>;
+
+const stubRegisterUser: RegisterUserController = {
+  handle: async () => ({
+    ok: true as const,
+    value: { userId: 'user-1', name: 'Ada', email: 'ada@example.com' },
+  }),
+} as unknown as RegisterUserController;
+
+const stubLogin: LoginController = {
+  handle: async () => ({
+    ok: true as const,
+    value: { accessToken: 'token', tokenType: 'Bearer' as const, expiresIn: 900 },
+  }),
+} as unknown as LoginController;
+
+const withHandle = (
+  routes: readonly HttpRouteDefinition[],
+  path: string,
+  handle: IdentityHandler,
+): HttpRouteDefinition[] => routes.map((item) => (item.path === path ? { ...item, handle } : item));
 
 const buildApp = async (overrides?: {
   registerUserHandler?: IdentityHandler;
@@ -22,14 +45,21 @@ const buildApp = async (overrides?: {
 }): Promise<FastifyInstance> => {
   const app = await createHttpServer({ corsOrigin: '*', logger: silentLogger() });
 
-  registerIdentityRoutes(app, {
-    registerUserHandler:
-      overrides?.registerUserHandler ?? (async () => ({ status: 201, body: {} })),
-    loginHandler: overrides?.loginHandler ?? (async () => ({ status: 200, body: {} })),
-    jwksHandler:
-      overrides?.jwksHandler ??
-      createJwksHandler([{ kty: 'RSA', kid: 'k1', alg: 'RS256', use: 'sig', n: 'abc', e: 'AQAB' }]),
+  let routes = identityRoutes({
+    registerUser: stubRegisterUser,
+    login: stubLogin,
+    jwks: [{ kty: 'RSA', kid: 'k1', alg: 'RS256', use: 'sig', n: 'abc', e: 'AQAB' }],
   });
+  if (overrides?.registerUserHandler !== undefined) {
+    routes = withHandle(routes, '/register', overrides.registerUserHandler);
+  }
+  if (overrides?.loginHandler !== undefined) {
+    routes = withHandle(routes, '/login', overrides.loginHandler);
+  }
+  if (overrides?.jwksHandler !== undefined) {
+    routes = withHandle(routes, '/.well-known/jwks.json', overrides.jwksHandler);
+  }
+  bindHttpRoutes(app, routes);
   registerHealthRoutes(app, {
     isReady: overrides?.isReady ?? (async () => ({ ready: true })),
     renderMetrics: overrides?.renderMetrics ?? (async () => 'nodejs_version_info 1\n'),

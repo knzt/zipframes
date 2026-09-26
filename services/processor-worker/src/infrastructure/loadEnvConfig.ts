@@ -17,7 +17,6 @@ const configSchema = z.object({
   maxAttempts: z.coerce.number().int().positive(),
   retryBaseDelayMs: z.coerce.number().int().nonnegative(),
   retryMaxDelayMs: z.coerce.number().int().positive(),
-  healthPort: z.coerce.number().int().positive(),
   logLevel: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
   serviceVersion: z.string().min(1),
 });
@@ -37,7 +36,6 @@ const ENV_BY_FIELD: Record<string, string> = {
   maxAttempts: 'MAX_ATTEMPTS',
   retryBaseDelayMs: 'RETRY_BASE_DELAY_MS',
   retryMaxDelayMs: 'RETRY_MAX_DELAY_MS',
-  healthPort: 'HEALTH_PORT',
   logLevel: 'LOG_LEVEL',
   serviceVersion: 'SERVICE_VERSION',
 };
@@ -63,7 +61,6 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): WorkerConfig =
       maxAttempts: env.MAX_ATTEMPTS ?? '5',
       retryBaseDelayMs: env.RETRY_BASE_DELAY_MS ?? '1000',
       retryMaxDelayMs: env.RETRY_MAX_DELAY_MS ?? '30000',
-      healthPort: env.HEALTH_PORT ?? '8081',
       logLevel: env.LOG_LEVEL ?? 'info',
       serviceVersion: env.SERVICE_VERSION ?? '0.0.0',
     });

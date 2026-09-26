@@ -10,20 +10,21 @@ Cadastrar usuário, autenticar e emitir JWT RS256. Depois de gravar o usuário, 
 
 ## Camadas
 
-As dependências apontam para dentro. `application/` junta o que o livro separa: casos de uso e interface adapters. O caso de uso fica em `application/useCases/` e a interface que ele declara fica em `application/interfaces/`; a classe que implementa essa interface fica em `infrastructure/`. O raciocínio dessa decisão está em [layers.md](../layers.md).
+As dependências apontam para dentro. Os quatro anéis e o composition root estão em [layers.md](../layers.md).
 
-Neste serviço, a rota Fastify em `infrastructure/http` só liga o framework: path, schema OpenAPI e `sendHttpReply`. O correlation id é calculado no `onRequest` de `server.ts`. O handler em `infrastructure/http/handlers/` é `defineHandler` de `@zipframes/http` (JWKS tem o próprio handler): valida o pedido, chama o controller e devolve `HttpReply`. O controller em `application/controllers/` chama `RegisterUserUseCase` ou `LoginUseCase` e devolve `Result`. Cadastro usa o `errorHelper` padrão (`statusCode` + `message`). Login passa um `errorHelper` que sempre responde 401. O caso de uso só enxerga as interfaces que declara. `main/compose.ts` instancia o repositório Prisma, o hasher bcrypt, o emissor RS256 e o `EventPublisher` AMQP e chama `buildIdentityApp`. O controller não importa Fastify, Prisma nem bcrypt. `@zipframes/authenticator` continua só em teste — o auth emite JWT, não verifica nas rotas de register/login.
+Neste serviço, Fastify fica em `infrastructure/http/server.ts`. `bindHttpRoutes` é o único `app.route`. O correlation id é calculado no `onRequest` de `server.ts`. Os handlers em `main/handlers/` são `defineHandler` de `@zipframes/http` (JWKS tem o próprio handler): validam o pedido, chamam o controller e devolvem `HttpReply`. `identityRoutes.ts` lista `method`/`path`/`openApi`/`handle`. O controller em `interface-adapters/` chama `RegisterUserUseCase` ou `LoginUseCase` e devolve `Result`. Cadastro usa o `errorHelper` padrão (`statusCode` + `message`). Login passa um `errorHelper` que sempre responde 401. O caso de uso só enxerga as interfaces que declara. `start.ts` chama as factories e dá `listen`. O controller não importa Fastify, Prisma nem bcrypt. `@zipframes/authenticator` continua só em teste — o auth emite JWT, não verifica nas rotas de register/login.
 
 ```
-infrastructure  →  application  →  domain
+main  →  interface-adapters / infrastructure  →  application  →  domain
 ```
 
-| Pasta                 | Neste projeto                     | O que há aqui                                                                                                                                                             |
-| --------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/domain/`         | Entidades                         | `User`, `Password`, `UserRegistered`, erros de domínio                                                                                                                    |
-| `src/application/`    | Casos de uso e interface adapters | `RegisterUserUseCase`, `LoginUseCase`, controllers HTTP, tipos e interfaces (`UserRepository`, `EventPublisher`, `PasswordHasher`, `TokenIssuer`, `Clock`, `IdGenerator`) |
-| `src/infrastructure/` | Implementação e frameworks        | Prisma, bcrypt, RS256, rotas HTTP, conexão AMQP e o gateway que publica o evento                                                                                          |
-| `src/main/`           | Composition root                  | `compose.ts` resolve os adapters e chama `buildIdentityApp`; `identityApp.ts` monta o Fastify; `index.ts` trata sinal e shutdown                                          |
+| Pasta                     | Neste projeto        | O que há aqui                                                                                                                                           |
+| ------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/domain/`             | Entidades            | `User`, `Password`, `UserRegistered`, erros de domínio                                                                                                  |
+| `src/application/`        | Casos de uso e ports | `RegisterUserUseCase`, `LoginUseCase`, tipos e interfaces (`UserRepository`, `EventPublisher`, `PasswordHasher`, `TokenIssuer`, `Clock`, `IdGenerator`) |
+| `src/interface-adapters/` | Controllers          | `RegisterUserController`, `LoginController`                                                                                                             |
+| `src/infrastructure/`     | Drivers              | Prisma, bcrypt, RS256, Fastify, conexão AMQP e o gateway que publica o evento                                                                           |
+| `src/main/`               | Composition root     | `index.ts` trata sinal; `start.ts` sobe e para; `factories/` dá `new`; `handlers/` é o catálogo HTTP                                                    |
 
 ## Mapa de pastas
 
@@ -36,7 +37,6 @@ auth-service/src/
 │   ├── errors/userErrors.ts
 │   └── index.ts
 ├── application/
-│   ├── controllers/{RegisterUserController.ts, LoginController.ts}
 │   ├── useCases/
 │   │   ├── registerUser/{RegisterUserUseCase.ts, registerUser.types.ts}
 │   │   └── login/{LoginUseCase.ts, login.types.ts}
@@ -44,17 +44,22 @@ auth-service/src/
 │       ├── repositories/UserRepository.ts
 │       ├── gateways/EventPublisher.ts
 │       └── services/{PasswordHasher,TokenIssuer,Clock,IdGenerator}.ts
+├── interface-adapters/{RegisterUserController.ts, LoginController.ts}
 ├── infrastructure/
-│   ├── http/{openapi.ts, server.ts, fastifyAdapter.ts, problemDetails.schema.ts, handlers/{registerUser,login,jwks}Handler.ts, routes/{identity,health}.routes.ts}
+│   ├── http/{openapi.ts, server.ts, bindHttpRoutes.ts, httpRoute.ts, fastifyAdapter.ts, problemDetails.schema.ts, routes/health.routes.ts}
 │   ├── repositories/prisma/{schema.prisma,migrations/,client.ts,user.repository.ts}
 │   ├── gateways/amqpEventPublisher.gateway.ts
 │   ├── services/{systemClock.ts,uuidIdGenerator.ts,crypto/{bcryptPasswordHasher,rs256TokenIssuer,rsaKeys}.ts}
 │   ├── messaging/{amqpConnection,amqpPublisher,topology}.ts
 │   └── loadEnvConfig.ts
-└── main/{compose.ts,identityApp.ts,index.ts}
+└── main/
+    ├── index.ts
+    ├── start.ts
+    ├── factories/{externals,repositories,gateways,services,use-cases,controllers}/
+    └── handlers/{registerUser.ts,login.ts,jwks.ts,identityRoutes.ts}
 ```
 
-A persistência é repository: `UserRepository` em `application/interfaces/repositories/` e `PrismaUserRepository` em `infrastructure/repositories/prisma/`. A publicação AMQP é gateway: `EventPublisher` em `application/interfaces/gateways/` e `createAmqpEventPublisher` em `infrastructure/gateways/`. `messaging/` só tem a conexão e o `PublishPort`. Quem o caso de uso chama é `EventPublisher`. Prisma só tem `users`.
+A persistência é repository: `UserRepository` em `application/interfaces/repositories/` e `PrismaUserRepository` em `infrastructure/repositories/prisma/`. A publicação AMQP é gateway: `EventPublisher` em `application/interfaces/gateways/` e `AmqpEventPublisher` em `infrastructure/gateways/`. `messaging/` só tem a conexão e o `PublishPort`. Quem o caso de uso chama é `EventPublisher`. Prisma só tem `users`.
 
 ## Casos de uso
 

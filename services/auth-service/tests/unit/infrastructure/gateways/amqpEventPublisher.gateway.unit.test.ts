@@ -3,13 +3,13 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Publisher } from '@zipframes/communication';
 import { authService } from '@zipframes/schemas';
 
-import { createAmqpEventPublisher } from '../../../../src/infrastructure/gateways/amqpEventPublisher.gateway.js';
+import { AmqpEventPublisher } from '../../../../src/infrastructure/gateways/amqpEventPublisher.gateway.js';
 
-describe('createAmqpEventPublisher', () => {
+describe('AmqpEventPublisher', () => {
   it('publishes the envelope on the events exchange', async () => {
     const publish = vi.fn(async () => undefined);
     const publisher: Publisher = { publish };
-    const eventPublisher = createAmqpEventPublisher({
+    const eventPublisher = new AmqpEventPublisher({
       publisher,
       createId: () => '44444444-4444-4444-8444-444444444444',
       now: () => new Date('2026-09-20T12:00:05.000Z'),

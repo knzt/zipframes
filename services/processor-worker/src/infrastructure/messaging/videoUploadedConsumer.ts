@@ -6,7 +6,7 @@ import { runWithCorrelationId } from '@zipframes/logger';
 import { parseSchema } from '@zipframes/schemas';
 import { videoUploadedEventSchema } from '@zipframes/schemas/video-service';
 
-import type { ProcessUploadedVideoController } from '../../application/controllers/ProcessUploadedVideoController.js';
+import type { ProcessUploadedVideoController } from '../../interface-adapters/ProcessUploadedVideoController.js';
 import type { EventPublisher } from '../../application/interfaces/gateways/EventPublisher.js';
 
 export interface JobMetrics {

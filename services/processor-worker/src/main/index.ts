@@ -1,4 +1,4 @@
-import { startWorker } from './compose.js';
+import { startWorker } from './start.js';
 
 const main = async (): Promise<void> => {
   const service = await startWorker();

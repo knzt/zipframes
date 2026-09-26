@@ -4,9 +4,9 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { createZipArchiveBuilder } from '../../../../../src/infrastructure/services/media/zipArchiveBuilder.service.js';
+import { ZipArchiveBuilder } from '../../../../../src/infrastructure/services/media/zipArchiveBuilder.service.js';
 
-describe('createZipArchiveBuilder', () => {
+describe('ZipArchiveBuilder', () => {
   it('writes a zip with the frame file names', async () => {
     const dir = await mkdtemp(path.join(tmpdir(), 'zip-builder-'));
     try {
@@ -14,7 +14,7 @@ describe('createZipArchiveBuilder', () => {
       const archivePath = path.join(dir, 'frames.zip');
       await writeFile(frame, 'png');
 
-      await createZipArchiveBuilder().createZip([frame], archivePath);
+      await new ZipArchiveBuilder().createZip([frame], archivePath);
 
       const zip = await readFile(archivePath);
       expect(zip.subarray(0, 2).toString()).toBe('PK');
