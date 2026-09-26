@@ -1,59 +1,28 @@
-import { type PROBLEM_CONTENT_TYPE, problemResponse, type ProblemDetails } from '@zipframes/core';
-import { authService, parseSchema } from '@zipframes/schemas';
-import type { z } from 'zod';
+import { defineHandler, type HttpReply, type HttpRequest } from '@zipframes/http';
+import { authService } from '@zipframes/schemas';
 
 import type { RegisterUserUseCase } from '../useCases/registerUser/RegisterUserUseCase.js';
 
-export interface RegisterUserControllerRequest {
-  readonly body: unknown;
-  readonly correlationId: string;
-}
-
-export type RegisterUserControllerResponse =
-  | {
-      readonly status: 201;
-      readonly body: z.infer<typeof authService.registerResponseSchema>;
-    }
-  | {
-      readonly status: 400;
-      readonly contentType: typeof PROBLEM_CONTENT_TYPE;
-      readonly body: ProblemDetails;
-    }
-  | {
-      readonly status: 409;
-      readonly contentType: typeof PROBLEM_CONTENT_TYPE;
-      readonly body: ProblemDetails;
-    };
+export type RegisterUserControllerRequest = HttpRequest;
+export type RegisterUserControllerResponse = HttpReply;
 
 /**
- * Turns an already decoded register request into a status and a body.
- * The Fastify route only forwards this result.
+ * Register HTTP adapter. Validation, Result mapping and problem+json come from
+ * `defineHandler`. The Fastify route only forwards this result.
  */
 export class RegisterUserController {
-  constructor(private readonly registerUserUseCase: RegisterUserUseCase) {}
+  readonly handle: (request: HttpRequest) => Promise<HttpReply>;
 
-  async handle(request: RegisterUserControllerRequest): Promise<RegisterUserControllerResponse> {
-    const body = parseSchema(authService.registerRequestSchema, request.body);
-    if (!body.ok) {
-      return problemResponse(400, body.error.message, undefined, request.correlationId);
-    }
-
-    const result = await this.registerUserUseCase.execute({
-      ...body.value,
-      correlationId: request.correlationId,
+  constructor(registerUserUseCase: RegisterUserUseCase) {
+    this.handle = defineHandler({
+      inputSchema: authService.registerRequestSchema,
+      outputSchema: authService.registerResponseSchema,
+      successStatus: 201,
+      handler: (input, ctx) =>
+        registerUserUseCase.execute({
+          ...input,
+          correlationId: ctx.correlationId,
+        }),
     });
-    if (!result.ok) {
-      return problemResponse(
-        result.error.statusCode,
-        result.error.message,
-        undefined,
-        request.correlationId,
-      ) as RegisterUserControllerResponse;
-    }
-
-    return {
-      status: 201,
-      body: authService.registerResponseSchema.parse(result.value),
-    };
   }
 }

@@ -16,7 +16,7 @@ src/
 │   ├── useCases/           # LoginUseCase, RegisterUserUseCase
 │   └── interfaces/         # interface adapters declarados pelo caso de uso
 ├── infrastructure/
-│   ├── http/               # Fastify, rotas, OpenAPI gerado e HttpReply
+│   ├── http/               # Fastify, rotas, OpenAPI gerado; HttpReply vem de `@zipframes/http`
 │   ├── repositories/prisma/
 │   ├── gateways/           # EventPublisher AMQP
 │   ├── services/crypto/

@@ -11,3 +11,6 @@ allowBuilds:
 minimumReleaseAgeExclude:
   - '@zipframes/core@0.4.0'
   - '@zipframes/test-toolkit@0.2.1'
+  - '@zipframes/http@0.2.0-pr41-20260926005304'
+  - '@zipframes/authenticator@0.1.3'
+  - '@zipframes/schemas@0.1.3'

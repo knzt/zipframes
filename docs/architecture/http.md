@@ -2,7 +2,7 @@
 
 Todo processo que escuta HTTP usa **Fastify**. Saúde, métricas e a documentação gerada sobem nesse mesmo servidor.
 
-A especificação OpenAPI não é um arquivo mantido à mão. `@fastify/swagger` gera o documento a partir das schemas das rotas, e `@fastify/swagger-ui` publica a interface. Onde a rota já valida com Zod (`@zipframes/schemas`), a schema da rota é `z.toJSONSchema` dessa mesma schema. A validação em tempo de execução continua no handler, para preservar o status que o caso de uso escolhe (o login responde 401 para um corpo inválido, não 400).
+A especificação OpenAPI não é um arquivo mantido à mão. `@fastify/swagger` gera o documento a partir das schemas das rotas, e `@fastify/swagger-ui` publica a interface. Onde a rota já valida com Zod (`@zipframes/schemas`), a schema da rota é `z.toJSONSchema` dessa mesma schema. No auth-service, `defineHandler` de `@zipframes/http` valida entrada e saída em tempo de execução. O login passa um `errorHelper` que responde 401 tanto para corpo inválido quanto para credencial errada, sem distinguir os dois.
 
 Um throw que escapa do handler responde `500` `application/problem+json` (RFC 9457), com `correlationId` e sem a mensagem interna. O 404 de rota inexistente e o 400 de JSON malformado usam o mesmo envelope; o `503` de readiness continua `{ status, reason }`.
 
