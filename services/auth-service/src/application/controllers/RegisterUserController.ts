@@ -1,28 +1,35 @@
-import { defineHandler, type HttpReply, type HttpRequest } from '@zipframes/http';
-import { authService } from '@zipframes/schemas';
+import type { Result } from '@zipframes/core';
 
 import type { RegisterUserUseCase } from '../useCases/registerUser/RegisterUserUseCase.js';
+import type {
+  RegisterUserUseCaseError,
+  RegisterUserUseCaseOutput,
+} from '../useCases/registerUser/registerUser.types.js';
 
-export type RegisterUserControllerRequest = HttpRequest;
-export type RegisterUserControllerResponse = HttpReply;
+export interface RegisterUserControllerRequest {
+  readonly name: string;
+  readonly email: string;
+  readonly password: string;
+}
+
+export interface RegisterUserControllerContext {
+  readonly correlationId: string;
+}
 
 /**
- * Register HTTP adapter. Validation, Result mapping and problem+json come from
- * `defineHandler`. The Fastify route only forwards this result.
+ * Turns a validated register payload into the use case call.
+ * HTTP status and problem+json stay in the handler.
  */
 export class RegisterUserController {
-  readonly handle: (request: HttpRequest) => Promise<HttpReply>;
+  constructor(private readonly registerUserUseCase: RegisterUserUseCase) {}
 
-  constructor(registerUserUseCase: RegisterUserUseCase) {
-    this.handle = defineHandler({
-      inputSchema: authService.registerRequestSchema,
-      outputSchema: authService.registerResponseSchema,
-      successStatus: 201,
-      handler: (input, ctx) =>
-        registerUserUseCase.execute({
-          ...input,
-          correlationId: ctx.correlationId,
-        }),
+  handle(
+    input: RegisterUserControllerRequest,
+    ctx: RegisterUserControllerContext,
+  ): Promise<Result<RegisterUserUseCaseOutput, RegisterUserUseCaseError>> {
+    return this.registerUserUseCase.execute({
+      ...input,
+      correlationId: ctx.correlationId,
     });
   }
 }

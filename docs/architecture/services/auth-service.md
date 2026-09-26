@@ -12,7 +12,7 @@ Cadastrar usuário, autenticar e emitir JWT RS256. Depois de gravar o usuário, 
 
 As dependências apontam para dentro. `application/` junta o que o livro separa: casos de uso e interface adapters. O caso de uso fica em `application/useCases/` e a interface que ele declara fica em `application/interfaces/`; a classe que implementa essa interface fica em `infrastructure/`. O raciocínio dessa decisão está em [layers.md](../layers.md).
 
-Neste serviço, a rota Fastify em `infrastructure/http` só liga o framework. O controller em `application/controllers/` é `defineHandler` de `@zipframes/http`: valida o pedido, chama `RegisterUserUseCase` ou `LoginUseCase` e devolve `HttpReply`. Cadastro usa o `errorHelper` padrão (`statusCode` + `message`). Login passa um `errorHelper` que sempre responde 401. O caso de uso só enxerga as interfaces que declara. `main/compose.ts` instancia o repositório Prisma, o hasher bcrypt, o emissor RS256 e o `EventPublisher` AMQP, monta o caso de uso e entrega o controller à rota. O controller não importa Fastify, Prisma nem bcrypt. `@zipframes/authenticator` continua só em teste — o auth emite JWT, não verifica nas rotas de register/login.
+Neste serviço, a rota Fastify em `infrastructure/http` só liga o framework. O handler em `infrastructure/http/handlers/` é `defineHandler` de `@zipframes/http`: valida o pedido, chama o controller e devolve `HttpReply`. O controller em `application/controllers/` chama `RegisterUserUseCase` ou `LoginUseCase` e devolve `Result`. Cadastro usa o `errorHelper` padrão (`statusCode` + `message`). Login passa um `errorHelper` que sempre responde 401. O caso de uso só enxerga as interfaces que declara. `main/compose.ts` instancia o repositório Prisma, o hasher bcrypt, o emissor RS256 e o `EventPublisher` AMQP, monta o caso de uso, o controller e o handler, e entrega o handler à rota. O controller não importa Fastify, Prisma nem bcrypt. `@zipframes/authenticator` continua só em teste — o auth emite JWT, não verifica nas rotas de register/login.
 
 ```
 infrastructure  →  application  →  domain
@@ -45,7 +45,7 @@ auth-service/src/
 │       ├── gateways/EventPublisher.ts
 │       └── services/{PasswordHasher,TokenIssuer,Clock,IdGenerator}.ts
 ├── infrastructure/
-│   ├── http/{httpReply.ts, openapi.ts, server.ts, routes/{identity,health}.routes.ts}
+│   ├── http/{openapi.ts, server.ts, handlers/{registerUser,login}Handler.ts, routes/{identity,health}.routes.ts}
 │   ├── repositories/prisma/{schema.prisma,migrations/,client.ts,user.repository.ts}
 │   ├── gateways/amqpEventPublisher.gateway.ts
 │   ├── services/crypto/{bcryptPasswordHasher,rs256TokenIssuer,rsaKeys}.ts

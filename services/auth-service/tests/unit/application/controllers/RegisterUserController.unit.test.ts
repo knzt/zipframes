@@ -5,12 +5,13 @@ import { RegisterUserController } from '../../../../src/application/controllers/
 import type { RegisterUserUseCase } from '../../../../src/application/useCases/registerUser/RegisterUserUseCase.js';
 
 const correlationId = 'corr-register';
+const payload = { name: 'Ada Lovelace', email: 'ada@example.com', password: 'senha1234' };
 
 const controllerFor = (execute: RegisterUserUseCase['execute']): RegisterUserController =>
   new RegisterUserController({ execute } as unknown as RegisterUserUseCase);
 
 describe('RegisterUserController', () => {
-  it('returns 201 and the parsed body when the use case succeeds', async () => {
+  it('forwards the payload and correlation id to the use case', async () => {
     const execute = vi.fn(async () => ({
       ok: true as const,
       value: {
@@ -21,20 +22,12 @@ describe('RegisterUserController', () => {
     }));
     const controller = controllerFor(execute);
 
-    const response = await controller.handle({
-      correlationId,
-      body: { name: 'Ada Lovelace', email: 'ada@example.com', password: 'senha1234' },
-    });
+    const result = await controller.handle(payload, { correlationId });
 
-    expect(execute).toHaveBeenCalledWith({
-      name: 'Ada Lovelace',
-      email: 'ada@example.com',
-      password: 'senha1234',
-      correlationId,
-    });
-    expect(response).toEqual({
-      status: 201,
-      body: {
+    expect(execute).toHaveBeenCalledWith({ ...payload, correlationId });
+    expect(result).toEqual({
+      ok: true,
+      value: {
         userId: '0194f3a0-0000-7000-8000-000000000001',
         name: 'Ada Lovelace',
         email: 'ada@example.com',
@@ -42,64 +35,26 @@ describe('RegisterUserController', () => {
     });
   });
 
-  it('returns 400 problem details for a body the schema rejects', async () => {
-    const execute = vi.fn();
+  it('returns the use case error when registration is rejected', async () => {
+    const error = new ValidationError('NO_DIGIT', 'password must contain at least one digit');
+    const execute = vi.fn(async () => ({ ok: false as const, error }));
     const controller = controllerFor(execute);
 
-    const response = await controller.handle({
-      correlationId,
-      body: { name: '', email: 'not-an-email', password: 'x' },
-    });
+    const result = await controller.handle(
+      { name: 'Ada Lovelace', email: 'ada@example.com', password: 'abcdefgh' },
+      { correlationId },
+    );
 
-    expect(execute).not.toHaveBeenCalled();
-    expect(response).toMatchObject({
-      status: 400,
-      contentType: 'application/problem+json',
-      body: { status: 400, correlationId },
-    });
-    expect(response.body).not.toHaveProperty('detail');
+    expect(result).toEqual({ ok: false, error });
   });
 
-  it('returns 400 when the use case rejects the input', async () => {
-    const execute = vi.fn(async () => ({
-      ok: false as const,
-      error: new ValidationError('NO_DIGIT', 'password must contain at least one digit'),
-    }));
+  it('returns EMAIL_TAKEN from the use case', async () => {
+    const error = new ConflictError('EMAIL_TAKEN', 'email is already registered');
+    const execute = vi.fn(async () => ({ ok: false as const, error }));
     const controller = controllerFor(execute);
 
-    const response = await controller.handle({
-      correlationId,
-      body: { name: 'Ada Lovelace', email: 'ada@example.com', password: 'abcdefgh' },
-    });
+    const result = await controller.handle(payload, { correlationId });
 
-    expect(response.status).toBe(400);
-    expect(response.body).toMatchObject({
-      title: 'password must contain at least one digit',
-      correlationId,
-    });
-    expect(response.body).not.toHaveProperty('detail');
-  });
-
-  it('returns 409 when the email is already registered', async () => {
-    const execute = vi.fn(async () => ({
-      ok: false as const,
-      error: new ConflictError('EMAIL_TAKEN', 'email is already registered'),
-    }));
-    const controller = controllerFor(execute);
-
-    const response = await controller.handle({
-      correlationId,
-      body: { name: 'Ada Lovelace', email: 'ada@example.com', password: 'senha1234' },
-    });
-
-    expect(response).toMatchObject({
-      status: 409,
-      contentType: 'application/problem+json',
-      body: {
-        title: 'email is already registered',
-        correlationId,
-      },
-    });
-    expect(response.body).not.toHaveProperty('detail');
+    expect(result).toEqual({ ok: false, error });
   });
 });

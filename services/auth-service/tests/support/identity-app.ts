@@ -15,6 +15,8 @@ import { RegisterUserController } from '../../src/application/controllers/Regist
 import type { EventPublisher } from '../../src/application/interfaces/gateways/EventPublisher.js';
 import { LoginUseCase } from '../../src/application/useCases/login/LoginUseCase.js';
 import { RegisterUserUseCase } from '../../src/application/useCases/registerUser/RegisterUserUseCase.js';
+import { createLoginHandler } from '../../src/infrastructure/http/handlers/loginHandler.js';
+import { createRegisterUserHandler } from '../../src/infrastructure/http/handlers/registerUserHandler.js';
 import { createHttpServer } from '../../src/infrastructure/http/server.js';
 import { silentLogger } from './silent-logger.js';
 import { registerIdentityRoutes } from '../../src/infrastructure/http/routes/identity.routes.js';
@@ -74,8 +76,8 @@ export const startIdentityApp = async (options?: IdentityAppOptions): Promise<Id
 
   const app = await createHttpServer({ corsOrigin: '*', logger: silentLogger() });
   registerIdentityRoutes(app, {
-    registerUserController,
-    loginController,
+    registerUserHandler: createRegisterUserHandler(registerUserController),
+    loginHandler: createLoginHandler(loginController),
     jwks: [keys.publicJwk],
   });
   await app.listen({ port: 0, host: '127.0.0.1' });
