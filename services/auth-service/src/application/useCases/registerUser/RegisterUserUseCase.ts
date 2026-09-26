@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { ConflictError, ValidationError, err, ok } from '@zipframes/core';
 import type { Result } from '@zipframes/core';
 
@@ -6,8 +8,6 @@ import { User } from '../../../domain/entities/user.js';
 import { createPassword } from '../../../domain/valueObjects/password.js';
 import type { EventPublisher } from '../../interfaces/gateways/EventPublisher.js';
 import type { UserRepository } from '../../interfaces/repositories/UserRepository.js';
-import type { Clock } from '../../interfaces/services/Clock.js';
-import type { IdGenerator } from '../../interfaces/services/IdGenerator.js';
 import type { PasswordHasher } from '../../interfaces/services/PasswordHasher.js';
 import type {
   RegisterUserUseCaseError,
@@ -18,8 +18,6 @@ import type {
 export interface RegisterUserUseCaseDeps {
   readonly userRepository: UserRepository;
   readonly passwordHasher: PasswordHasher;
-  readonly idGenerator: IdGenerator;
-  readonly clock: Clock;
   readonly eventPublisher: EventPublisher;
   readonly onPublishFailed?: (
     error: unknown,
@@ -39,10 +37,10 @@ export class RegisterUserUseCase {
     }
 
     const user = User.create({
-      id: this.deps.idGenerator.next(),
+      id: randomUUID(),
       name: input.name,
       email: input.email,
-      now: this.deps.clock.now(),
+      now: new Date(),
     });
     if (!user.ok) {
       return err(user.error);

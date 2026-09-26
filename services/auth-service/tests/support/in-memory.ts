@@ -3,8 +3,6 @@ import type {
   EventPublisherInput,
 } from '../../src/application/interfaces/gateways/EventPublisher.js';
 import type { UserRepository } from '../../src/application/interfaces/repositories/UserRepository.js';
-import type { Clock } from '../../src/application/interfaces/services/Clock.js';
-import type { IdGenerator } from '../../src/application/interfaces/services/IdGenerator.js';
 import type { PasswordHasher } from '../../src/application/interfaces/services/PasswordHasher.js';
 import type { TokenIssuer } from '../../src/application/interfaces/services/TokenIssuer.js';
 import type { User, UserId } from '../../src/domain/entities/user.js';
@@ -61,22 +59,5 @@ export class FakeTokenIssuer implements TokenIssuer {
   issue(userId: UserId): Promise<{ token: string; expiresInSeconds: number }> {
     this.issuedFor.push(userId);
     return Promise.resolve({ token: `token-for-${userId}`, expiresInSeconds: 900 });
-  }
-}
-
-export class SequentialIds implements IdGenerator {
-  private counter = 0;
-
-  next(): string {
-    this.counter += 1;
-    return `0194f3a0-0000-7000-8000-00000000000${String(this.counter)}`;
-  }
-}
-
-export class FixedClock implements Clock {
-  constructor(private readonly instant = new Date('2026-01-01T12:00:00.000Z')) {}
-
-  now(): Date {
-    return this.instant;
   }
 }

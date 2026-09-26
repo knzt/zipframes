@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import type { Publisher } from '@zipframes/communication';
 import { EVENT_EXCHANGE } from '@zipframes/schemas/shared';
 
@@ -7,21 +9,15 @@ import type {
 } from '../../application/interfaces/gateways/EventPublisher.js';
 
 export class AmqpEventPublisher implements EventPublisher {
-  constructor(
-    private readonly deps: {
-      readonly publisher: Publisher;
-      readonly createId: () => string;
-      readonly now: () => Date;
-    },
-  ) {}
+  constructor(private readonly publisher: Publisher) {}
 
   async publish(input: EventPublisherInput): Promise<void> {
-    await this.deps.publisher.publish(
+    await this.publisher.publish(
       {
-        eventId: this.deps.createId(),
+        eventId: randomUUID(),
         eventType: input.eventType,
         version: 1,
-        occurredAt: this.deps.now().toISOString(),
+        occurredAt: new Date().toISOString(),
         correlationId: input.correlationId,
         payload: input.payload,
       },

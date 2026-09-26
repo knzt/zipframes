@@ -13,14 +13,7 @@ import { createLoginController } from './factories/controllers/login.js';
 import { createRegisterUserController } from './factories/controllers/registerUser.js';
 import { createAmqp } from './factories/externals/amqp.js';
 import { createPrisma } from './factories/externals/prisma.js';
-import { createEventPublisher } from './factories/gateways/eventPublisher.js';
-import { createUserRepository } from './factories/repositories/userRepository.js';
-import { createClock } from './factories/services/clock.js';
-import { createIdGenerator } from './factories/services/idGenerator.js';
-import { createPasswordHasher } from './factories/services/passwordHasher.js';
 import { createTokenIssuer } from './factories/services/tokenIssuer.js';
-import { createLogin } from './factories/use-cases/login.js';
-import { createRegisterUser } from './factories/use-cases/registerUser.js';
 import { identityRoutes } from './handlers/identityRoutes.js';
 
 export const startAuthService = async (): Promise<{ stop: () => Promise<void> }> => {
@@ -52,41 +45,12 @@ export const startAuthService = async (): Promise<{ stop: () => Promise<void> }>
     closers.push(() => amqp.close());
     await assertTopology(amqp.channel);
 
-    const clock = createClock();
-    const idGenerator = createIdGenerator();
-    const eventPublisher = createEventPublisher({
-      channel: amqp.channel,
-      clock,
-      idGenerator,
-    });
-    const userRepository = createUserRepository(prisma);
-    const passwordHasher = createPasswordHasher();
-    const registerUser = createRegisterUser({
-      userRepository,
-      passwordHasher,
-      idGenerator,
-      clock,
-      eventPublisher,
-      onPublishFailed: (error, details) => {
-        logger.error('failed to publish user.registered', {
-          err: error,
-          userId: details.userId,
-          correlationId: details.correlationId,
-        });
-      },
-    });
-    const login = createLogin({
-      userRepository,
-      passwordHasher,
-      tokenIssuer,
-    });
-
     const app = await createHttpServer({ corsOrigin: config.corsOrigin, logger });
     bindHttpRoutes(
       app,
       identityRoutes({
-        registerUser: createRegisterUserController(registerUser),
-        login: createLoginController(login),
+        registerUser: createRegisterUserController({ prisma, amqp, logger }),
+        login: createLoginController({ prisma, tokenIssuer }),
         jwks: [keys.publicJwk],
       }),
     );

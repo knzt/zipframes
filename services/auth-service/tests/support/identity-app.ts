@@ -16,13 +16,7 @@ import { createHttpServer } from '../../src/infrastructure/http/server.js';
 import { createLoginController } from '../../src/main/factories/controllers/login.js';
 import { createRegisterUserController } from '../../src/main/factories/controllers/registerUser.js';
 import { createPrisma } from '../../src/main/factories/externals/prisma.js';
-import { createUserRepository } from '../../src/main/factories/repositories/userRepository.js';
-import { createClock } from '../../src/main/factories/services/clock.js';
-import { createIdGenerator } from '../../src/main/factories/services/idGenerator.js';
-import { createPasswordHasher } from '../../src/main/factories/services/passwordHasher.js';
 import { createTokenIssuer } from '../../src/main/factories/services/tokenIssuer.js';
-import { createLogin } from '../../src/main/factories/use-cases/login.js';
-import { createRegisterUser } from '../../src/main/factories/use-cases/registerUser.js';
 import { identityRoutes } from '../../src/main/handlers/identityRoutes.js';
 import { silentLogger } from './silent-logger.js';
 
@@ -76,30 +70,17 @@ export const startIdentityApp = async (options?: IdentityAppOptions): Promise<Id
       });
     });
 
-  const userRepository = createUserRepository(prisma);
-  const passwordHasher = createPasswordHasher();
-  const clock = createClock();
-  const idGenerator = createIdGenerator();
-  const registerUser = createRegisterUser({
-    userRepository,
-    passwordHasher,
-    idGenerator,
-    clock,
-    eventPublisher,
-    onPublishFailed,
-  });
-  const login = createLogin({
-    userRepository,
-    passwordHasher,
-    tokenIssuer,
-  });
-
   const app = await createHttpServer({ corsOrigin: '*', logger });
   bindHttpRoutes(
     app,
     identityRoutes({
-      registerUser: createRegisterUserController(registerUser),
-      login: createLoginController(login),
+      registerUser: createRegisterUserController({
+        prisma,
+        logger,
+        eventPublisher,
+        onPublishFailed,
+      }),
+      login: createLoginController({ prisma, tokenIssuer }),
       jwks: [keys.publicJwk],
     }),
   );

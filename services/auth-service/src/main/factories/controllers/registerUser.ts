@@ -1,6 +1,6 @@
-import type { RegisterUserUseCase } from '../../../application/useCases/registerUser/RegisterUserUseCase.js';
 import { RegisterUserController } from '../../../interface-adapters/RegisterUserController.js';
+import { createRegisterUser, type RegisterUserExternals } from '../use-cases/registerUser.js';
 
 export const createRegisterUserController = (
-  registerUser: RegisterUserUseCase,
-): RegisterUserController => new RegisterUserController(registerUser);
+  externals: RegisterUserExternals,
+): RegisterUserController => new RegisterUserController(createRegisterUser(externals));

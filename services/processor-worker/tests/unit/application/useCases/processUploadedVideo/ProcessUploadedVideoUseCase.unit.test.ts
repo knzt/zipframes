@@ -55,7 +55,6 @@ describe('ProcessUploadedVideoUseCase', () => {
       archive: { createZip },
       workDirectory: { createTempDir, removeDir },
       events,
-      now: () => new Date('2026-09-20T12:00:05.000Z'),
       processingTimeoutMs: 60_000,
     });
 
@@ -100,7 +99,6 @@ describe('ProcessUploadedVideoUseCase', () => {
         removeDir: async () => undefined,
       },
       events,
-      now: () => new Date('2026-09-20T12:00:05.000Z'),
       processingTimeoutMs: 60_000,
     });
 
@@ -127,7 +125,6 @@ describe('ProcessUploadedVideoUseCase', () => {
         removeDir: async () => undefined,
       },
       events,
-      now: () => new Date(),
       processingTimeoutMs: 60_000,
     });
 
@@ -159,7 +156,6 @@ describe('ProcessUploadedVideoUseCase', () => {
         removeDir,
       },
       events: { publish: vi.fn(async () => undefined) },
-      now: () => new Date(),
       processingTimeoutMs: 20,
     });
 
@@ -186,7 +182,6 @@ describe('ProcessUploadedVideoUseCase', () => {
         removeDir: async () => undefined,
       },
       events: { publish: vi.fn(async () => undefined) },
-      now: () => new Date(),
       processingTimeoutMs: 60_000,
       onDiscardOriginalFailed,
     });
@@ -212,7 +207,6 @@ describe('ProcessUploadedVideoUseCase', () => {
         removeDir: async () => undefined,
       },
       events,
-      now: () => new Date('2026-09-20T12:00:05.000Z'),
       processingTimeoutMs: 60_000,
     });
 
@@ -240,7 +234,6 @@ describe('ProcessUploadedVideoUseCase', () => {
         removeDir: async () => undefined,
       },
       events: eventsDouble(),
-      now: () => new Date('2026-09-20T12:00:05.000Z'),
       processingTimeoutMs: 60_000,
     });
 
@@ -268,7 +261,6 @@ describe('ProcessUploadedVideoUseCase', () => {
         removeDir: async () => undefined,
       },
       events: eventsDouble(),
-      now: () => new Date('2026-09-20T12:00:05.000Z'),
       processingTimeoutMs: 60_000,
     });
 
@@ -298,7 +290,6 @@ describe('ProcessUploadedVideoUseCase', () => {
         removeDir: async () => undefined,
       },
       events,
-      now: () => new Date(),
       processingTimeoutMs: 60_000,
     });
 
@@ -330,7 +321,6 @@ describe('ProcessUploadedVideoUseCase', () => {
         removeDir: async () => undefined,
       },
       events: eventsDouble(),
-      now: () => new Date(),
       processingTimeoutMs: 20,
     });
 

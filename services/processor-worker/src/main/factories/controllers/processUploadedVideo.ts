@@ -1,6 +1,10 @@
-import type { ProcessUploadedVideoUseCase } from '../../../application/useCases/processUploadedVideo/ProcessUploadedVideoUseCase.js';
 import { ProcessUploadedVideoController } from '../../../interface-adapters/ProcessUploadedVideoController.js';
+import {
+  createProcessUploadedVideo,
+  type ProcessUploadedVideoExternals,
+} from '../use-cases/processUploadedVideo.js';
 
 export const createProcessUploadedVideoController = (
-  processUploadedVideo: ProcessUploadedVideoUseCase,
-): ProcessUploadedVideoController => new ProcessUploadedVideoController(processUploadedVideo);
+  externals: ProcessUploadedVideoExternals,
+): ProcessUploadedVideoController =>
+  new ProcessUploadedVideoController(createProcessUploadedVideo(externals));

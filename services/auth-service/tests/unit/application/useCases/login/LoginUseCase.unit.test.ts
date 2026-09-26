@@ -5,10 +5,8 @@ import { RegisterUserUseCase } from '../../../../../src/application/useCases/reg
 import {
   FakeHasher,
   FakeTokenIssuer,
-  FixedClock,
   InMemoryEventPublisher,
   InMemoryUserRepository,
-  SequentialIds,
 } from '../../../../support/in-memory.js';
 
 let userRepository: InMemoryUserRepository;
@@ -16,6 +14,7 @@ let tokenIssuer: FakeTokenIssuer;
 let passwordHasher: FakeHasher;
 let eventPublisher: InMemoryEventPublisher;
 let login: LoginUseCase;
+let userId: string;
 
 beforeEach(async () => {
   userRepository = new InMemoryUserRepository();
@@ -23,11 +22,9 @@ beforeEach(async () => {
   passwordHasher = new FakeHasher();
   eventPublisher = new InMemoryEventPublisher();
 
-  await new RegisterUserUseCase({
+  const registered = await new RegisterUserUseCase({
     userRepository,
     passwordHasher,
-    idGenerator: new SequentialIds(),
-    clock: new FixedClock(),
     eventPublisher,
   }).execute({
     name: 'Hellen Santos',
@@ -35,6 +32,10 @@ beforeEach(async () => {
     password: 'senha1234',
     correlationId: '0194f3a0-0000-7000-8000-000000000099',
   });
+  if (!registered.ok) {
+    throw new Error('fixture registration failed');
+  }
+  userId = registered.value.userId;
 
   login = new LoginUseCase({ userRepository, passwordHasher, tokenIssuer });
   passwordHasher.verifiedAgainst.length = 0;
@@ -47,11 +48,11 @@ describe('a successful login', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value).toEqual({
-      accessToken: 'token-for-0194f3a0-0000-7000-8000-000000000001',
+      accessToken: `token-for-${userId}`,
       tokenType: 'Bearer',
       expiresIn: 900,
     });
-    expect(tokenIssuer.issuedFor).toEqual(['0194f3a0-0000-7000-8000-000000000001']);
+    expect(tokenIssuer.issuedFor).toEqual([userId]);
     expect(eventPublisher.published).toHaveLength(1);
   });
 

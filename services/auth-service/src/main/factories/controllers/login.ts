@@ -1,5 +1,5 @@
-import type { LoginUseCase } from '../../../application/useCases/login/LoginUseCase.js';
 import { LoginController } from '../../../interface-adapters/LoginController.js';
+import { createLogin, type LoginExternals } from '../use-cases/login.js';
 
-export const createLoginController = (login: LoginUseCase): LoginController =>
-  new LoginController(login);
+export const createLoginController = (externals: LoginExternals): LoginController =>
+  new LoginController(createLogin(externals));

@@ -97,7 +97,6 @@ export interface ProcessUploadedVideoUseCaseDeps {
   readonly archive: ArchiveBuilder;
   readonly workDirectory: WorkDirectory;
   readonly events: EventPublisher;
-  readonly now: () => Date;
   readonly processingTimeoutMs: number;
   readonly onDiscardOriginalFailed?: (
     job: ProcessUploadedVideoUseCaseInput,
@@ -114,7 +113,7 @@ export class ProcessUploadedVideoUseCase {
       job.videoId,
       job.originalFileName,
     );
-    const startedAt = this.deps.now().getTime();
+    const startedAt = new Date().getTime();
     const deadline = startDeadline(this.deps.processingTimeoutMs);
 
     try {
@@ -191,7 +190,7 @@ export class ProcessUploadedVideoUseCase {
     packaged: FramesPackageReady,
     startedAt: number,
   ): Promise<void> {
-    const durationMs = Math.max(0, this.deps.now().getTime() - startedAt);
+    const durationMs = Math.max(0, new Date().getTime() - startedAt);
     await this.deps.events.publish({
       eventType: 'video.processed',
       correlationId: job.correlationId,

@@ -3,11 +3,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { RegisterUserUseCase } from '../../../../../src/application/useCases/registerUser/RegisterUserUseCase.js';
 import {
   FakeHasher,
-  FixedClock,
   InMemoryEventPublisher,
   InMemoryUserRepository,
-  SequentialIds,
 } from '../../../../support/in-memory.js';
+
+const uuidV4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 let userRepository: InMemoryUserRepository;
 let eventPublisher: InMemoryEventPublisher;
@@ -23,8 +23,6 @@ beforeEach(() => {
   registerUser = new RegisterUserUseCase({
     userRepository,
     passwordHasher,
-    idGenerator: new SequentialIds(),
-    clock: new FixedClock(),
     eventPublisher,
     onPublishFailed,
   });
@@ -43,8 +41,8 @@ describe('a successful registration', () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value).toEqual({
-      userId: '0194f3a0-0000-7000-8000-000000000001',
+    expect(result.value.userId).toMatch(uuidV4);
+    expect(result.value).toMatchObject({
       name: 'Hellen Santos',
       email: 'hellen@example.com',
     });
@@ -60,15 +58,17 @@ describe('a successful registration', () => {
   });
 
   it('creates the user and then publishes user.registered', async () => {
-    await registerUser.execute(validInput);
+    const result = await registerUser.execute(validInput);
 
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
     expect(userRepository.users.size).toBe(1);
     expect(eventPublisher.published).toEqual([
       {
         eventType: 'user.registered',
         correlationId: '0194f3a0-0000-7000-8000-000000000099',
         payload: {
-          userId: '0194f3a0-0000-7000-8000-000000000001',
+          userId: result.value.userId,
           name: 'Hellen Santos',
           email: 'hellen@example.com',
         },
@@ -151,8 +151,6 @@ describe('repository create failure', () => {
     const useCase = new RegisterUserUseCase({
       userRepository: raceRepository,
       passwordHasher: new FakeHasher(),
-      idGenerator: new SequentialIds(),
-      clock: new FixedClock(),
       eventPublisher,
     });
 
@@ -173,7 +171,7 @@ describe('publish after create', () => {
     expect(userRepository.users.size).toBe(1);
     expect(onPublishFailed).toHaveBeenCalledOnce();
     expect(onPublishFailed).toHaveBeenCalledWith(eventPublisher.failWith, {
-      userId: '0194f3a0-0000-7000-8000-000000000001',
+      userId: result.value.userId,
       correlationId: validInput.correlationId,
     });
   });
@@ -192,8 +190,6 @@ describe('publish after create', () => {
     const useCase = new RegisterUserUseCase({
       userRepository: new InMemoryUserRepository(),
       passwordHasher: new FakeHasher(),
-      idGenerator: new SequentialIds(),
-      clock: new FixedClock(),
       eventPublisher,
     });
 

@@ -10,13 +10,6 @@ import { createProcessUploadedVideoController } from './factories/controllers/pr
 import { createAmqp } from './factories/externals/amqp.js';
 import { createS3 } from './factories/externals/s3.js';
 import { createEventPublisher } from './factories/gateways/eventPublisher.js';
-import { createFrameExtractor } from './factories/gateways/frameExtractor.js';
-import { createObjectStorage } from './factories/gateways/objectStorage.js';
-import { createArchiveBuilder } from './factories/services/archiveBuilder.js';
-import { createClock } from './factories/services/clock.js';
-import { createIdGenerator } from './factories/services/idGenerator.js';
-import { createWorkDirectory } from './factories/services/workDirectory.js';
-import { createProcessUploadedVideo } from './factories/use-cases/processUploadedVideo.js';
 
 export const startWorker = async (): Promise<{ stop: () => Promise<void> }> => {
   const config = loadConfig();
@@ -43,9 +36,6 @@ export const startWorker = async (): Promise<{ stop: () => Promise<void> }> => {
     closers.push(() => connection.close());
     await connection.assertTopology(createProcessorTopology());
 
-    const clock = createClock();
-    const idGenerator = createIdGenerator();
-    const events = createEventPublisher({ connection, clock, idGenerator });
     const s3 = createS3({
       endpoint: config.s3Endpoint,
       region: config.s3Region,
@@ -53,34 +43,18 @@ export const startWorker = async (): Promise<{ stop: () => Promise<void> }> => {
       secretKey: config.s3SecretKey,
       forcePathStyle: config.s3ForcePathStyle,
     });
-    const storage = createObjectStorage(s3, config.s3Bucket);
 
-    const processUploadedVideoController = createProcessUploadedVideoController(
-      createProcessUploadedVideo({
-        storage,
-        extractor: createFrameExtractor(),
-        archive: createArchiveBuilder(),
-        workDirectory: createWorkDirectory(config.workDir),
-        events,
-        now: () => clock.now(),
-        processingTimeoutMs: config.processingTimeoutMs,
-        onDiscardOriginalFailed: (job, error) => {
-          logger.error('failed to discard original object after processing', {
-            videoId: job.videoId,
-            sourceKey: job.sourceKey,
-            errorCode: error instanceof Error ? error.message : 'unknown',
-          });
-          technicalMetrics.messagesHandledTotal.inc({
-            destination: UPLOADED_QUEUE,
-            outcome: 'delete_original_failed',
-          });
-        },
-      }),
-    );
+    const processUploadedVideoController = createProcessUploadedVideoController({
+      connection,
+      s3,
+      config,
+      logger,
+      technicalMetrics,
+    });
 
     const consumer = createVideoUploadedConsumer({
       controller: processUploadedVideoController,
-      events,
+      events: createEventPublisher(connection),
       retry,
       logger,
       metrics: jobMetrics,

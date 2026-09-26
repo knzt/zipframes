@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import { createPublisher } from '@zipframes/communication';
 import { authService } from '@zipframes/schemas';
 import { EVENT_EXCHANGE } from '@zipframes/schemas/shared';
@@ -46,11 +44,9 @@ describe('POST /register against Postgres and RabbitMQ', () => {
     rabbit = await startRabbitMq();
     const amqpConnection = await connectAmqp(rabbit.amqpUri);
     await amqpConnection.channel.assertExchange(EVENT_EXCHANGE, 'topic', { durable: true });
-    const eventPublisher = new AmqpEventPublisher({
-      publisher: createPublisher(createAmqpPublishPort(amqpConnection.channel)),
-      createId: () => randomUUID(),
-      now: () => new Date(),
-    });
+    const eventPublisher = new AmqpEventPublisher(
+      createPublisher(createAmqpPublishPort(amqpConnection.channel)),
+    );
     stopPublisher = async () => {
       await amqpConnection.close();
     };
