@@ -27,8 +27,6 @@ Cada serviço tem o próprio `package.json` e `pnpm-lock.yaml`. A raiz só insta
 | `@zipframes/authenticator` | só nos testes do auth           |
 | `@zipframes/test-toolkit`  | testes de integração            |
 
-`@zipframes/http` no auth-service está fixo em `0.2.0-pr41-20260926005304` (snapshot de [zipframes-packages#41](https://github.com/zipframes/zipframes-packages/pull/41), dist-tag `pr41`). Os demais `@zipframes/*` usam a release estável no GitHub Packages.
-
 ## Como os processos se relacionam
 
 O auth grava o usuário e publica `user.registered` no exchange `zipframes.events`. O worker não consome esse evento. Ele escuta a fila `processor.video.uploaded`, ligada a `video.uploaded`. Quem publicaria esse evento não está neste repositório.
