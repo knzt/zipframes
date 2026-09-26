@@ -54,11 +54,55 @@ describe('POST /login against Postgres', () => {
     expect(live.status).toBe(200);
     expect(await live.json()).toEqual({ status: 'ok' });
 
+    const ready = await fetch(`${app.baseUrl}/health/ready`);
+    expect(ready.status).toBe(200);
+    expect(await ready.json()).toEqual({ status: 'ready' });
+
+    const metrics = await fetch(`${app.baseUrl}/metrics`);
+    expect(metrics.status).toBe(200);
+    expect(metrics.headers.get('content-type')).toMatch(/text\/plain/);
+
     const rejected = await fetch(`${app.baseUrl}/login`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ email: payload.email, password: 'senha9999' }),
     });
     expect(rejected.status).toBe(401);
+  });
+});
+
+describe('POST /register when event publish fails', () => {
+  it('returns 201 and invokes onPublishFailed', async () => {
+    let publishedError: unknown;
+    let publishedDetails: { readonly userId: string; readonly correlationId: string } | undefined;
+    const app = await startIdentityApp({
+      eventPublisher: {
+        publish: () => Promise.reject(new Error('broker down')),
+      },
+      onPublishFailed: (error, details) => {
+        publishedError = error;
+        publishedDetails = details;
+      },
+    });
+
+    try {
+      const created = await fetch(`${app.baseUrl}/register`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-correlation-id': '44444444-4444-4444-8444-444444444444',
+        },
+        body: JSON.stringify(payload),
+      });
+      expect(created.status).toBe(201);
+      const body = (await created.json()) as { userId: string };
+      expect(publishedError).toBeInstanceOf(Error);
+      expect(publishedDetails).toEqual({
+        userId: body.userId,
+        correlationId: '44444444-4444-4444-8444-444444444444',
+      });
+    } finally {
+      await app.stop();
+    }
   });
 });
