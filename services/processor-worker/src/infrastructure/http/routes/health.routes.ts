@@ -1,10 +1,7 @@
-import Fastify from 'fastify';
 import type { FastifyInstance } from 'fastify';
 
 import type { Logger } from '@zipframes/logger';
 import type { ReadinessResult } from '@zipframes/core';
-
-import { registerOpenApi } from './openapi.js';
 
 const DEPENDENCY_UNAVAILABLE = 'dependency unavailable';
 const METRICS_FAILED = 'metrics unavailable';
@@ -117,26 +114,4 @@ export const registerHealthRoutes = (
       }
     },
   );
-};
-
-/** Fastify app for liveness, readiness, metrics and generated OpenAPI. Does not listen. */
-export const createHealthApp = async (deps: HealthRoutesDependencies): Promise<FastifyInstance> => {
-  const app = Fastify({ logger: false });
-  await registerOpenApi(app, {
-    title: 'ZipFrames processor-worker',
-    version: '0.0.0',
-    description: 'Saúde e métricas do worker. A especificação é gerada das schemas das rotas.',
-  });
-  registerHealthRoutes(app, deps);
-  return app;
-};
-
-/** Listens on `port` (0 picks a free port). */
-export const startHealthServer = async (
-  port: number,
-  deps: HealthRoutesDependencies,
-): Promise<FastifyInstance> => {
-  const app = await createHealthApp(deps);
-  await app.listen({ port, host: '0.0.0.0' });
-  return app;
 };

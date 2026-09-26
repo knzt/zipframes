@@ -1,55 +1,17 @@
-import type { FastifyInstance, FastifyReply } from 'fastify';
-import type { JWK } from 'jose';
+import type { FastifyInstance } from 'fastify';
 
 import type { HttpReply, HttpRequest } from '@zipframes/http';
-import { createCorrelationId, runWithCorrelationId } from '@zipframes/logger';
 import { authService } from '@zipframes/schemas';
 
+import { sendHttpReply, toHttpRequest } from '../fastifyAdapter.js';
 import { jsonSchemaOf } from '../openapi.js';
+import { problemDetailsSchema } from '../problemDetails.schema.js';
 
 export interface IdentityRoutesDependencies {
   readonly registerUserHandler: (request: HttpRequest) => Promise<HttpReply>;
   readonly loginHandler: (request: HttpRequest) => Promise<HttpReply>;
-  readonly jwks: readonly JWK[];
+  readonly jwksHandler: (request: HttpRequest) => Promise<HttpReply>;
 }
-
-const CORRELATION_HEADER = 'x-correlation-id';
-
-const problemDetailsJsonSchema = {
-  type: 'object',
-  required: ['type', 'title', 'status'],
-  properties: {
-    type: { type: 'string' },
-    title: { type: 'string' },
-    status: { type: 'integer' },
-    detail: { type: 'string' },
-    correlationId: { type: 'string' },
-  },
-};
-
-const problemDetailsSchema = (description: string): Record<string, unknown> => ({
-  description,
-  content: {
-    'application/problem+json': {
-      schema: problemDetailsJsonSchema,
-    },
-  },
-});
-
-const correlationIdOf = (headerValue: string | string[] | undefined): string => {
-  if (typeof headerValue === 'string' && headerValue.length > 0) {
-    return headerValue;
-  }
-  return createCorrelationId();
-};
-
-const sendHandlerResult = async (reply: FastifyReply, result: HttpReply): Promise<void> => {
-  const outgoing = reply.code(result.status);
-  if (result.contentType !== undefined) {
-    void outgoing.header('content-type', result.contentType);
-  }
-  await outgoing.send(result.body);
-};
 
 /**
  * Binds the identity HTTP surface. Status and body come from the handlers.
@@ -73,14 +35,7 @@ export const registerIdentityRoutes = (
       },
     },
     async (request, reply) => {
-      const correlationId = correlationIdOf(request.headers[CORRELATION_HEADER]);
-      await runWithCorrelationId(correlationId, async () => {
-        const result = await deps.registerUserHandler({
-          body: request.body,
-          correlationId,
-        });
-        await sendHandlerResult(reply, result);
-      });
+      await sendHttpReply(reply, await deps.registerUserHandler(toHttpRequest(request)));
     },
   );
 
@@ -98,14 +53,7 @@ export const registerIdentityRoutes = (
       },
     },
     async (request, reply) => {
-      const correlationId = correlationIdOf(request.headers[CORRELATION_HEADER]);
-      await runWithCorrelationId(correlationId, async () => {
-        const result = await deps.loginHandler({
-          body: request.body,
-          correlationId,
-        });
-        await sendHandlerResult(reply, result);
-      });
+      await sendHttpReply(reply, await deps.loginHandler(toHttpRequest(request)));
     },
   );
 
@@ -120,9 +68,8 @@ export const registerIdentityRoutes = (
         },
       },
     },
-    async (_request, reply) => {
-      const response = authService.jwksResponseSchema.parse({ keys: deps.jwks });
-      await reply.code(200).send(response);
+    async (request, reply) => {
+      await sendHttpReply(reply, await deps.jwksHandler(toHttpRequest(request)));
     },
   );
 };

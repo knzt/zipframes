@@ -11,6 +11,7 @@ export default defineConfig({
         'src/infrastructure/services/crypto/**',
         'src/infrastructure/gateways/**',
         'src/infrastructure/http/**',
+        'src/infrastructure/messaging/amqpPublisher.ts',
         'src/infrastructure/loadEnvConfig.ts',
       ],
       thresholds: {

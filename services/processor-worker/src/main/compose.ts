@@ -1,6 +1,6 @@
 import { createPublisher } from '@zipframes/communication';
+import type { RetryOptions } from '@zipframes/communication';
 import { createReadinessCheck } from '@zipframes/core';
-import type { Pingable } from '@zipframes/core';
 import { createLogger } from '@zipframes/logger';
 import { createMetrics } from '@zipframes/telemetry';
 import { randomUUID } from 'node:crypto';
@@ -13,11 +13,14 @@ import { createFfmpegFrameExtractor } from '../infrastructure/gateways/media/ffm
 import { createS3ObjectStorage } from '../infrastructure/gateways/storage/s3ObjectStorage.gateway.js';
 import { createFsWorkDirectory } from '../infrastructure/services/filesystem/fsWorkDirectory.service.js';
 import { createZipArchiveBuilder } from '../infrastructure/services/media/zipArchiveBuilder.service.js';
-import { startHealthServer } from '../infrastructure/http/health.routes.js';
-import { createRabbitMqConnection } from '../infrastructure/messaging/rabbitmqConnection.js';
+import {
+  createAmqpPing,
+  createRabbitMqConnection,
+} from '../infrastructure/messaging/rabbitmqConnection.js';
 import { createProcessorTopology, UPLOADED_QUEUE } from '../infrastructure/messaging/topology.js';
 import { createVideoUploadedConsumer } from '../infrastructure/messaging/videoUploadedConsumer.js';
 import { createJobMetrics } from '../infrastructure/observability/jobMetrics.js';
+import { createHealthApp } from './healthApp.js';
 
 export const startWorker = async (): Promise<{ stop: () => Promise<void> }> => {
   const config = loadConfig();
@@ -31,93 +34,91 @@ export const startWorker = async (): Promise<{ stop: () => Promise<void> }> => {
     version: config.serviceVersion,
   });
   const jobMetrics = createJobMetrics(technicalMetrics);
+  const retry: RetryOptions = {
+    maxAttempts: config.maxAttempts,
+    baseDelayMs: config.retryBaseDelayMs,
+    maxDelayMs: config.retryMaxDelayMs,
+  };
 
-  const connection = await createRabbitMqConnection(config.amqpUrl);
-  await connection.assertTopology(createProcessorTopology());
+  const closers: (() => Promise<void>)[] = [];
 
-  const createId = (): string => randomUUID();
-  const now = (): Date => new Date();
-  const publisher = createPublisher(connection);
-  const events = createAmqpEventPublisher({ publisher, createId, now });
+  try {
+    const connection = await createRabbitMqConnection(config.amqpUrl);
+    closers.push(() => connection.close());
+    await connection.assertTopology(createProcessorTopology());
 
-  const storage = createS3ObjectStorage({
-    endpoint: config.s3Endpoint,
-    region: config.s3Region,
-    accessKey: config.s3AccessKey,
-    secretKey: config.s3SecretKey,
-    bucket: config.s3Bucket,
-    forcePathStyle: config.s3ForcePathStyle,
-  });
+    const createId = (): string => randomUUID();
+    const now = (): Date => new Date();
+    const publisher = createPublisher(connection);
+    const events = createAmqpEventPublisher({ publisher, createId, now });
 
-  const processUploadedVideoController = new ProcessUploadedVideoController(
-    new ProcessUploadedVideoUseCase(
-      storage,
-      createFfmpegFrameExtractor(),
-      createZipArchiveBuilder(),
-      createFsWorkDirectory(config.workDir),
+    const storage = createS3ObjectStorage({
+      endpoint: config.s3Endpoint,
+      region: config.s3Region,
+      accessKey: config.s3AccessKey,
+      secretKey: config.s3SecretKey,
+      bucket: config.s3Bucket,
+      forcePathStyle: config.s3ForcePathStyle,
+    });
+
+    const processUploadedVideoController = new ProcessUploadedVideoController(
+      new ProcessUploadedVideoUseCase({
+        storage,
+        extractor: createFfmpegFrameExtractor(),
+        archive: createZipArchiveBuilder(),
+        workDirectory: createFsWorkDirectory(config.workDir),
+        events,
+        now,
+        processingTimeoutMs: config.processingTimeoutMs,
+        onDiscardOriginalFailed: (job, error) => {
+          logger.error('failed to discard original object after processing', {
+            videoId: job.videoId,
+            sourceKey: job.sourceKey,
+            errorCode: error instanceof Error ? error.message : 'unknown',
+          });
+          technicalMetrics.messagesHandledTotal.inc({
+            destination: UPLOADED_QUEUE,
+            outcome: 'delete_original_failed',
+          });
+        },
+      }),
+    );
+
+    const consumer = createVideoUploadedConsumer({
+      controller: processUploadedVideoController,
       events,
-      now,
-      config.processingTimeoutMs,
-      (job, error) => {
-        logger.error('failed to discard original object after processing', {
-          videoId: job.videoId,
-          sourceKey: job.sourceKey,
-          errorCode: error instanceof Error ? error.message : 'unknown',
-        });
-        technicalMetrics.messagesHandledTotal.inc({
-          destination: UPLOADED_QUEUE,
-          outcome: 'delete_original_failed',
-        });
+      retry,
+      logger,
+      metrics: jobMetrics,
+    });
+
+    await connection.consume(UPLOADED_QUEUE, consumer, { retry });
+
+    const isReady = createReadinessCheck([createAmqpPing(connection), storage]);
+    const healthServer = await createHealthApp({
+      isReady,
+      renderMetrics: () => technicalMetrics.registry.metrics(),
+      logger,
+    });
+    closers.push(() => healthServer.close());
+    await healthServer.listen({ port: config.healthPort, host: '0.0.0.0' });
+
+    logger.info('processor-worker started', {
+      queue: UPLOADED_QUEUE,
+      healthPort: config.healthPort,
+    });
+
+    return {
+      stop: async () => {
+        await healthServer.close().catch(() => undefined);
+        await connection.close();
+        logger.info('processor-worker stopped');
       },
-    ),
-  );
-
-  const consumer = createVideoUploadedConsumer({
-    controller: processUploadedVideoController,
-    events,
-    retry: {
-      maxAttempts: config.maxAttempts,
-      baseDelayMs: config.retryBaseDelayMs,
-      maxDelayMs: config.retryMaxDelayMs,
-    },
-    logger,
-    metrics: jobMetrics,
-  });
-
-  await connection.consume(UPLOADED_QUEUE, consumer, {
-    retry: {
-      maxAttempts: config.maxAttempts,
-      baseDelayMs: config.retryBaseDelayMs,
-      maxDelayMs: config.retryMaxDelayMs,
-    },
-  });
-
-  const amqpPing: Pingable = {
-    ping: () => {
-      if (!connection.isConnected()) {
-        return Promise.reject(new Error('amqp disconnected'));
-      }
-      return Promise.resolve();
-    },
-  };
-  const isReady = createReadinessCheck([amqpPing, storage]);
-
-  const healthServer = await startHealthServer(config.healthPort, {
-    isReady,
-    renderMetrics: () => technicalMetrics.registry.metrics(),
-    logger,
-  });
-
-  logger.info('processor-worker started', {
-    queue: UPLOADED_QUEUE,
-    healthPort: config.healthPort,
-  });
-
-  return {
-    stop: async () => {
-      await healthServer.close().catch(() => undefined);
-      await connection.close();
-      logger.info('processor-worker stopped');
-    },
-  };
+    };
+  } catch (error) {
+    for (const close of [...closers].reverse()) {
+      await close().catch(() => undefined);
+    }
+    throw error;
+  }
 };

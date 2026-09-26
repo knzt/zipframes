@@ -15,18 +15,20 @@ import type {
   RegisterUserUseCaseOutput,
 } from './registerUser.types.js';
 
+export interface RegisterUserUseCaseDeps {
+  readonly userRepository: UserRepository;
+  readonly passwordHasher: PasswordHasher;
+  readonly idGenerator: IdGenerator;
+  readonly clock: Clock;
+  readonly eventPublisher: EventPublisher;
+  readonly onPublishFailed?: (
+    error: unknown,
+    details: { readonly userId: string; readonly correlationId: string },
+  ) => void;
+}
+
 export class RegisterUserUseCase {
-  constructor(
-    private readonly userRepository: UserRepository,
-    private readonly passwordHasher: PasswordHasher,
-    private readonly idGenerator: IdGenerator,
-    private readonly clock: Clock,
-    private readonly eventPublisher: EventPublisher,
-    private readonly onPublishFailed?: (
-      error: unknown,
-      details: { readonly userId: string; readonly correlationId: string },
-    ) => void,
-  ) {}
+  constructor(private readonly deps: RegisterUserUseCaseDeps) {}
 
   async execute(
     input: RegisterUserUseCaseInput,
@@ -36,23 +38,25 @@ export class RegisterUserUseCase {
       return err(new ValidationError(password.error.code, password.error.message));
     }
 
-    const passwordHash = await this.passwordHasher.hash(password.value);
-    const now = this.clock.now();
-
-    const user = new User({
-      id: this.idGenerator.next(),
+    const user = User.create({
+      id: this.deps.idGenerator.next(),
       name: input.name,
       email: input.email,
-      passwordHash,
-      now,
+      now: this.deps.clock.now(),
     });
+    if (!user.ok) {
+      return err(user.error);
+    }
 
-    const existing = await this.userRepository.findByEmail(user.email);
+    const existing = await this.deps.userRepository.findByEmail(user.value.email);
     if (existing !== null) {
       return err(new ConflictError('EMAIL_TAKEN', 'email is already registered'));
     }
 
-    const created = await this.userRepository.create(user);
+    const passwordHash = await this.deps.passwordHasher.hash(password.value);
+    const created = await this.deps.userRepository.create(
+      user.value.withPasswordHash(passwordHash),
+    );
 
     await this.publishUserRegistered(input.correlationId, created);
 
@@ -65,13 +69,13 @@ export class RegisterUserUseCase {
 
   private async publishUserRegistered(correlationId: string, user: User): Promise<void> {
     try {
-      await this.eventPublisher.publish({
+      await this.deps.eventPublisher.publish({
         eventType: 'user.registered',
         correlationId,
         payload: userRegisteredFrom(user),
       });
     } catch (error) {
-      this.onPublishFailed?.(error, {
+      this.deps.onPublishFailed?.(error, {
         userId: user.id,
         correlationId,
       });

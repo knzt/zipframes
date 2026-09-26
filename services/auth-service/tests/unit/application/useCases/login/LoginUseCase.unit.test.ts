@@ -23,20 +23,20 @@ beforeEach(async () => {
   passwordHasher = new FakeHasher();
   eventPublisher = new InMemoryEventPublisher();
 
-  await new RegisterUserUseCase(
+  await new RegisterUserUseCase({
     userRepository,
     passwordHasher,
-    new SequentialIds(),
-    new FixedClock(),
+    idGenerator: new SequentialIds(),
+    clock: new FixedClock(),
     eventPublisher,
-  ).execute({
+  }).execute({
     name: 'Hellen Santos',
     email: 'hellen@example.com',
     password: 'senha1234',
     correlationId: '0194f3a0-0000-7000-8000-000000000099',
   });
 
-  login = new LoginUseCase(userRepository, passwordHasher, tokenIssuer);
+  login = new LoginUseCase({ userRepository, passwordHasher, tokenIssuer });
   passwordHasher.verifiedAgainst.length = 0;
 });
 

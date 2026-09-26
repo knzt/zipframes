@@ -1,29 +1,24 @@
 import { execFile } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import { promisify } from 'node:util';
 
-import { PrismaClient } from '@prisma/client';
 import { startPostgres } from '@zipframes/test-toolkit';
 import type { PostgresHandle } from '@zipframes/test-toolkit';
 import { exportPKCS8, generateKeyPair } from 'jose';
 import type { JWK } from 'jose';
+import type { PrismaClient } from '@prisma/client';
 
-import { LoginController } from '../../src/application/controllers/LoginController.js';
-import { RegisterUserController } from '../../src/application/controllers/RegisterUserController.js';
 import type { EventPublisher } from '../../src/application/interfaces/gateways/EventPublisher.js';
-import { LoginUseCase } from '../../src/application/useCases/login/LoginUseCase.js';
-import { RegisterUserUseCase } from '../../src/application/useCases/registerUser/RegisterUserUseCase.js';
-import { createLoginHandler } from '../../src/infrastructure/http/handlers/loginHandler.js';
-import { createRegisterUserHandler } from '../../src/infrastructure/http/handlers/registerUserHandler.js';
-import { createHttpServer } from '../../src/infrastructure/http/server.js';
-import { silentLogger } from './silent-logger.js';
-import { registerIdentityRoutes } from '../../src/infrastructure/http/routes/identity.routes.js';
+import { createPrismaClient } from '../../src/infrastructure/repositories/prisma/client.js';
 import { PrismaUserRepository } from '../../src/infrastructure/repositories/prisma/user.repository.js';
 import { BcryptPasswordHasher } from '../../src/infrastructure/services/crypto/bcryptPasswordHasher.js';
 import { deriveRsaKeyMaterial } from '../../src/infrastructure/services/crypto/rsaKeys.js';
 import { Rs256TokenIssuer } from '../../src/infrastructure/services/crypto/rs256TokenIssuer.js';
+import { SystemClock } from '../../src/infrastructure/services/systemClock.js';
+import { UuidIdGenerator } from '../../src/infrastructure/services/uuidIdGenerator.js';
+import { buildIdentityApp } from '../../src/main/identityApp.js';
+import { silentLogger } from './silent-logger.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -39,6 +34,10 @@ export interface IdentityApp {
 
 export interface IdentityAppOptions {
   readonly eventPublisher?: EventPublisher;
+  readonly onPublishFailed?: (
+    error: unknown,
+    details: { readonly userId: string; readonly correlationId: string },
+  ) => void;
 }
 
 export const startIdentityApp = async (options?: IdentityAppOptions): Promise<IdentityApp> => {
@@ -49,36 +48,36 @@ export const startIdentityApp = async (options?: IdentityAppOptions): Promise<Id
     env: { ...process.env, AUTH_DATABASE_URL: postgres.connectionUri },
   });
 
-  const prisma = new PrismaClient({ datasources: { db: { url: postgres.connectionUri } } });
+  const prisma = createPrismaClient(postgres.connectionUri);
   const { privateKey } = await generateKeyPair('RS256');
   const keys = await deriveRsaKeyMaterial(await exportPKCS8(privateKey), 'key-1');
-  const userRepository = new PrismaUserRepository(prisma);
-  const passwordHasher = new BcryptPasswordHasher();
   const eventPublisher: EventPublisher = options?.eventPublisher ?? {
     publish: () => Promise.resolve(),
   };
-  const registerUserController = new RegisterUserController(
-    new RegisterUserUseCase(
-      userRepository,
-      passwordHasher,
-      { next: () => randomUUID() },
-      { now: () => new Date() },
-      eventPublisher,
-    ),
-  );
-  const loginController = new LoginController(
-    new LoginUseCase(
-      userRepository,
-      passwordHasher,
-      new Rs256TokenIssuer({ keys, issuer: ISSUER, audience: AUDIENCE }),
-    ),
-  );
+  const logger = silentLogger();
+  const onPublishFailed =
+    options?.onPublishFailed ??
+    ((error, details) => {
+      logger.error('failed to publish user.registered', {
+        err: error,
+        userId: details.userId,
+        correlationId: details.correlationId,
+      });
+    });
 
-  const app = await createHttpServer({ corsOrigin: '*', logger: silentLogger() });
-  registerIdentityRoutes(app, {
-    registerUserHandler: createRegisterUserHandler(registerUserController),
-    loginHandler: createLoginHandler(loginController),
+  const app = await buildIdentityApp({
+    userRepository: new PrismaUserRepository(prisma),
+    passwordHasher: new BcryptPasswordHasher(),
+    tokenIssuer: new Rs256TokenIssuer({ keys, issuer: ISSUER, audience: AUDIENCE }),
+    eventPublisher,
+    clock: new SystemClock(),
+    idGenerator: new UuidIdGenerator(),
     jwks: [keys.publicJwk],
+    isReady: () => Promise.resolve({ ready: true }),
+    renderMetrics: () => Promise.resolve(''),
+    logger,
+    corsOrigin: '*',
+    onPublishFailed,
   });
   await app.listen({ port: 0, host: '127.0.0.1' });
   const address = app.server.address() as AddressInfo;

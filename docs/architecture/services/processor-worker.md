@@ -22,7 +22,7 @@ infrastructure  →  application  →  domain
 | --------------------- | --------------------------------- | --------------------------------------------------------------------------------------- |
 | `src/domain/`         | Entidades                         | Value objects, policies e erros de domínio (`ValidationError` do core quando aplicável) |
 | `src/application/`    | Casos de uso e interface adapters | `ProcessUploadedVideoUseCase`, controller da mensagem, tipos e interfaces               |
-| `src/infrastructure/` | Implementação e frameworks        | Consumer AMQP, S3/ffmpeg, zip/fs, health HTTP no Fastify                                |
+| `src/infrastructure/` | Implementação e frameworks        | Consumer AMQP, S3/ffmpeg, zip/fs, rotas de saúde no Fastify                             |
 | `src/main/`           | Composition root                  | Wiring na inicialização                                                                 |
 
 ### Gateway e service
@@ -46,12 +46,12 @@ processor-worker/src/
 │   ├── controllers/ProcessUploadedVideoController.ts
 │   ├── useCases/processUploadedVideo/
 │   │   ├── ProcessUploadedVideoUseCase.ts
-│   │   └── processUploadedVideo.types.ts
+│   │   └── processUploadedVideo.types.ts  ← reexporta `ProcessingJob` / `ProcessingResult` do domínio
 │   └── interfaces/
 │       ├── gateways/{ObjectStorage,EventPublisher,FrameExtractor}.ts
 │       └── services/{ArchiveBuilder,WorkDirectory}.ts
 ├── infrastructure/
-│   ├── http/health.routes.ts
+│   ├── http/{openapi.ts, routes/health.routes.ts}
 │   ├── gateways/
 │   │   ├── storage/s3ObjectStorage.gateway.ts
 │   │   ├── media/ffmpegFrameExtractor.gateway.ts
@@ -62,7 +62,7 @@ processor-worker/src/
 │   ├── messaging/{rabbitmqConnection,topology,videoUploadedConsumer}.ts
 │   ├── observability/jobMetrics.ts
 │   └── loadEnvConfig.ts
-└── main/{compose.ts,index.ts}
+└── main/{compose.ts,healthApp.ts,index.ts}
 ```
 
 ## Casos de uso
@@ -77,7 +77,7 @@ Falhas usam `throw` com `retryable` (alinhado a `InfrastructureError` em `@zipfr
 
 Payloads de eventos de saída tipados com `@zipframes/schemas/processor-worker`.
 
-## Topologia AMQP (retry real)
+O exchange de eventos é `EVENT_EXCHANGE` de `@zipframes/schemas/shared`; `topology.ts` reexporta o nome.
 
 ```mermaid
 flowchart LR
@@ -113,11 +113,11 @@ flowchart LR
 
 - Logs estruturados com `correlationId` via ALS.
 - Métricas Prometheus via `@zipframes/telemetry`.
-- HTTP no Fastify, na porta `HEALTH_PORT` (padrão 8081): `GET /health/live`, `GET /health/ready` (AMQP + storage), `GET /metrics`, `GET /docs` e `GET /docs/json`. O contrato está em [http.md](../http.md).
+- HTTP no Fastify, na porta `HEALTH_PORT` (padrão 8081): `GET /health/live`, `GET /health/ready` (AMQP + storage), `GET /metrics`, `GET /docs` e `GET /docs/json`. `createHealthApp` mora em `main/`; `registerHealthRoutes` só registra as rotas. O contrato está em [http.md](../http.md).
 
 ## Processo
 
-Um processo consome `processor.video.uploaded` com prefetch 1. `SIGINT`/`SIGTERM` cancelam o consume, drenam o job em andamento e fecham o canal.
+Um processo consome `processor.video.uploaded` com prefetch 1. `SIGINT`/`SIGTERM` cancelam o consume, drenam o job em andamento e fecham o canal. O `index.ts` usa o mesmo guard `stopping` do auth-service: dois SIGTERMs não fecham o canal duas vezes. `runService()` em `@zipframes/core` é candidato a extrair esse laço quando aparecer o terceiro serviço.
 
 Réplicas: KEDA pelo tamanho da fila. No cluster, Argo CD aplica [`infra/k8s/processor-worker`](../../../infra/k8s/processor-worker). Na máquina, Docker Compose na rede `zipframes`.
 

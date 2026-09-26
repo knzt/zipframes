@@ -26,6 +26,7 @@ export class ProcessUploadedVideoController {
       ownerId: event.payload.ownerId,
       sourceKey: event.payload.sourceKey,
       originalFileName: event.payload.originalFileName,
+      sizeBytes: event.payload.sizeBytes,
       attempt,
       correlationId: event.correlationId,
     });

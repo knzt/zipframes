@@ -4,10 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { createReadinessCheck } from '@zipframes/core';
 import type { Pingable, ReadinessResult } from '@zipframes/core';
 
-import {
-  createHealthApp,
-  startHealthServer,
-} from '../../../../src/infrastructure/http/health.routes.js';
+import { createHealthApp } from '../../../../src/main/healthApp.js';
 
 const readyChecks = (checks: readonly Pingable[]): (() => Promise<ReadinessResult>) =>
   createReadinessCheck(checks);
@@ -47,15 +44,16 @@ describe('health and metrics HTTP', () => {
   });
 
   it('listens on the health port', async () => {
-    const app = await startHealthServer(0, {
+    const app = await createHealthApp({
       isReady: readyChecks([{ ping: async () => undefined }]),
       renderMetrics: async () => '',
     });
+    await app.listen({ port: 0, host: '127.0.0.1' });
 
     try {
-      const response = await fetch(`http://127.0.0.1:${String(listeningPort(app))}/health/live`);
-      expect(response.status).toBe(200);
-      expect(await response.json()).toEqual({ status: 'ok' });
+      const live = await fetch(`http://127.0.0.1:${String(listeningPort(app))}/health/live`);
+      expect(live.status).toBe(200);
+      expect(await live.json()).toEqual({ status: 'ok' });
     } finally {
       await app.close();
     }

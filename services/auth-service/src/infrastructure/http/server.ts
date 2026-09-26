@@ -3,10 +3,16 @@ import Fastify from 'fastify';
 import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import { InternalServerError, isBaseError, problemResponse } from '@zipframes/core';
-import { createCorrelationId } from '@zipframes/logger';
+import { createCorrelationId, runWithCorrelationId } from '@zipframes/logger';
 import type { Logger } from '@zipframes/logger';
 
 import { registerOpenApi } from './openapi.js';
+
+declare module 'fastify' {
+  interface FastifyRequest {
+    correlationId: string;
+  }
+}
 
 export interface HttpServerOptions {
   readonly corsOrigin: string;
@@ -48,8 +54,17 @@ export const createHttpServer = async (options: HttpServerOptions): Promise<Fast
       'Cadastro, autenticação e emissão de tokens. A especificação é gerada das schemas das rotas.',
   });
 
-  app.setErrorHandler((error: FastifyError, request, reply) => {
+  app.decorateRequest('correlationId', '');
+  app.addHook('onRequest', (request, _reply, done) => {
     const correlationId = correlationIdOf(request);
+    request.correlationId = correlationId;
+    runWithCorrelationId(correlationId, () => {
+      done();
+    });
+  });
+
+  app.setErrorHandler((error: FastifyError, request, reply) => {
+    const correlationId = request.correlationId;
 
     if (isBaseError(error)) {
       if (error.statusCode >= 500) {
@@ -88,7 +103,7 @@ export const createHttpServer = async (options: HttpServerOptions): Promise<Fast
   });
 
   app.setNotFoundHandler((request, reply) => {
-    const correlationId = correlationIdOf(request);
+    const correlationId = request.correlationId;
     return sendProblem(reply, problemResponse(404, 'Not found', undefined, correlationId));
   });
 

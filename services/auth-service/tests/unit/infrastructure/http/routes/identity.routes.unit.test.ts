@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { HttpReply, HttpRequest } from '@zipframes/http';
 import type { Logger } from '@zipframes/logger';
 
+import { createJwksHandler } from '../../../../../src/infrastructure/http/handlers/jwksHandler.js';
 import { registerHealthRoutes } from '../../../../../src/infrastructure/http/routes/health.routes.js';
 import { registerIdentityRoutes } from '../../../../../src/infrastructure/http/routes/identity.routes.js';
 import { createHttpServer } from '../../../../../src/infrastructure/http/server.js';
@@ -14,6 +15,7 @@ type IdentityHandler = (request: HttpRequest) => Promise<HttpReply>;
 const buildApp = async (overrides?: {
   registerUserHandler?: IdentityHandler;
   loginHandler?: IdentityHandler;
+  jwksHandler?: IdentityHandler;
   isReady?: () => Promise<{ ready: boolean; reason?: string }>;
   renderMetrics?: () => Promise<string>;
   logger?: Logger;
@@ -24,7 +26,9 @@ const buildApp = async (overrides?: {
     registerUserHandler:
       overrides?.registerUserHandler ?? (async () => ({ status: 201, body: {} })),
     loginHandler: overrides?.loginHandler ?? (async () => ({ status: 200, body: {} })),
-    jwks: [{ kty: 'RSA', kid: 'k1', alg: 'RS256', use: 'sig', n: 'abc', e: 'AQAB' }],
+    jwksHandler:
+      overrides?.jwksHandler ??
+      createJwksHandler([{ kty: 'RSA', kid: 'k1', alg: 'RS256', use: 'sig', n: 'abc', e: 'AQAB' }]),
   });
   registerHealthRoutes(app, {
     isReady: overrides?.isReady ?? (async () => ({ ready: true })),
@@ -258,6 +262,28 @@ describe('health and metrics', () => {
     expect(response.statusCode).toBe(200);
     expect(response.headers['content-type']).toContain('text/plain');
     expect(response.body).toContain('nodejs_version_info');
+  });
+
+  it('answers 500 plain text when metrics rendering fails', async () => {
+    const logger = {
+      warn: vi.fn(),
+      error: vi.fn(),
+    } as unknown as Logger;
+    const failure = new Error('registry closed');
+    const app = await buildApp({
+      logger,
+      renderMetrics: async () => {
+        throw failure;
+      },
+    });
+
+    const response = await app.inject({ method: 'GET', url: '/metrics' });
+
+    expect(response.statusCode).toBe(500);
+    expect(response.headers['content-type']).toContain('text/plain');
+    expect(response.body).toBe('metrics unavailable');
+    expect(logger.error).toHaveBeenCalledWith('metrics render failed', { err: failure });
+    await app.close();
   });
 });
 

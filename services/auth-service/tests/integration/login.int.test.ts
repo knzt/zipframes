@@ -50,6 +50,10 @@ describe('POST /login against Postgres', () => {
     });
     expect(verified.payload.sub).toBe(registered.userId);
 
+    const live = await fetch(`${app.baseUrl}/health/live`);
+    expect(live.status).toBe(200);
+    expect(await live.json()).toEqual({ status: 'ok' });
+
     const rejected = await fetch(`${app.baseUrl}/login`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },

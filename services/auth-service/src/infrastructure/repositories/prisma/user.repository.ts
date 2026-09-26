@@ -7,7 +7,7 @@ export class PrismaUserRepository implements UserRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
   async findByEmail(email: string): Promise<User | null> {
-    const user = await this.prisma.user.findFirst({ where: { email } });
+    const user = await this.prisma.user.findUnique({ where: { email } });
     return user === null ? null : User.fromPersistence(user);
   }
 

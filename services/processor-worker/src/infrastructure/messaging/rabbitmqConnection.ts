@@ -6,10 +6,13 @@ import type {
   Topology,
 } from '@zipframes/communication';
 import type { RetryOptions } from '@zipframes/communication';
+import type { Pingable } from '@zipframes/core';
 import type { EventEnvelope } from '@zipframes/schemas/shared';
 import amqp, { type Channel, type ChannelModel, type ConsumeMessage } from 'amqplib';
 
 import { ATTEMPT_HEADER, planAmqpSettle } from './amqpSettle.js';
+
+export type AmqpConnect = (url: string) => Promise<ChannelModel>;
 
 export interface RabbitMqConnection {
   readonly publish: (envelope: EventEnvelope<unknown>, options: PublishOptions) => Promise<void>;
@@ -22,6 +25,15 @@ export interface RabbitMqConnection {
   readonly close: () => Promise<void>;
   readonly isConnected: () => boolean;
 }
+
+export const createAmqpPing = (connection: Pick<RabbitMqConnection, 'isConnected'>): Pingable => ({
+  ping: () => {
+    if (!connection.isConnected()) {
+      return Promise.reject(new Error('amqp disconnected'));
+    }
+    return Promise.resolve();
+  },
+});
 
 const headersFromAmqp = (message: ConsumeMessage): MessageHeaders => {
   const raw = message.properties.headers ?? {};
@@ -42,8 +54,11 @@ const readAttempt = (message: ConsumeMessage): number => {
   return Number.isFinite(parsed) && parsed >= 1 ? parsed : 1;
 };
 
-export const createRabbitMqConnection = async (amqpUrl: string): Promise<RabbitMqConnection> => {
-  const connection: ChannelModel = await amqp.connect(amqpUrl);
+export const createRabbitMqConnection = async (
+  amqpUrl: string,
+  connect: AmqpConnect = (url) => amqp.connect(url),
+): Promise<RabbitMqConnection> => {
+  const connection: ChannelModel = await connect(amqpUrl);
   const channel: Channel = await connection.createChannel();
   await channel.prefetch(1);
 

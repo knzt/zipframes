@@ -4,6 +4,7 @@ import type { Logger } from '@zipframes/logger';
 import type { ReadinessResult } from '@zipframes/core';
 
 const DEPENDENCY_UNAVAILABLE = 'dependency unavailable';
+const METRICS_FAILED = 'metrics unavailable';
 
 export interface HealthRoutesDependencies {
   readonly isReady: () => Promise<ReadinessResult>;
@@ -96,12 +97,21 @@ export const registerHealthRoutes = (
         summary: 'Métricas Prometheus',
         response: {
           200: { description: 'Texto Prometheus 0.0.4', type: 'string' },
+          500: { description: 'Falha ao renderizar as métricas', type: 'string' },
         },
       },
     },
     async (_request, reply) => {
-      const body = await deps.renderMetrics();
-      await reply.code(200).header('content-type', 'text/plain; version=0.0.4').send(body);
+      try {
+        const body = await deps.renderMetrics();
+        await reply.code(200).header('content-type', 'text/plain; version=0.0.4').send(body);
+      } catch (error) {
+        deps.logger?.error('metrics render failed', { err: error });
+        await reply
+          .code(500)
+          .header('content-type', 'text/plain; version=0.0.4')
+          .send(METRICS_FAILED);
+      }
     },
   );
 };

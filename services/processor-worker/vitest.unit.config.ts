@@ -12,9 +12,6 @@ export default defineConfig({
         'src/application/**/*.types.ts',
         'src/domain/index.ts',
         'src/domain/valueObjects/**',
-        'src/infrastructure/gateways/storage/**',
-        'src/infrastructure/messaging/rabbitmqConnection.ts',
-        'src/infrastructure/services/**',
       ],
       thresholds: {
         statements: 80,

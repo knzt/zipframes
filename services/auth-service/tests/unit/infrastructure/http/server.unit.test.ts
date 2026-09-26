@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { InternalServerError, ValidationError } from '@zipframes/core';
+import { getCorrelationId } from '@zipframes/logger';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { Logger } from '@zipframes/logger';
@@ -188,6 +189,26 @@ describe('Fastify client errors as problem details', () => {
     });
     expect(response.body).not.toContain('Unexpected');
     expect(response.json()).not.toHaveProperty('message');
+    await app.close();
+  });
+
+  it('runs the request under the correlation id from the header', async () => {
+    const { app } = await buildApp();
+    let seen: string | undefined;
+    app.get('/corr', async (request) => {
+      seen = getCorrelationId();
+      return { correlationId: request.correlationId };
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/corr',
+      headers: { 'x-correlation-id': 'corr-als' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ correlationId: 'corr-als' });
+    expect(seen).toBe('corr-als');
     await app.close();
   });
 });

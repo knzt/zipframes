@@ -1,8 +1,10 @@
 import type { Topology } from '@zipframes/communication';
+import { EVENT_EXCHANGE } from '@zipframes/schemas/shared';
+
+export { EVENT_EXCHANGE };
 
 export const UPLOADED_QUEUE = 'processor.video.uploaded';
 export const UPLOADED_RETRY_QUEUE = 'processor.video.uploaded.wait';
-export const EVENT_EXCHANGE = 'zipframes.events';
 export const DLX_EXCHANGE = 'zipframes.events.dlx';
 export const DLQ_QUEUE = 'zipframes.events.dlq';
 

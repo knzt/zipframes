@@ -42,8 +42,10 @@ export class InMemoryEventPublisher implements EventPublisher {
 
 export class FakeHasher implements PasswordHasher {
   readonly verifiedAgainst: PasswordHash[] = [];
+  hashCalls = 0;
 
   hash(password: string): Promise<PasswordHash> {
+    this.hashCalls += 1;
     return Promise.resolve(`hashed:${password}` as PasswordHash);
   }
 

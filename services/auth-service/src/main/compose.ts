@@ -1,30 +1,24 @@
-import { randomUUID } from 'node:crypto';
-
 import { createPublisher } from '@zipframes/communication';
 import { createReadinessCheck } from '@zipframes/core';
-import type { Pingable } from '@zipframes/core';
 import { createLogger } from '@zipframes/logger';
-import { EVENT_EXCHANGE } from '@zipframes/schemas/shared';
 import { createMetrics } from '@zipframes/telemetry';
 
-import { LoginController } from '../application/controllers/LoginController.js';
-import { RegisterUserController } from '../application/controllers/RegisterUserController.js';
-import { LoginUseCase } from '../application/useCases/login/LoginUseCase.js';
-import { RegisterUserUseCase } from '../application/useCases/registerUser/RegisterUserUseCase.js';
-import { loadConfig } from '../infrastructure/loadEnvConfig.js';
 import { createAmqpEventPublisher } from '../infrastructure/gateways/amqpEventPublisher.gateway.js';
-import { createLoginHandler } from '../infrastructure/http/handlers/loginHandler.js';
-import { createRegisterUserHandler } from '../infrastructure/http/handlers/registerUserHandler.js';
-import { createHttpServer } from '../infrastructure/http/server.js';
-import { registerHealthRoutes } from '../infrastructure/http/routes/health.routes.js';
-import { registerIdentityRoutes } from '../infrastructure/http/routes/identity.routes.js';
-import { connectAmqp } from '../infrastructure/messaging/amqpConnection.js';
+import { loadConfig } from '../infrastructure/loadEnvConfig.js';
+import { connectAmqp, createAmqpPing } from '../infrastructure/messaging/amqpConnection.js';
 import { createAmqpPublishPort } from '../infrastructure/messaging/amqpPublisher.js';
-import { createPrismaClient, pingDatabase } from '../infrastructure/repositories/prisma/client.js';
+import { assertTopology } from '../infrastructure/messaging/topology.js';
+import {
+  createPrismaClient,
+  createPrismaPing,
+} from '../infrastructure/repositories/prisma/client.js';
 import { PrismaUserRepository } from '../infrastructure/repositories/prisma/user.repository.js';
 import { BcryptPasswordHasher } from '../infrastructure/services/crypto/bcryptPasswordHasher.js';
 import { deriveRsaKeyMaterial } from '../infrastructure/services/crypto/rsaKeys.js';
 import { Rs256TokenIssuer } from '../infrastructure/services/crypto/rs256TokenIssuer.js';
+import { SystemClock } from '../infrastructure/services/systemClock.js';
+import { UuidIdGenerator } from '../infrastructure/services/uuidIdGenerator.js';
+import { buildIdentityApp } from './identityApp.js';
 
 export const startAuthService = async (): Promise<{ stop: () => Promise<void> }> => {
   const config = loadConfig();
@@ -38,85 +32,69 @@ export const startAuthService = async (): Promise<{ stop: () => Promise<void> }>
     version: config.serviceVersion,
   });
 
-  const prisma = createPrismaClient();
-  const keys = await deriveRsaKeyMaterial(config.jwtPrivateKeyPem, config.jwtKid);
-  const amqp = await connectAmqp(config.amqpUrl);
-  await amqp.channel.assertExchange(EVENT_EXCHANGE, 'topic', { durable: true });
+  const closers: (() => Promise<void>)[] = [];
 
-  const createId = (): string => randomUUID();
-  const now = (): Date => new Date();
-  const publisher = createPublisher(createAmqpPublishPort(amqp.channel));
-  const eventPublisher = createAmqpEventPublisher({ publisher, createId, now });
+  try {
+    const prisma = createPrismaClient(config.databaseUrl);
+    closers.push(() => prisma.$disconnect());
 
-  const userRepository = new PrismaUserRepository(prisma);
-  const passwordHasher = new BcryptPasswordHasher();
-  const tokenIssuer = new Rs256TokenIssuer({
-    keys,
-    issuer: config.jwtIssuer,
-    audience: config.jwtAudience,
-  });
+    const keys = await deriveRsaKeyMaterial(config.jwtPrivateKeyPem, config.jwtKid);
 
-  const registerUserController = new RegisterUserController(
-    new RegisterUserUseCase(
-      userRepository,
-      passwordHasher,
-      { next: createId },
-      { now },
+    const amqp = await connectAmqp(config.amqpUrl);
+    closers.push(() => amqp.close());
+    await assertTopology(amqp.channel);
+
+    const clock = new SystemClock();
+    const idGenerator = new UuidIdGenerator();
+    const publisher = createPublisher(createAmqpPublishPort(amqp.channel));
+    const eventPublisher = createAmqpEventPublisher({
+      publisher,
+      createId: () => idGenerator.next(),
+      now: () => clock.now(),
+    });
+
+    const app = await buildIdentityApp({
+      userRepository: new PrismaUserRepository(prisma),
+      passwordHasher: new BcryptPasswordHasher(),
+      tokenIssuer: new Rs256TokenIssuer({
+        keys,
+        issuer: config.jwtIssuer,
+        audience: config.jwtAudience,
+      }),
       eventPublisher,
-      (error, details) => {
+      clock,
+      idGenerator,
+      jwks: [keys.publicJwk],
+      isReady: createReadinessCheck([createPrismaPing(prisma), createAmqpPing(amqp)]),
+      renderMetrics: () => technicalMetrics.registry.metrics(),
+      logger,
+      corsOrigin: config.corsOrigin,
+      onPublishFailed: (error, details) => {
         logger.error('failed to publish user.registered', {
           err: error,
           userId: details.userId,
           correlationId: details.correlationId,
         });
       },
-    ),
-  );
-  const loginController = new LoginController(
-    new LoginUseCase(userRepository, passwordHasher, tokenIssuer),
-  );
+    });
+    closers.push(() => app.close());
 
-  const prismaPing: Pingable = {
-    ping: () => pingDatabase(prisma),
-  };
-  const amqpPing: Pingable = {
-    ping: () => {
-      if (!amqp.isConnected()) {
-        return Promise.reject(new Error('amqp disconnected'));
-      }
-      return Promise.resolve();
-    },
-  };
-  const isReady = createReadinessCheck([prismaPing, amqpPing]);
-
-  const app = await createHttpServer({ corsOrigin: config.corsOrigin, logger });
-  registerIdentityRoutes(app, {
-    registerUserHandler: createRegisterUserHandler(registerUserController),
-    loginHandler: createLoginHandler(loginController),
-    jwks: [keys.publicJwk],
-  });
-  registerHealthRoutes(app, {
-    isReady,
-    renderMetrics: () => technicalMetrics.registry.metrics(),
-    logger,
-  });
-
-  try {
     await app.listen({ port: config.port, host: '0.0.0.0' });
+
+    logger.info('auth-service listening', { port: config.port });
+
+    return {
+      stop: async () => {
+        await app.close();
+        await amqp.close();
+        await prisma.$disconnect();
+        logger.info('auth-service stopped');
+      },
+    };
   } catch (error) {
-    await amqp.close();
-    await prisma.$disconnect();
+    for (const close of [...closers].reverse()) {
+      await close().catch(() => undefined);
+    }
     throw error;
   }
-
-  logger.info('auth-service listening', { port: config.port });
-
-  return {
-    stop: async () => {
-      await app.close();
-      await amqp.close();
-      await prisma.$disconnect();
-      logger.info('auth-service stopped');
-    },
-  };
 };

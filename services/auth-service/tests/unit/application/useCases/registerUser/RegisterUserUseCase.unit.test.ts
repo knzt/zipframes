@@ -11,21 +11,23 @@ import {
 
 let userRepository: InMemoryUserRepository;
 let eventPublisher: InMemoryEventPublisher;
+let passwordHasher: FakeHasher;
 let registerUser: RegisterUserUseCase;
 let onPublishFailed: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   userRepository = new InMemoryUserRepository();
   eventPublisher = new InMemoryEventPublisher();
+  passwordHasher = new FakeHasher();
   onPublishFailed = vi.fn();
-  registerUser = new RegisterUserUseCase(
+  registerUser = new RegisterUserUseCase({
     userRepository,
-    new FakeHasher(),
-    new SequentialIds(),
-    new FixedClock(),
+    passwordHasher,
+    idGenerator: new SequentialIds(),
+    clock: new FixedClock(),
     eventPublisher,
     onPublishFailed,
-  );
+  });
 });
 
 const validInput = {
@@ -88,6 +90,7 @@ describe('invalid input', () => {
     expect(result).toMatchObject({ ok: false, error: { code: 'TOO_SHORT' } });
     expect(userRepository.users.size).toBe(0);
     expect(eventPublisher.published).toHaveLength(0);
+    expect(passwordHasher.hashCalls).toBe(0);
   });
 
   it('checks the password before hashing anything else', async () => {
@@ -95,18 +98,36 @@ describe('invalid input', () => {
 
     expect(result.ok).toBe(false);
     expect(eventPublisher.published).toHaveLength(0);
+    expect(passwordHasher.hashCalls).toBe(0);
+  });
+
+  it('rejects an invalid name without hashing', async () => {
+    const result = await registerUser.execute({ ...validInput, name: 'H' });
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'INVALID_NAME' } });
+    expect(passwordHasher.hashCalls).toBe(0);
+    expect(userRepository.users.size).toBe(0);
+  });
+
+  it('rejects an invalid email without hashing', async () => {
+    const result = await registerUser.execute({ ...validInput, email: 'not-an-email' });
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'INVALID_EMAIL' } });
+    expect(passwordHasher.hashCalls).toBe(0);
   });
 });
 
 describe('duplicate email', () => {
   it('reports EMAIL_TAKEN when the address is already registered', async () => {
     await registerUser.execute(validInput);
+    expect(passwordHasher.hashCalls).toBe(1);
 
     const result = await registerUser.execute({ ...validInput, name: 'Outra Pessoa' });
 
     expect(result).toMatchObject({ ok: false, error: { code: 'EMAIL_TAKEN' } });
     expect(userRepository.users.size).toBe(1);
     expect(eventPublisher.published).toHaveLength(1);
+    expect(passwordHasher.hashCalls).toBe(1);
   });
 
   it('treats addresses differing only by case as the same', async () => {
@@ -115,6 +136,7 @@ describe('duplicate email', () => {
     const result = await registerUser.execute({ ...validInput, email: 'HELLEN@EXAMPLE.COM' });
 
     expect(result).toMatchObject({ ok: false, error: { code: 'EMAIL_TAKEN' } });
+    expect(passwordHasher.hashCalls).toBe(1);
   });
 });
 
@@ -126,13 +148,13 @@ describe('repository create failure', () => {
         throw new Error('unique constraint');
       },
     };
-    const useCase = new RegisterUserUseCase(
-      raceRepository,
-      new FakeHasher(),
-      new SequentialIds(),
-      new FixedClock(),
+    const useCase = new RegisterUserUseCase({
+      userRepository: raceRepository,
+      passwordHasher: new FakeHasher(),
+      idGenerator: new SequentialIds(),
+      clock: new FixedClock(),
       eventPublisher,
-    );
+    });
 
     await expect(useCase.execute(validInput)).rejects.toThrow('unique constraint');
     expect(eventPublisher.published).toHaveLength(0);
@@ -167,13 +189,13 @@ describe('publish after create', () => {
   it('still succeeds when publish fails and no failure handler is provided', async () => {
     const eventPublisher = new InMemoryEventPublisher();
     eventPublisher.failWith = new Error('broker down');
-    const useCase = new RegisterUserUseCase(
-      new InMemoryUserRepository(),
-      new FakeHasher(),
-      new SequentialIds(),
-      new FixedClock(),
+    const useCase = new RegisterUserUseCase({
+      userRepository: new InMemoryUserRepository(),
+      passwordHasher: new FakeHasher(),
+      idGenerator: new SequentialIds(),
+      clock: new FixedClock(),
       eventPublisher,
-    );
+    });
 
     const result = await useCase.execute(validInput);
 

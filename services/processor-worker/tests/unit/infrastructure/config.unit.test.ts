@@ -46,6 +46,18 @@ describe('loadConfig', () => {
   });
 
   it('rejects a missing required variable', () => {
-    expect(() => loadConfig({})).toThrow();
+    expect(() => loadConfig({})).toThrow('invalid environment variable: AMQP_URL');
+  });
+
+  it('names S3_ENDPOINT when the object storage URL is invalid', () => {
+    expect(() =>
+      loadConfig({
+        AMQP_URL: 'amqp://guest:guest@localhost:5672',
+        S3_ENDPOINT: 'not-a-url',
+        S3_ACCESS_KEY: 'zipframes',
+        S3_SECRET_KEY: 'secret',
+        S3_BUCKET: 'videos',
+      }),
+    ).toThrow('invalid environment variable: S3_ENDPOINT');
   });
 });

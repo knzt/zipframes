@@ -33,8 +33,9 @@ export type S3ObjectStorage = ObjectStorage & Pingable;
 const abortedError = (): TimeoutError =>
   new TimeoutError('PROCESSING_TIMEOUT', 'storage operation cancelled');
 
-export const createS3ObjectStorage = (config: S3ObjectStorageConfig): S3ObjectStorage => {
-  const client = new S3Client({
+export const createS3ObjectStorage = (
+  config: S3ObjectStorageConfig,
+  client: S3Client = new S3Client({
     endpoint: config.endpoint,
     region: config.region,
     forcePathStyle: config.forcePathStyle,
@@ -45,8 +46,8 @@ export const createS3ObjectStorage = (config: S3ObjectStorageConfig): S3ObjectSt
       accessKeyId: config.accessKey,
       secretAccessKey: config.secretKey,
     },
-  });
-
+  }),
+): S3ObjectStorage => {
   return {
     downloadToFile: async (key, destinationPath, signal) => {
       if (signal?.aborted) {
