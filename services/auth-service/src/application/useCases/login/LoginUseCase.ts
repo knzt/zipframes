@@ -1,4 +1,4 @@
-import { err, ok } from '@zipframes/core';
+import { UnauthorizedError, err, ok } from '@zipframes/core';
 import type { Result } from '@zipframes/core';
 import { Email } from '@zipframes/value-objects';
 
@@ -12,10 +12,10 @@ import type { LoginUseCaseError, LoginUseCaseInput, LoginUseCaseOutput } from '.
  * apart from "wrong password" would let anyone enumerate which addresses
  * are registered.
  */
-const invalidCredentials: LoginUseCaseError = {
-  code: 'INVALID_CREDENTIALS',
-  message: 'invalid email or password',
-};
+export const invalidCredentials = new UnauthorizedError(
+  'INVALID_CREDENTIALS',
+  'invalid email or password',
+);
 
 export class LoginUseCase {
   constructor(

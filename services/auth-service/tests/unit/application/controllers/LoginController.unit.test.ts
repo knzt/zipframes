@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { LoginController } from '../../../../src/application/controllers/LoginController.js';
+import { invalidCredentials } from '../../../../src/application/useCases/login/LoginUseCase.js';
 import type { LoginUseCase } from '../../../../src/application/useCases/login/LoginUseCase.js';
 
 const correlationId = 'corr-login';
@@ -41,7 +42,7 @@ describe('LoginController', () => {
     expect(response).toMatchObject({
       status: 401,
       contentType: 'application/problem+json',
-      body: { title: 'Invalid credentials', correlationId },
+      body: { title: invalidCredentials.message, correlationId },
     });
     expect(response.body).not.toHaveProperty('detail');
   });
@@ -49,7 +50,7 @@ describe('LoginController', () => {
   it('returns 401 when the use case rejects the credentials', async () => {
     const execute = vi.fn(async () => ({
       ok: false as const,
-      error: { code: 'INVALID_CREDENTIALS' as const, message: 'invalid email or password' },
+      error: invalidCredentials,
     }));
     const controller = controllerFor(execute);
 
@@ -59,6 +60,10 @@ describe('LoginController', () => {
     });
 
     expect(response.status).toBe(401);
-    expect(response.body).toMatchObject({ title: 'Invalid credentials', correlationId });
+    expect(response.body).toMatchObject({
+      title: invalidCredentials.message,
+      correlationId,
+    });
+    expect(response.body).not.toHaveProperty('detail');
   });
 });

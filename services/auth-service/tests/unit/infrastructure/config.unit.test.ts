@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { loadConfig } from '../../../src/infrastructure/config.js';
+import { loadConfig } from '../../../src/infrastructure/loadEnvConfig.js';
 
 const REQUIRED_VARS = {
   AUTH_DATABASE_URL: 'postgresql://localhost/auth_db',

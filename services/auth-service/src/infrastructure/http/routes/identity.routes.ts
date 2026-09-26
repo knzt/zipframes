@@ -17,7 +17,7 @@ export interface IdentityRoutesDependencies {
 
 const CORRELATION_HEADER = 'x-correlation-id';
 
-const problemDetailsSchema = {
+const problemDetailsJsonSchema = {
   type: 'object',
   required: ['type', 'title', 'status'],
   properties: {
@@ -29,11 +29,11 @@ const problemDetailsSchema = {
   },
 };
 
-const problemResponse = (description: string): Record<string, unknown> => ({
+const problemDetailsSchema = (description: string): Record<string, unknown> => ({
   description,
   content: {
     'application/problem+json': {
-      schema: problemDetailsSchema,
+      schema: problemDetailsJsonSchema,
     },
   },
 });
@@ -69,8 +69,8 @@ export const registerIdentityRoutes = (
         body: jsonSchemaOf(authService.registerRequestSchema),
         response: {
           201: jsonSchemaOf(authService.registerResponseSchema),
-          400: problemResponse('Dados inválidos'),
-          409: problemResponse('E-mail já cadastrado'),
+          400: problemDetailsSchema('Dados inválidos'),
+          409: problemDetailsSchema('E-mail já cadastrado'),
         },
       },
     },
@@ -95,7 +95,7 @@ export const registerIdentityRoutes = (
         body: jsonSchemaOf(authService.loginRequestSchema),
         response: {
           200: jsonSchemaOf(authService.loginResponseSchema),
-          401: problemResponse('Credenciais inválidas'),
+          401: problemDetailsSchema('Credenciais inválidas'),
         },
       },
     },

@@ -1,6 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { describe, expect, it, vi } from 'vitest';
 
+import type { Logger } from '@zipframes/logger';
+
 import type {
   LoginController,
   LoginControllerRequest,
@@ -28,6 +30,7 @@ const buildApp = async (overrides?: {
   loginController?: LoginController;
   isReady?: () => Promise<{ ready: boolean; reason?: string }>;
   renderMetrics?: () => Promise<string>;
+  logger?: Logger;
 }): Promise<FastifyInstance> => {
   const app = await createHttpServer({ corsOrigin: '*', logger: silentLogger() });
 
@@ -42,6 +45,7 @@ const buildApp = async (overrides?: {
   registerHealthRoutes(app, {
     isReady: overrides?.isReady ?? (async () => ({ ready: true })),
     renderMetrics: overrides?.renderMetrics ?? (async () => 'nodejs_version_info 1\n'),
+    ...(overrides?.logger === undefined ? {} : { logger: overrides.logger }),
   });
 
   return app;
@@ -199,30 +203,45 @@ describe('health and metrics', () => {
   });
 
   it('answers 503 when a dependency is down', async () => {
+    const logger = {
+      warn: vi.fn(),
+      error: vi.fn(),
+    } as unknown as Logger;
     const app = await buildApp({
+      logger,
       isReady: async () => ({ ready: false, reason: 'amqp disconnected' }),
     });
 
     const response = await app.inject({ method: 'GET', url: '/health/ready' });
 
     expect(response.statusCode).toBe(503);
-    expect(response.json()).toEqual({ status: 'not_ready', reason: 'amqp disconnected' });
+    expect(response.json()).toEqual({ status: 'not_ready', reason: 'dependency unavailable' });
+    expect(logger.warn).toHaveBeenCalledWith('readiness check reported not ready', {
+      reason: 'amqp disconnected',
+    });
   });
 
   it('answers 503 when the readiness check throws', async () => {
+    const logger = {
+      warn: vi.fn(),
+      error: vi.fn(),
+    } as unknown as Logger;
+    const failure = new Error('database down');
     const app = await buildApp({
+      logger,
       isReady: async () => {
-        throw new Error('database down');
+        throw failure;
       },
     });
 
     const response = await app.inject({ method: 'GET', url: '/health/ready' });
 
     expect(response.statusCode).toBe(503);
-    expect(response.json()).toEqual({ status: 'not_ready', reason: 'database down' });
+    expect(response.json()).toEqual({ status: 'not_ready', reason: 'dependency unavailable' });
+    expect(logger.error).toHaveBeenCalledWith('readiness check failed', { err: failure });
   });
 
-  it('answers 503 with unknown when a dependency is down and gives no reason', async () => {
+  it('answers 503 with dependency unavailable when a dependency is down and gives no reason', async () => {
     const app = await buildApp({
       isReady: async () => ({ ready: false }),
     });
@@ -230,10 +249,10 @@ describe('health and metrics', () => {
     const response = await app.inject({ method: 'GET', url: '/health/ready' });
 
     expect(response.statusCode).toBe(503);
-    expect(response.json()).toEqual({ status: 'not_ready', reason: 'unknown' });
+    expect(response.json()).toEqual({ status: 'not_ready', reason: 'dependency unavailable' });
   });
 
-  it('answers 503 with unknown when the readiness check throws a non-error', async () => {
+  it('answers 503 with dependency unavailable when the readiness check throws a non-error', async () => {
     const app = await buildApp({
       isReady: async () => {
         // Exercises the branch where the failure is not an Error.
@@ -245,7 +264,7 @@ describe('health and metrics', () => {
     const response = await app.inject({ method: 'GET', url: '/health/ready' });
 
     expect(response.statusCode).toBe(503);
-    expect(response.json()).toEqual({ status: 'not_ready', reason: 'unknown' });
+    expect(response.json()).toEqual({ status: 'not_ready', reason: 'dependency unavailable' });
   });
 
   it('returns the prometheus text from the metrics registry', async () => {

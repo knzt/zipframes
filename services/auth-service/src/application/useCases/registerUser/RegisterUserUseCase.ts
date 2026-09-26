@@ -1,8 +1,8 @@
-import { err, ok } from '@zipframes/core';
+import { ConflictError, ValidationError, err, ok } from '@zipframes/core';
 import type { Result } from '@zipframes/core';
 
 import { userRegisteredFrom } from '../../../domain/events/userRegistered.js';
-import { registerUser } from '../../../domain/entities/user.js';
+import { User } from '../../../domain/entities/user.js';
 import { createPassword } from '../../../domain/valueObjects/password.js';
 import type { EventPublisher } from '../../interfaces/gateways/EventPublisher.js';
 import type { UserRepository } from '../../interfaces/repositories/UserRepository.js';
@@ -33,45 +33,48 @@ export class RegisterUserUseCase {
   ): Promise<Result<RegisterUserUseCaseOutput, RegisterUserUseCaseError>> {
     const password = createPassword(input.password);
     if (!password.ok) {
-      return err({ code: 'INVALID_INPUT' as const, message: password.error.message });
+      return err(new ValidationError(password.error.code, password.error.message));
     }
 
     const passwordHash = await this.passwordHasher.hash(password.value);
     const now = this.clock.now();
 
-    const user = registerUser({
+    const user = new User({
       id: this.idGenerator.next(),
       name: input.name,
       email: input.email,
       passwordHash,
       now,
     });
-    if (!user.ok) {
-      return err({ code: 'INVALID_INPUT' as const, message: user.error.message });
+
+    const existing = await this.userRepository.findByEmail(user.email);
+    if (existing !== null) {
+      return err(new ConflictError('EMAIL_TAKEN', 'email is already registered'));
     }
 
-    const saved = await this.userRepository.save(user.value);
-    if (!saved.ok) {
-      return err({ code: 'EMAIL_TAKEN' as const, message: 'email is already registered' });
-    }
+    const created = await this.userRepository.create(user);
 
+    await this.publishUserRegistered(input.correlationId, created);
+
+    return ok({
+      userId: created.id,
+      name: created.name,
+      email: created.email,
+    });
+  }
+
+  private async publishUserRegistered(correlationId: string, user: User): Promise<void> {
     try {
       await this.eventPublisher.publish({
         eventType: 'user.registered',
-        correlationId: input.correlationId,
-        payload: userRegisteredFrom(user.value),
+        correlationId,
+        payload: userRegisteredFrom(user),
       });
     } catch (error) {
       this.onPublishFailed?.(error, {
-        userId: user.value.id,
-        correlationId: input.correlationId,
+        userId: user.id,
+        correlationId,
       });
     }
-
-    return ok({
-      userId: user.value.id,
-      name: user.value.name,
-      email: user.value.email,
-    });
   }
 }

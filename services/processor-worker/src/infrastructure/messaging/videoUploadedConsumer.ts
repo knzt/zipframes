@@ -1,5 +1,6 @@
 import type { BrokerMessage, ConsumeContext, ConsumeHandler } from '@zipframes/communication';
 import { decideRetry, type RetryOptions } from '@zipframes/communication';
+import { isBaseError, isRetryableError } from '@zipframes/core';
 import type { Logger } from '@zipframes/logger';
 import { runWithCorrelationId } from '@zipframes/logger';
 import { parseSchema } from '@zipframes/schemas';
@@ -7,7 +8,6 @@ import { videoUploadedEventSchema } from '@zipframes/schemas/video-service';
 
 import type { ProcessUploadedVideoController } from '../../application/controllers/ProcessUploadedVideoController.js';
 import type { EventPublisher } from '../../application/interfaces/gateways/EventPublisher.js';
-import { isProcessingError } from '../../domain/errors/processingError.js';
 
 export interface JobMetrics {
   readonly recordFramesPackaged: (durationSeconds: number) => void;
@@ -71,9 +71,8 @@ export const createVideoUploadedConsumer = (deps: VideoUploadedConsumerDeps): Co
         }
         await context.ack();
       } catch (error) {
-        // Media rejection returns from the use case; anything thrown is retryable.
-        const code = isProcessingError(error) ? error.code : 'UNEXPECTED';
-        const retryable = isProcessingError(error) ? error.retryable : true;
+        const code = isBaseError(error) ? error.code : 'UNEXPECTED';
+        const retryable = isRetryableError(error);
 
         if (decideRetry(context.attempt, deps.retry) === 'dlq') {
           await deps.events.publish({

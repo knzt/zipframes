@@ -1,5 +1,10 @@
-export type { User, UserId, RegisterUserInput } from './entities/user.js';
-export { asUserId, registerUser } from './entities/user.js';
+export {
+  User,
+  asUserId,
+  type UserId,
+  type RegisterUserInput,
+  type PersistedUser,
+} from './entities/user.js';
 
 export type { Password, PasswordHash } from './valueObjects/password.js';
 export { createPassword, asPasswordHash } from './valueObjects/password.js';

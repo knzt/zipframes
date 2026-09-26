@@ -2,7 +2,7 @@ import cors from '@fastify/cors';
 import Fastify from 'fastify';
 import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
-import { problemResponse } from '@zipframes/core';
+import { InternalServerError, isBaseError, problemResponse } from '@zipframes/core';
 import { createCorrelationId } from '@zipframes/logger';
 import type { Logger } from '@zipframes/logger';
 
@@ -50,6 +50,25 @@ export const createHttpServer = async (options: HttpServerOptions): Promise<Fast
 
   app.setErrorHandler((error: FastifyError, request, reply) => {
     const correlationId = correlationIdOf(request);
+
+    if (isBaseError(error)) {
+      if (error.statusCode >= 500) {
+        options.logger.error('unhandled http error', {
+          err: error,
+          correlationId,
+        });
+        return sendProblem(
+          reply,
+          problemResponse(error.statusCode, 'Internal server error', undefined, correlationId),
+        );
+      }
+
+      return sendProblem(
+        reply,
+        problemResponse(error.statusCode, error.message, undefined, correlationId),
+      );
+    }
+
     if (isClientError(error)) {
       return sendProblem(
         reply,
@@ -57,10 +76,14 @@ export const createHttpServer = async (options: HttpServerOptions): Promise<Fast
       );
     }
 
-    options.logger.error('unhandled http error', { err: error, correlationId });
+    const httpError = new InternalServerError('UNEXPECTED', error.message, { cause: error });
+    options.logger.error('unhandled http error', {
+      err: httpError,
+      correlationId,
+    });
     return sendProblem(
       reply,
-      problemResponse(500, 'Internal server error', undefined, correlationId),
+      problemResponse(httpError.statusCode, 'Internal server error', undefined, correlationId),
     );
   });
 

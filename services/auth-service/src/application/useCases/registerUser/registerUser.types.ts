@@ -1,3 +1,5 @@
+import type { ConflictError, ValidationError } from '@zipframes/core';
+
 export interface RegisterUserUseCaseInput {
   readonly name: string;
   readonly email: string;
@@ -11,7 +13,4 @@ export interface RegisterUserUseCaseOutput {
   readonly email: string;
 }
 
-export interface RegisterUserUseCaseError {
-  readonly code: 'INVALID_INPUT' | 'EMAIL_TAKEN';
-  readonly message: string;
-}
+export type RegisterUserUseCaseError = ValidationError | ConflictError;

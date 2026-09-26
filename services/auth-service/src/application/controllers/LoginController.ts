@@ -2,6 +2,7 @@ import { type PROBLEM_CONTENT_TYPE, problemResponse, type ProblemDetails } from 
 import { authService, parseSchema } from '@zipframes/schemas';
 import type { z } from 'zod';
 
+import { invalidCredentials } from '../useCases/login/LoginUseCase.js';
 import type { LoginUseCase } from '../useCases/login/LoginUseCase.js';
 
 export interface LoginControllerRequest {
@@ -31,12 +32,22 @@ export class LoginController {
   async handle(request: LoginControllerRequest): Promise<LoginControllerResponse> {
     const body = parseSchema(authService.loginRequestSchema, request.body);
     if (!body.ok) {
-      return problemResponse(401, 'Invalid credentials', undefined, request.correlationId);
+      return problemResponse(
+        invalidCredentials.statusCode,
+        invalidCredentials.message,
+        undefined,
+        request.correlationId,
+      ) as LoginControllerResponse;
     }
 
     const result = await this.loginUseCase.execute(body.value);
     if (!result.ok) {
-      return problemResponse(401, 'Invalid credentials', undefined, request.correlationId);
+      return problemResponse(
+        result.error.statusCode,
+        result.error.message,
+        undefined,
+        request.correlationId,
+      ) as LoginControllerResponse;
     }
 
     return {

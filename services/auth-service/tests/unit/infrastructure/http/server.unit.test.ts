@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { InternalServerError, ValidationError } from '@zipframes/core';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { Logger } from '@zipframes/logger';
@@ -24,6 +25,12 @@ const buildApp = async (
   const app = await createHttpServer({ corsOrigin: '*', logger });
   app.get('/boom', async () => {
     throw new Error(INTERNAL_MESSAGE);
+  });
+  app.get('/boom-internal', async () => {
+    throw new InternalServerError('UNEXPECTED', INTERNAL_MESSAGE);
+  });
+  app.get('/validation', async () => {
+    throw new ValidationError('INVALID_NAME', 'name is too short');
   });
   app.post('/echo', async () => ({ ok: true }));
   return { app, logger };
@@ -67,6 +74,55 @@ describe('unhandled HTTP errors', () => {
     expect(response.json().correlationId).toEqual(expect.any(String));
     expect(response.json().correlationId).not.toBe('');
     expect(response.body).not.toContain(INTERNAL_MESSAGE);
+    await app.close();
+  });
+
+  it('logs an InternalServerError without wrapping it again', async () => {
+    const { app, logger } = await buildApp();
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/boom-internal',
+      headers: { 'x-correlation-id': 'corr-internal' },
+    });
+
+    expect(response.statusCode).toBe(500);
+    expect(response.json()).toEqual({
+      type: 'about:blank',
+      status: 500,
+      title: 'Internal server error',
+      correlationId: 'corr-internal',
+    });
+    expect(response.body).not.toContain(INTERNAL_MESSAGE);
+    expect(logger.error).toHaveBeenCalledWith(
+      'unhandled http error',
+      expect.objectContaining({
+        correlationId: 'corr-internal',
+        err: expect.objectContaining({ code: 'UNEXPECTED' }),
+      }),
+    );
+    await app.close();
+  });
+
+  it('answers 400 problem details for a thrown ValidationError, using the error message', async () => {
+    const { app, logger } = await buildApp();
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/validation',
+      headers: { 'x-correlation-id': 'corr-validation' },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.headers['content-type']).toContain('application/problem+json');
+    expect(response.json()).toEqual({
+      type: 'about:blank',
+      status: 400,
+      title: 'name is too short',
+      correlationId: 'corr-validation',
+    });
+    expect(response.body).not.toHaveProperty('detail');
+    expect(logger.error).not.toHaveBeenCalled();
     await app.close();
   });
 });

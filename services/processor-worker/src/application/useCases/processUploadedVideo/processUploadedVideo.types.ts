@@ -1,16 +1,14 @@
-import type { ProcessingError } from '../../../domain/errors/processingError.js';
-import type { ProcessingResult } from '../../../domain/valueObjects/processingResult.js';
+import type { InfrastructureError } from '@zipframes/core';
 
 export interface ProcessUploadedVideoUseCaseInput {
   readonly videoId: string;
   readonly ownerId: string;
   readonly sourceKey: string;
   readonly originalFileName: string;
-  readonly sizeBytes: number;
-  readonly attempt: number;
   readonly correlationId: string;
+  readonly attempt: number;
 }
 
-export type ProcessUploadedVideoUseCaseOutput = ProcessingResult;
+export type ProcessUploadedVideoUseCaseOutput = 'frames_packaged' | 'media_rejected';
 
-export type ProcessUploadedVideoUseCaseError = ProcessingError;
+export type ProcessUploadedVideoUseCaseError = InfrastructureError;

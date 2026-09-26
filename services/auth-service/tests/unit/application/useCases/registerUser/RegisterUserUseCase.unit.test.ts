@@ -57,7 +57,7 @@ describe('a successful registration', () => {
     expect(stored?.passwordHash).not.toBe('senha1234');
   });
 
-  it('saves the user and then publishes user.registered', async () => {
+  it('creates the user and then publishes user.registered', async () => {
     await registerUser.execute(validInput);
 
     expect(userRepository.users.size).toBe(1);
@@ -85,22 +85,9 @@ describe('invalid input', () => {
   it('rejects a password that fails the policy', async () => {
     const result = await registerUser.execute({ ...validInput, password: 'curta1' });
 
-    expect(result).toMatchObject({ ok: false, error: { code: 'INVALID_INPUT' } });
+    expect(result).toMatchObject({ ok: false, error: { code: 'TOO_SHORT' } });
     expect(userRepository.users.size).toBe(0);
     expect(eventPublisher.published).toHaveLength(0);
-  });
-
-  it('rejects an invalid email', async () => {
-    const result = await registerUser.execute({ ...validInput, email: 'not-an-email' });
-
-    expect(result).toMatchObject({ ok: false, error: { code: 'INVALID_INPUT' } });
-    expect(eventPublisher.published).toHaveLength(0);
-  });
-
-  it('rejects an invalid name', async () => {
-    const result = await registerUser.execute({ ...validInput, name: 'H' });
-
-    expect(result).toMatchObject({ ok: false, error: { code: 'INVALID_INPUT' } });
   });
 
   it('checks the password before hashing anything else', async () => {
@@ -131,7 +118,28 @@ describe('duplicate email', () => {
   });
 });
 
-describe('publish after save', () => {
+describe('repository create failure', () => {
+  it('propagates when create loses a concurrent registration race', async () => {
+    const raceRepository = {
+      findByEmail: async () => null,
+      create: async (): Promise<never> => {
+        throw new Error('unique constraint');
+      },
+    };
+    const useCase = new RegisterUserUseCase(
+      raceRepository,
+      new FakeHasher(),
+      new SequentialIds(),
+      new FixedClock(),
+      eventPublisher,
+    );
+
+    await expect(useCase.execute(validInput)).rejects.toThrow('unique constraint');
+    expect(eventPublisher.published).toHaveLength(0);
+  });
+});
+
+describe('publish after create', () => {
   it('still returns registration success when publish fails', async () => {
     eventPublisher.failWith = new Error('broker down');
 

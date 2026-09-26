@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { PROBLEM_CONTENT_TYPE, problemDetails } from '@zipframes/core';
 
+import { invalidCredentials } from '../../../../src/application/useCases/login/LoginUseCase.js';
+
 describe('problemDetails from @zipframes/core', () => {
   it('includes detail and correlationId when given', () => {
     expect(problemDetails(400, 'Bad request', 'why', 'corr-1')).toEqual({
@@ -14,9 +16,13 @@ describe('problemDetails from @zipframes/core', () => {
   });
 
   it('omits detail and correlationId when not given, rather than sending null', () => {
-    const result = problemDetails(401, 'Invalid credentials');
+    const result = problemDetails(401, invalidCredentials.message);
 
-    expect(result).toEqual({ type: 'about:blank', status: 401, title: 'Invalid credentials' });
+    expect(result).toEqual({
+      type: 'about:blank',
+      status: 401,
+      title: invalidCredentials.message,
+    });
     expect(result).not.toHaveProperty('detail');
     expect(result).not.toHaveProperty('correlationId');
   });
