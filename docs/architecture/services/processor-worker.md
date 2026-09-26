@@ -12,7 +12,7 @@ Consumir `video.uploaded`, extrair frames (1 fps, PNG), empacotar em zip (store)
 
 As dependências apontam para dentro. Os quatro anéis e o composition root estão em [layers.md](../layers.md).
 
-O consumer em `infrastructure/messaging` lê `video.uploaded` e chama `ProcessUploadedVideoController`. O controller entrega o envelope já decodificado a `ProcessUploadedVideoUseCase`. O caso de uso chama `ObjectStorage`, `FrameExtractor` e `EventPublisher` (`application/interfaces/gateways/`) e `ArchiveBuilder` e `WorkDirectory` (`application/interfaces/services/`). `start.ts` chama as factories — `new S3Client` em `externals/s3.ts`, `new S3ObjectStorage(s3)` em `gateways/objectStorage.ts`, ffmpeg, publisher AMQP, zip e o diretório temporário — e dá `consume`. Não há `handlers/` HTTP. O consumer confirma, agenda nova tentativa ou envia à dead-letter a partir do desfecho. O caso de uso não importa o SDK da AWS, o ffmpeg nem o cliente AMQP.
+O consumer em `infrastructure/messaging` lê `video.uploaded` e chama `ProcessUploadedVideoController`. O controller entrega o envelope já decodificado a `ProcessUploadedVideoUseCase`. O caso de uso chama `ObjectStorage`, `FrameExtractor` e `EventPublisher` (`application/interfaces/gateways/`) e `ArchiveBuilder` e `WorkDirectory` (`application/interfaces/services/`). `start.ts` abre AMQP e `new S3Client` (`externals/s3.ts`) e chama `createProcessUploadedVideoController({ connection, s3, config, logger, … })`. Essa factory chama `createProcessUploadedVideo`, que faz `new S3ObjectStorage(s3)`, ffmpeg, zip, diretório temporário e o publisher. Não há `handlers/` HTTP. O consumer confirma, agenda nova tentativa ou envia à dead-letter a partir do desfecho. O caso de uso não importa o SDK da AWS, o ffmpeg nem o cliente AMQP.
 
 ```
 main  →  interface-adapters / infrastructure  →  application  →  domain
@@ -31,7 +31,7 @@ main  →  interface-adapters / infrastructure  →  application  →  domain
 | Categoria   | Neste serviço                                                                    |
 | ----------- | -------------------------------------------------------------------------------- |
 | `gateways/` | `ObjectStorage`, `EventPublisher`, `FrameExtractor` (o trabalho sai do processo) |
-| `services/` | `ArchiveBuilder`, `WorkDirectory`, `Clock`, `IdGenerator` (capacidade local)     |
+| `services/` | `ArchiveBuilder`, `WorkDirectory` (capacidade local)                             |
 
 `ObjectStorage` não inclui `ping`. `S3ObjectStorage` implementa `Pingable` à parte (ISP). Sem HTTP de readiness neste processo.
 
@@ -49,7 +49,7 @@ processor-worker/src/
 │   │   └── processUploadedVideo.types.ts  ← reexporta `ProcessingJob` / `ProcessingResult` do domínio
 │   └── interfaces/
 │       ├── gateways/{ObjectStorage,EventPublisher,FrameExtractor}.ts
-│       └── services/{ArchiveBuilder,WorkDirectory,Clock,IdGenerator}.ts
+│       └── services/{ArchiveBuilder,WorkDirectory}.ts
 ├── interface-adapters/ProcessUploadedVideoController.ts
 ├── infrastructure/
 │   ├── gateways/
@@ -58,9 +58,7 @@ processor-worker/src/
 │   │   └── amqpEventPublisher.gateway.ts
 │   ├── services/
 │   │   ├── media/zipArchiveBuilder.service.ts
-│   │   ├── filesystem/fsWorkDirectory.service.ts
-│   │   ├── systemClock.ts
-│   │   └── uuidIdGenerator.ts
+│   │   └── filesystem/fsWorkDirectory.service.ts
 │   ├── messaging/{rabbitmqConnection,topology,videoUploadedConsumer}.ts
 │   ├── observability/jobMetrics.ts
 │   └── loadEnvConfig.ts

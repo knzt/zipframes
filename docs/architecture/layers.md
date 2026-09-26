@@ -17,13 +17,13 @@ Depois da inicialização, um pedido não procura a infraestrutura: ela já foi 
 main  →  interface-adapters / infrastructure  →  application  →  domain
 ```
 
-No `auth-service`, `index.ts` trata sinal e chama `startAuthService()`. `start.ts` abre Prisma e AMQP, chama as factories, liga o catálogo HTTP e dá `listen`. Os handlers em `main/handlers/` (`defineHandler` de `@zipframes/http`, ou o JWKS) validam o pedido, chamam o controller e devolvem `HttpReply`. `identityRoutes.ts` lista `method`/`path`/`openApi`/`handle`. `bindHttpRoutes` em `infrastructure/http` é o único `app.route`. Fastify fica em `infrastructure/http/server.ts` — não há `src/app.ts` nem `src/server.ts`. O controller em `interface-adapters/` chama `RegisterUserUseCase` ou `LoginUseCase` e devolve `Result`. O caso de uso chama `UserRepository`, `EventPublisher`, `PasswordHasher`, `TokenIssuer` e as outras interfaces que declarou. Essas chamadas caem nos objetos injetados — `PrismaUserRepository`, `AmqpEventPublisher`, `BcryptPasswordHasher`, `Rs256TokenIssuer`.
+No `auth-service`, `index.ts` trata sinal e chama `startAuthService()`. `start.ts` abre Prisma e AMQP, deriva o `tokenIssuer` (também o JWKS), chama as factories de controller e dá `listen`. Não monta o grafo: a factory do controller chama a factory do caso de uso, que chama repositório, hasher e publisher. Os handlers em `main/handlers/` (`defineHandler` de `@zipframes/http`, ou o JWKS) validam o pedido, chamam o controller e devolvem `HttpReply`. `identityRoutes.ts` lista `method`/`path`/`openApi`/`handle`. `bindHttpRoutes` em `infrastructure/http` é o único `app.route`. Fastify fica em `infrastructure/http/server.ts` — não há `src/app.ts` nem `src/server.ts`. O controller em `interface-adapters/` chama `RegisterUserUseCase` ou `LoginUseCase` e devolve `Result`. O caso de uso chama `UserRepository`, `EventPublisher`, `PasswordHasher` e `TokenIssuer`. Essas chamadas caem nos objetos injetados — `PrismaUserRepository`, `AmqpEventPublisher`, `BcryptPasswordHasher`, `Rs256TokenIssuer`. `randomUUID()` e `new Date()` entram direto no caso de uso e no gateway de evento; não há ports `Clock` / `IdGenerator`.
 
-No `processor-worker` não há HTTP nem `handlers/`. O consumer AMQP em `infrastructure/messaging` decodifica `video.uploaded` e chama o controller. `start.ts` chama as factories e dá `consume`. O caso de uso chama `ObjectStorage`, `FrameExtractor`, `EventPublisher`, `ArchiveBuilder` e `WorkDirectory`. O cliente S3 nasce em `main/factories/externals/s3.ts` (`new S3Client`); o port é `new S3ObjectStorage(s3)` em `gateways/objectStorage.ts`. Probes de Compose e Kubernetes são exec (`kill -0 1`), não HTTP na 8081.
+No `processor-worker` não há HTTP nem `handlers/`. O consumer AMQP em `infrastructure/messaging` decodifica `video.uploaded` e chama o controller. `start.ts` abre AMQP e S3, chama `createProcessUploadedVideoController({ connection, s3, config, logger, … })` e dá `consume`. A factory do controller chama a do caso de uso, que instancia storage, ffmpeg, zip, diretório de trabalho e o publisher. O caso de uso chama `ObjectStorage`, `FrameExtractor`, `EventPublisher`, `ArchiveBuilder` e `WorkDirectory`. O cliente S3 nasce em `main/factories/externals/s3.ts` (`new S3Client`); o port é `new S3ObjectStorage(s3)` em `gateways/objectStorage.ts`. Probes de Compose e Kubernetes são exec (`kill -0 1`), não HTTP na 8081.
 
 O `index.ts` dos dois serviços trata sinal com um guard `stopping` para o shutdown não fechar o canal duas vezes. `runService()` em `@zipframes/core` é candidato a extrair esse laço quando aparecer o terceiro serviço.
 
-Injeção é pura: cada factory exporta uma função que faz `new` e devolve o objeto. Sem `let` no módulo. `start.ts` chama cada factory uma vez. Teste chama de novo com fakes.
+Injeção é pura: cada factory exporta uma função que faz `new` e devolve o objeto. Sem `let` no módulo. `start.ts` abre as conexões uma vez e passa esses clientes às factories de controller, para não abrir Prisma/AMQP/S3 duas vezes. A factory do controller chama a factory do caso de uso; essa chama as factories de repositório, gateway e serviço. Teste chama de novo com fakes.
 
 A interface fica ao lado do caso de uso, e não ao lado da classe do Prisma, para o caso de uso não precisar importar `infrastructure` só para enxergar o tipo. A regra da aplicação permanece estável quando o driver muda. Um teste do caso de uso entrega um fake. Um driver novo é uma classe nova em `infrastructure/` e a factory em `main/` que a instancia.
 
@@ -40,7 +40,7 @@ infrastructure / interface-adapters  →  application  →  domain
 (mais externo)                                          (mais interno)
 ```
 
-`main/` é o composition root. Ele conhece as outras pastas só para montar o grafo na inicialização. Nada em `src/` fora de `main/` importa `main/` (index, start e testes de integração montam o grafo; testes unitários passam fakes).
+`main/` é o composition root. Ele conhece as outras pastas só para montar o grafo na inicialização. Nada em `src/` fora de `main/` importa `main/` (as factories em `main/` montam o grafo; `start.ts` só abre conexões e chama as factories de controller; testes unitários passam fakes).
 
 ### Layout
 
@@ -62,11 +62,11 @@ Factories em `main/factories/` agrupam por responsabilidade. O arquivo chama o q
 
 Três categorias em `application/interfaces/`, espelhadas em `infrastructure/` e nas factories de `main/`:
 
-| Categoria       | Critério                                                          | Exemplos                                                                  |
-| --------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| `repositories/` | Devolve e recebe **objetos de domínio**                           | `UserRepository`                                                          |
-| `gateways/`     | Cruza a fronteira do processo sem falar em termos de domínio      | `ObjectStorage`, `EventPublisher`, `FrameExtractor`                       |
-| `services/`     | Capacidade técnica **local** (mesmo processo; sem estado externo) | `PasswordHasher`, `TokenIssuer`, `Clock`, `IdGenerator`, `ArchiveBuilder` |
+| Categoria       | Critério                                                          | Exemplos                                                           |
+| --------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `repositories/` | Devolve e recebe **objetos de domínio**                           | `UserRepository`                                                   |
+| `gateways/`     | Cruza a fronteira do processo sem falar em termos de domínio      | `ObjectStorage`, `EventPublisher`, `FrameExtractor`                |
+| `services/`     | Capacidade técnica **local** (mesmo processo; sem estado externo) | `PasswordHasher`, `TokenIssuer`, `ArchiveBuilder`, `WorkDirectory` |
 
 `gateway`, neste mapa, é a interface que o caso de uso declara quando o trabalho sai do processo: object storage, publicação de evento, extração de frames por um programa que não é o processo Node. A interface fica em `application/interfaces/gateways/`. A classe que a implementa fica em `infrastructure/gateways/` e é ela que segura o SDK. O `processor-worker` e o `auth-service` usam essa pasta. No `auth-service`, a persistência continua repository (`UserRepository`); a publicação de `user.registered` é `EventPublisher`, como no worker. `infrastructure/messaging` só segura a conexão e o `PublishPort`. O envelope (`eventId`, `version`, `occurredAt`) é montado no gateway AMQP.
 
