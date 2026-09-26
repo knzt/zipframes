@@ -27,7 +27,7 @@
     "@prisma/client": "^6.2.1",
     "@zipframes/communication": "^0.1.0",
     "@zipframes/core": "^0.4.0",
-    "@zipframes/http": "0.2.0-pr41-20260926005304",
+    "@zipframes/http": "^0.2.0",
     "@zipframes/logger": "^0.1.0",
     "@zipframes/schemas": "^0.1.0",
     "@zipframes/telemetry": "^0.1.0",
