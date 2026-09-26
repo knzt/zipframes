@@ -19,11 +19,11 @@ import { silentLogger } from '../../../../support/silent-logger.js';
 
 const asRegisterUserController = (
   handle: (request: RegisterUserControllerRequest) => Promise<HttpReply>,
-): RegisterUserController => ({ handle }) as unknown as RegisterUserController;
+): RegisterUserController => ({ handle });
 
 const asLoginController = (
   handle: (request: LoginControllerRequest) => Promise<HttpReply>,
-): LoginController => ({ handle }) as unknown as LoginController;
+): LoginController => ({ handle });
 
 const buildApp = async (overrides?: {
   registerUserController?: RegisterUserController;
