@@ -18,19 +18,16 @@ describe('AmqpEventPublisher', () => {
       payload: { videoId: '11111111-1111-4111-8111-111111111111', attempt: 1 },
     });
 
-    expect(publish).toHaveBeenCalledOnce();
-    const [envelope, routing] = publish.mock.calls[0] ?? [];
-    expect(envelope).toEqual({
-      eventId: expect.stringMatching(uuidV4),
-      eventType: 'video.processing.started',
-      version: 1,
-      occurredAt: expect.stringMatching(isoInstant),
-      correlationId: '22222222-2222-4222-8222-222222222222',
-      payload: { videoId: '11111111-1111-4111-8111-111111111111', attempt: 1 },
-    });
-    expect(routing).toEqual({
-      exchange: 'zipframes.events',
-      routingKey: 'video.processing.started',
-    });
+    expect(publish).toHaveBeenCalledWith(
+      {
+        eventId: expect.stringMatching(uuidV4),
+        eventType: 'video.processing.started',
+        version: 1,
+        occurredAt: expect.stringMatching(isoInstant),
+        correlationId: '22222222-2222-4222-8222-222222222222',
+        payload: { videoId: '11111111-1111-4111-8111-111111111111', attempt: 1 },
+      },
+      { exchange: 'zipframes.events', routingKey: 'video.processing.started' },
+    );
   });
 });

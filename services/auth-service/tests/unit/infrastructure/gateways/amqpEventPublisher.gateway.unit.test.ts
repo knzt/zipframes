@@ -24,21 +24,24 @@ describe('AmqpEventPublisher', () => {
       },
     });
 
-    expect(publish).toHaveBeenCalledOnce();
-    const [envelope, routing] = publish.mock.calls[0] ?? [];
-    expect(envelope).toEqual({
-      eventId: expect.stringMatching(uuidV4),
-      eventType: 'user.registered',
-      version: 1,
-      occurredAt: expect.stringMatching(isoInstant),
-      correlationId: '22222222-2222-4222-8222-222222222222',
-      payload: {
-        userId: '11111111-1111-4111-8111-111111111111',
-        name: 'Hellen Santos',
-        email: 'hellen@example.com',
+    expect(publish).toHaveBeenCalledWith(
+      {
+        eventId: expect.stringMatching(uuidV4),
+        eventType: 'user.registered',
+        version: 1,
+        occurredAt: expect.stringMatching(isoInstant),
+        correlationId: '22222222-2222-4222-8222-222222222222',
+        payload: {
+          userId: '11111111-1111-4111-8111-111111111111',
+          name: 'Hellen Santos',
+          email: 'hellen@example.com',
+        },
       },
-    });
-    expect(routing).toEqual({ exchange: 'zipframes.events', routingKey: 'user.registered' });
-    expect(authService.userRegisteredEventSchema.safeParse(envelope).success).toBe(true);
+      { exchange: 'zipframes.events', routingKey: 'user.registered' },
+    );
+
+    const firstCall = publish.mock.calls[0] as unknown[] | undefined;
+    expect(firstCall).toBeDefined();
+    expect(authService.userRegisteredEventSchema.safeParse(firstCall?.[0]).success).toBe(true);
   });
 });
