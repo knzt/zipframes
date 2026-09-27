@@ -200,7 +200,7 @@ importers:
         specifier: ^0.1.0
         version: 0.1.0
       '@zipframes/schemas':
-        specifier: ^0.2.0-pr45-20260927180514
+        specifier: 0.2.0-pr45-20260927180514
         version: 0.2.0-pr45-20260927180514
       '@zipframes/telemetry':
         specifier: ^0.1.0
