@@ -11,16 +11,17 @@ export interface ApplyProcessingEventUseCaseInput {
 }
 
 /**
- * How the event ended. Infrastructure faults are not an outcome: they are
- * thrown so the message is retried.
+ * How the event ended, discriminated by `kind` like the domain's own
+ * {@link ProcessingEventOutcome}. Infrastructure faults are not a kind of
+ * result here: they are thrown so the message is retried.
  */
 export type ApplyProcessingEventUseCaseOutput =
-  | { readonly outcome: 'applied'; readonly status: VideoStatus }
+  | { readonly kind: 'applied'; readonly status: VideoStatus }
   | {
-      readonly outcome: 'ignored';
+      readonly kind: 'ignored';
       readonly reason: Exclude<IgnoredProcessingReason, 'not_queued'>;
     }
-  | { readonly outcome: 'unknown_video' };
+  | { readonly kind: 'unknown_video' };
 
 /**
  * Moves the video along what the worker reported. Idempotent by the state
@@ -41,7 +42,7 @@ export class ApplyProcessingEventUseCase {
     if (video === null) {
       // The row exists from the upload request on, well before anything is
       // queued, so retrying cannot make an unknown id appear.
-      return { outcome: 'unknown_video' };
+      return { kind: 'unknown_video' };
     }
 
     const result = video.applyProcessingEvent(input.event, {
@@ -55,11 +56,11 @@ export class ApplyProcessingEventUseCase {
         // time to land; if it never does, the message ends in the DLQ.
         throw new UnavailableError('VIDEO_NOT_QUEUED_YET', 'the video is not queued yet');
       }
-      return { outcome: 'ignored', reason: result.reason };
+      return { kind: 'ignored', reason: result.reason };
     }
 
     await this.videoRepository.save(result.video);
     await this.videoListCache.invalidate(video.ownerId);
-    return { outcome: 'applied', status: result.video.status };
+    return { kind: 'applied', status: result.video.status };
   }
 }

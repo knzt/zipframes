@@ -52,12 +52,12 @@ describe('createProcessingStatusObserver', () => {
   it('logs and counts each kind of outcome', async () => {
     const { logger, observe, count } = setup();
 
-    observe({ kind: 'handled', event, result: { outcome: 'applied', status: 'PROCESSING' } }, ctx);
+    observe({ kind: 'handled', event, result: { kind: 'applied', status: 'PROCESSING' } }, ctx);
     observe(
-      { kind: 'handled', event, result: { outcome: 'ignored', reason: 'processing_finished' } },
+      { kind: 'handled', event, result: { kind: 'ignored', reason: 'processing_finished' } },
       ctx,
     );
-    observe({ kind: 'handled', event, result: { outcome: 'unknown_video' } }, ctx);
+    observe({ kind: 'handled', event, result: { kind: 'unknown_video' } }, ctx);
     observe({ kind: 'retry', event, error: new UnavailableError('DB_DOWN', 'db down') }, ctx);
     observe({ kind: 'exhausted', event, error: 'weird' }, ctx);
     observe({ kind: 'poison', error: new ValidationError('SCHEMA_VALIDATION_FAILED', 'bad') }, ctx);
@@ -86,7 +86,7 @@ describe('createProcessingStatusObserver', () => {
     const logger = fakeLogger();
     const observe = createProcessingStatusObserver({ logger });
 
-    observe({ kind: 'handled', event, result: { outcome: 'unknown_video' } }, ctx);
+    observe({ kind: 'handled', event, result: { kind: 'unknown_video' } }, ctx);
 
     expect(logger.warn).toHaveBeenCalledOnce();
   });

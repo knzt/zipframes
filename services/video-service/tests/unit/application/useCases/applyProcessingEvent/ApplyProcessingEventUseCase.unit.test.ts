@@ -29,7 +29,7 @@ describe('ApplyProcessingEventUseCase', () => {
 
     const result = await applyProcessingEvent.execute(completed);
 
-    expect(result).toEqual({ outcome: 'applied', status: 'DONE' });
+    expect(result).toEqual({ kind: 'applied', status: 'DONE' });
     expect(videos.rows.get(VIDEO_ID)?.toJSON()).toMatchObject({ status: 'DONE', frameCount: 9 });
     expect(cache.invalidated).toEqual([OWNER_ID]);
   });
@@ -40,7 +40,7 @@ describe('ApplyProcessingEventUseCase', () => {
 
     const again = await applyProcessingEvent.execute(completed);
 
-    expect(again).toEqual({ outcome: 'ignored', reason: 'processing_finished' });
+    expect(again).toEqual({ kind: 'ignored', reason: 'processing_finished' });
     expect(videos.saves).toBe(1);
   });
 
@@ -50,14 +50,14 @@ describe('ApplyProcessingEventUseCase', () => {
     expect(
       await applyProcessingEvent.execute({ videoId: VIDEO_ID, event: { kind: 'started' } }),
     ).toEqual({
-      outcome: 'ignored',
+      kind: 'ignored',
       reason: 'processing_finished',
     });
     expect(videos.saves).toBe(0);
   });
 
   it('acknowledges an event for an id it never had', async () => {
-    expect(await applyProcessingEvent.execute(completed)).toEqual({ outcome: 'unknown_video' });
+    expect(await applyProcessingEvent.execute(completed)).toEqual({ kind: 'unknown_video' });
   });
 
   it('throws a retryable error when the video is not queued yet, so the message comes back', async () => {

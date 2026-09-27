@@ -74,7 +74,7 @@ describe('ApplyProcessingEventController', () => {
     ],
   ])('maps %s onto the use case and acks', async (eventType, payload, expected) => {
     const execute = vi.fn(() =>
-      Promise.resolve({ outcome: 'applied' as const, status: 'DONE' as const }),
+      Promise.resolve({ kind: 'applied' as const, status: 'DONE' as const }),
     );
     const { context, settled } = contextFor();
 

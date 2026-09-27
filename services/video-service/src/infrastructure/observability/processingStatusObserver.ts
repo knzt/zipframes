@@ -44,13 +44,13 @@ export const createProcessingStatusObserver =
 
     switch (outcome.kind) {
       case 'handled':
-        record(outcome.result.outcome);
-        if (outcome.result.outcome === 'applied') {
+        record(outcome.result.kind);
+        if (outcome.result.kind === 'applied') {
           deps.logger.info('processing status applied', {
             ...message,
             status: outcome.result.status,
           });
-        } else if (outcome.result.outcome === 'ignored') {
+        } else if (outcome.result.kind === 'ignored') {
           deps.logger.info('processing status ignored', {
             ...message,
             reason: outcome.result.reason,
