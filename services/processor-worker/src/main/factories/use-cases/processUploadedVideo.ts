@@ -28,5 +28,7 @@ export const createProcessUploadedVideo = (
     workDirectory: createWorkDirectory(externals.workDir),
     events: externals.events,
     processingTimeoutMs: externals.processingTimeoutMs,
-    onDiscardOriginalFailed: externals.onDiscardOriginalFailed,
+    ...(externals.onDiscardOriginalFailed === undefined
+      ? {}
+      : { onDiscardOriginalFailed: externals.onDiscardOriginalFailed }),
   });
