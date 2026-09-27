@@ -1,7 +1,7 @@
 # Repository-wide checks that are not a service.
 #
 # Each service is built, tested, and imaged by its own workflow
-# (auth-service.yml, processor-worker.yml), which calls service-ci.yml.
+# (auth-service.yml, video-service.yml, processor-worker.yml), which calls service-ci.yml.
 # This workflow covers what is shared: formatting and the AsyncAPI contract.
 name: ci
 

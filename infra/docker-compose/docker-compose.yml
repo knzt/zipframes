@@ -157,6 +157,9 @@ services:
         - node_auth_token
     image: zipframes-auth-service
     container_name: zipframes-auth-service
+    # The broker can report healthy a moment before it accepts AMQP; the
+    # process exits on a refused connection, so let Compose start it again.
+    restart: on-failure
     depends_on:
       auth-db:
         condition: service_healthy
@@ -190,6 +193,63 @@ services:
       start_period: 20s
     networks: [zipframes]
 
+  # ─── Gestão de vídeos ───────────────────────────────────────
+  video-service:
+    profiles: [apps]
+    build:
+      context: ../..
+      dockerfile: services/video-service/Dockerfile
+      secrets:
+        - node_auth_token
+    image: zipframes-video-service
+    container_name: zipframes-video-service
+    # The broker can report healthy a moment before it accepts AMQP; the
+    # process exits on a refused connection, so let Compose start it again.
+    restart: on-failure
+    depends_on:
+      video-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      storage-init:
+        condition: service_completed_successfully
+    environment:
+      VIDEO_DATABASE_URL: postgresql://${VIDEO_DB_USER:-zipframes}:${VIDEO_DB_PASSWORD:-zipframes}@video-db:5432/${VIDEO_DB_NAME:-video_db}
+      AMQP_URL: amqp://${RABBITMQ_USER:-zipframes}:${RABBITMQ_PASSWORD:-zipframes}@rabbitmq:5672
+      REDIS_URL: redis://redis:6379
+      S3_ENDPOINT: http://storage:8333
+      # The browser uploads and downloads with the presigned URLs, so they
+      # are signed for the port published on the host, not for `storage`.
+      S3_PUBLIC_ENDPOINT: http://localhost:${STORAGE_S3_PORT:-8333}
+      S3_ACCESS_KEY: ${STORAGE_ACCESS_KEY:-zipframes}
+      S3_SECRET_KEY: ${STORAGE_SECRET_KEY:-zipframes-local-secret}
+      S3_REGION: ${STORAGE_REGION:-us-east-1}
+      S3_BUCKET: ${STORAGE_BUCKET:-videos}
+      S3_FORCE_PATH_STYLE: 'true'
+      JWT_JWKS_URL: http://auth-service:3000/.well-known/jwks.json
+      JWT_ISSUER: https://auth.zipframes.local
+      JWT_AUDIENCE: zipframes
+      PORT: '3001'
+      LOG_LEVEL: info
+      SERVICE_VERSION: '0.1.0'
+    ports:
+      - '${VIDEO_HTTP_PORT:-3001}:3001'
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3001/health/ready').then((response)=>process.exit(response.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks: [zipframes]
+
   # ─── Processamento ──────────────────────────────────────────
   processor-worker:
     profiles: [apps]
@@ -198,6 +258,9 @@ services:
       dockerfile: Dockerfile
     image: zipframes-processor-worker
     container_name: zipframes-processor-worker
+    # The broker can report healthy a moment before it accepts AMQP; the
+    # process exits on a refused connection, so let Compose start it again.
+    restart: on-failure
     depends_on:
       rabbitmq:
         condition: service_healthy

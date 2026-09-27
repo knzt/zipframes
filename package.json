@@ -16,7 +16,8 @@
     "infra:logs": "docker compose -f infra/docker-compose/docker-compose.yml --profile apps logs -f",
     "infra:reset": "docker compose -f infra/docker-compose/docker-compose.yml --profile apps down -v && docker compose -f infra/docker-compose/docker-compose.yml up -d",
     "deps:auth": "pnpm --dir services/auth-service add",
-    "deps:worker": "pnpm --dir services/processor-worker add"
+    "deps:worker": "pnpm --dir services/processor-worker add",
+    "deps:video": "pnpm --dir services/video-service add"
   },
   "devDependencies": {
     "@commitlint/cli": "^19.8.1",
