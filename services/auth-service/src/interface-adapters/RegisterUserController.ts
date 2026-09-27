@@ -4,7 +4,7 @@ import type { RegisterUserUseCase } from '../application/useCases/registerUser/R
 import type {
   RegisterUserUseCaseError,
   RegisterUserUseCaseOutput,
-} from '../application/useCases/registerUser/registerUser.types.js';
+} from '../application/useCases/registerUser/registerUser.dto.js';
 
 export interface RegisterUserControllerRequest {
   readonly name: string;
@@ -16,19 +16,23 @@ export interface RegisterUserControllerContext {
   readonly correlationId: string;
 }
 
+export interface RegisterUserControllerDeps {
+  readonly registerUserUseCase: RegisterUserUseCase;
+}
+
 /**
  * Turns a validated register payload into the use case call.
  * HTTP status and problem+json stay in the handler.
  */
 export class RegisterUserController {
-  constructor(private readonly registerUserUseCase: RegisterUserUseCase) {}
+  constructor(private readonly deps: RegisterUserControllerDeps) {}
 
   handle(
-    input: RegisterUserControllerRequest,
+    registration: RegisterUserControllerRequest,
     ctx: RegisterUserControllerContext,
   ): Promise<Result<RegisterUserUseCaseOutput, RegisterUserUseCaseError>> {
-    return this.registerUserUseCase.execute({
-      ...input,
+    return this.deps.registerUserUseCase.execute({
+      ...registration,
       correlationId: ctx.correlationId,
     });
   }

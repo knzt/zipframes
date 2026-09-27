@@ -7,7 +7,7 @@ A Clean Architecture de Robert C. Martin é a base. A regra que fica do livro é
 - `domain/` — entidades, value objects, eventos, erros e policies. Sem injeção. Sem `new` de infra.
 - `application/` — casos de uso e as interfaces (ports) que eles declaram. Só `import type` dos ports.
 - `interface-adapters/` — classes controller. Recebem o caso de uso. Não importam Prisma, S3, Fastify nem `main/`.
-- `infrastructure/` — classes dos drivers (Prisma, amqplib, Fastify, S3, ffmpeg). Recebem o cliente no construtor. Não importam factories nem `main/`.
+- `infrastructure/` — classes dos drivers (Prisma, amqplib, Fastify, S3, ffmpeg). Recebem um objeto `deps` no construtor. Não importam factories nem `main/`.
 
 `main/` é o composition root. É o único código que conhece port e concreto, e só na inicialização. O `new` das classes de `interface-adapters/` e `infrastructure/` acontece só nas factories em `main/factories/`. Nenhum arquivo se chama `compose.ts`: o processo sobe em `start.ts`.
 
@@ -17,9 +17,9 @@ Depois da inicialização, um pedido não procura a infraestrutura: ela já foi 
 main  →  interface-adapters / infrastructure  →  application  →  domain
 ```
 
-No `auth-service`, `index.ts` trata sinal e chama `startAuthService()`. `start.ts` abre Prisma e AMQP, deriva o `tokenIssuer` (também o JWKS), chama as factories de controller e dá `listen`. Não monta o grafo: a factory do controller chama a factory do caso de uso, que chama repositório, hasher e publisher. Os handlers em `main/handlers/` (`defineHandler` de `@zipframes/http`, ou o JWKS) validam o pedido, chamam o controller e devolvem `HttpReply`. `identityRoutes.ts` lista `method`/`path`/`openApi`/`handle`. `bindHttpRoutes` em `infrastructure/http/fastify` é o único `app.route`. Fastify fica em `infrastructure/http/fastify/` — não há `src/app.ts` nem `src/server.ts`. `HttpRouteDefinition`, `jsonSchemaOf` e o schema de problem+json ficam em `infrastructure/http/`, ao lado da pasta do driver. O controller em `interface-adapters/` chama `RegisterUserUseCase` ou `LoginUseCase` e devolve `Result`. O caso de uso chama `UserRepository`, `EventPublisher`, `PasswordHasher` e `TokenIssuer`. Essas chamadas caem nos objetos injetados — `PrismaUserRepository`, `AmqpEventPublisherGateway`, `BcryptPasswordHasher`, `Rs256TokenIssuer`. `randomUUID()` e `new Date()` entram direto no caso de uso e no gateway de evento; não há ports `Clock` / `IdGenerator`.
+No `auth-service`, `index.ts` trata sinal e chama `startAuthService()`. `start.ts` abre Prisma e AMQP, deriva o `tokenIssuer` (também o JWKS), chama as factories de controller e dá `listen`. Não monta o grafo: a factory do controller chama a factory do caso de uso, que chama repositório, hasher e publisher. Os handlers em `main/handlers/` (`defineHandler` de `@zipframes/http`, ou o JWKS) validam o pedido, chamam o controller e devolvem `HttpReply`. `identityRoutes.ts` lista `method`/`path`/`openApi`/`handle`. `bindHttpRoutes` em `infrastructure/http/fastify` é o único `app.route`. Fastify fica em `infrastructure/http/fastify/` — não há `src/app.ts` nem `src/server.ts`. `HttpRouteDefinition`, `jsonSchemaOf` e o schema de problem+json ficam em `infrastructure/http/`, ao lado da pasta do driver. O controller em `interface-adapters/` chama `RegisterUserUseCase` ou `LoginUseCase` e devolve `Result`. O caso de uso chama `UserRepository`, `EventPublisher`, `PasswordHasher` e `TokenIssuer`. Essas chamadas caem nos objetos injetados — `PrismaUserRepository`, `AmqpEventPublisherGateway`, `BcryptPasswordHasher`, `Rs256TokenIssuer`. O `User` gera o próprio id (`randomUUID`). `new Date()` entra no cadastro; o gateway de evento gera `eventId`. Não há ports `Clock` / `IdGenerator`.
 
-No `processor-worker` não há HTTP nem `handlers/`. O consumer AMQP em `infrastructure/messaging/amqplib` decodifica `video.uploaded` e chama o controller. `start.ts` abre AMQP e S3, chama `createEventPublisher(amqp)` uma vez, passa esse gateway a `createProcessUploadedVideoController({ s3, events, bucket, workDir, processingTimeoutMs, onDiscardOriginalFailed })` e ao consumer, e dá `consume`. A factory do controller chama a do caso de uso, que instancia storage, ffmpeg, zip e diretório de trabalho — o publisher já veio montado. O caso de uso chama `ObjectStorage`, `FrameExtractor`, `EventPublisher`, `ArchiveBuilder` e `WorkDirectory`. O cliente S3 nasce em `main/factories/externals/s3.ts` (`new S3Client`, `export type S3 = ReturnType<typeof createS3>`); o port é `new S3ObjectStorage(s3)` em `gateways/objectStorage.ts`, tipado com `S3`, não com `S3Client`. Probes de Compose e Kubernetes são exec (`kill -0 1`), não HTTP na 8081.
+No `processor-worker` não há HTTP nem `handlers/`. O consumer AMQP em `infrastructure/messaging/amqplib` decodifica `video.uploaded` e chama o controller. `start.ts` abre AMQP e S3, chama `createEventPublisherGateway(amqp)` uma vez, passa esse gateway a `createProcessUploadedVideoController({ s3, eventPublisher, bucket, workDir, processingTimeoutMs, onDiscardOriginalFailed })` e ao consumer, e dá `consume`. A factory do controller chama a do caso de uso, que instancia storage, ffmpeg, zip e diretório de trabalho — o publisher já veio montado. O caso de uso chama `ObjectStorage`, `FrameExtractor`, `EventPublisher`, `ArchiveBuilder` e `WorkDirectory`. O cliente S3 nasce em `main/factories/externals/s3.ts` (`new S3Client`, `export type S3 = ReturnType<typeof createS3>`); o port é `new S3ObjectStorageGateway({ s3, bucket })` em `gateways/objectStorageGateway.ts`, tipado com `S3`, não com `S3Client`. Probes de Compose e Kubernetes são exec (`kill -0 1`), não HTTP na 8081.
 
 O `index.ts` dos dois serviços trata sinal com um guard `stopping` para o shutdown não fechar o canal duas vezes. `runService()` em `@zipframes/core` é candidato a extrair esse laço quando aparecer o terceiro serviço.
 
@@ -56,7 +56,7 @@ O caso de uso fica em `application/useCases/`. O controller da borda fica em `in
 
 A pasta não se chama `ports/`. O nome daqui é `interfaces/`.
 
-Factories em `main/factories/` agrupam por responsabilidade. O arquivo chama o que ele dá `new`: `externals/s3.ts` → `new S3Client`; `gateways/objectStorage.ts` → `new S3ObjectStorage(s3)`. Endpoint novo: um arquivo em `use-cases/`, `controllers/` e (no auth) `handlers/`.
+Factories em `main/factories/` agrupam por responsabilidade. O arquivo e a função incluem o papel: `use-cases/loginUseCase.ts` → `createLoginUseCase`; `gateways/objectStorageGateway.ts` → `new S3ObjectStorageGateway({ s3, bucket })`. Endpoint novo: um arquivo em `use-cases/`, `controllers/` e (no auth) `handlers/`. Construtores recebem um objeto `deps` nomeado (`LoginUseCaseDeps`, `LoginControllerDeps`, …), não uma lista solta de parâmetros. Na borda da factory, o saco de clientes já abertos é `externalDeps`.
 
 #### Interfaces em `application/interfaces/`
 
@@ -72,18 +72,19 @@ Três categorias em `application/interfaces/`, espelhadas em `infrastructure/` e
 
 #### Nomenclatura
 
-Pastas em **camelCase**. Arquivos de classe e de interface usam o nome do tipo. A pasta já diz o papel (`repositories/`, `gateways/`, `services/`). Tipos que não são uma classe ficam em `*.types.ts`.
+Pastas em **camelCase**. Arquivos de classe e de interface usam o nome do tipo. A pasta já diz o papel (`repositories/`, `gateways/`, `services/`). Funções factory e classes concretas incluem o papel no nome (`createLoginUseCase`, `AmqpEventPublisherGateway`, `PrismaUserRepository`). Entrada e saída de caso de uso que são DTOs ficam em `*.dto.ts`. Alias que só reexportam um tipo de domínio ficam no próprio módulo do caso de uso.
 
-| Tipo        | Exemplo                                                                                                                               |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| Caso de uso | `application/useCases/registerUser/RegisterUserUseCase.ts`                                                                            |
-| Tipos       | `registerUser.types.ts` (ao lado do caso de uso): `RegisterUserUseCaseInput`, `RegisterUserUseCaseOutput`, `RegisterUserUseCaseError` |
-| Controller  | `interface-adapters/RegisterUserController.ts` (chama o caso de uso e devolve `Result`)                                               |
-| HTTP        | `main/handlers/` no auth; Fastify em `infrastructure/http/fastify/`; `bindHttpRoutes` encaminha `HttpReply`                           |
-| Repository  | `application/interfaces/repositories/UserRepository.ts`                                                                               |
-| Gateway     | `application/interfaces/gateways/ObjectStorage.ts`                                                                                    |
-| Service     | `application/interfaces/services/PasswordHasher.ts`                                                                                   |
-| Processo    | `main/start.ts` (não `compose.ts`)                                                                                                    |
+| Tipo        | Exemplo                                                                                                                             |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Caso de uso | `application/useCases/registerUser/RegisterUserUseCase.ts`                                                                          |
+| DTO         | `registerUser.dto.ts` (ao lado do caso de uso): `RegisterUserUseCaseInput`, `RegisterUserUseCaseOutput`, `RegisterUserUseCaseError` |
+| Factory     | `main/factories/use-cases/registerUserUseCase.ts` → `createRegisterUserUseCase`                                                     |
+| Controller  | `interface-adapters/RegisterUserController.ts` (chama o caso de uso e devolve `Result`)                                             |
+| HTTP        | `main/handlers/` no auth; Fastify em `infrastructure/http/fastify/`; `bindHttpRoutes` encaminha `HttpReply`                         |
+| Repository  | `application/interfaces/repositories/UserRepository.ts`                                                                             |
+| Gateway     | `application/interfaces/gateways/ObjectStorage.ts`; concreto `S3ObjectStorageGateway`                                               |
+| Service     | `application/interfaces/services/PasswordHasher.ts`                                                                                 |
+| Processo    | `main/start.ts` (não `compose.ts`)                                                                                                  |
 
 Cada subpasta pública de `domain/` e `application/` expõe um `index.ts` (barrel).
 
@@ -93,7 +94,7 @@ O código que importa um SDK mora em `src/infrastructure/`. A interface que esse
 
 Tudo o que pertence a um ORM fica na pasta desse repository. Para o Prisma, schema, migrations e o repositório concreto ficam juntos em `src/infrastructure/repositories/prisma/`. O `new PrismaClient` é a factory `main/factories/externals/prisma.ts` (`export type Prisma = ReturnType<typeof createPrisma>`). O ping de readiness fica ao lado dessa factory, não num `client.ts`.
 
-Tudo o que pertence ao amqplib fica em `src/infrastructure/messaging/amqplib/` (`connection.ts`, `topology.ts`; no worker também o consumer e o settle). A factory `main/factories/externals/amqplib.ts` abre a conexão uma vez em `start.ts` (`export type Amqplib = Awaited<ReturnType<typeof createAmqplib>>`).
+Tudo o que pertence ao amqplib fica em `src/infrastructure/messaging/amqplib/` (`connection.ts`, `amqpTopology.ts`; no worker também o consumer e o settle). `amqpTopology.ts` declara exchanges, filas e bindings que o processo afirma no broker ao subir — não é uma camada. A factory `main/factories/externals/amqplib.ts` abre a conexão uma vez em `start.ts` (`export type Amqplib = Awaited<ReturnType<typeof createAmqplib>>`).
 
 Tudo o que pertence ao Fastify fica em `src/infrastructure/http/fastify/` (`server.ts`, `bindHttpRoutes`, adapter, health, plugins). O catálogo de rotas (`HttpRouteDefinition`) e as schemas de OpenAPI/problem ficam em `infrastructure/http/`, ao lado da pasta do driver, porque não importam Fastify.
 

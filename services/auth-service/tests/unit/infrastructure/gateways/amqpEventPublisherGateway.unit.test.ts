@@ -12,7 +12,7 @@ describe('AmqpEventPublisherGateway', () => {
   it('publishes the envelope on the events exchange', async () => {
     const publish = vi.fn(async () => undefined);
     const publisher: Publisher = { publish };
-    const eventPublisher = new AmqpEventPublisherGateway(publisher);
+    const eventPublisher = new AmqpEventPublisherGateway({ publisher });
 
     await eventPublisher.publish({
       eventType: 'user.registered',

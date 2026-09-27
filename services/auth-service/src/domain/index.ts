@@ -1,8 +1,8 @@
 export {
   User,
-  asUserId,
+  brandUserId,
   type UserId,
-  type RegisterUserInput,
+  type RegisterUserProps,
   type PersistedUser,
 } from './entities/user.js';
 

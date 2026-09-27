@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import { ConflictError, ValidationError, err, ok } from '@zipframes/core';
 import type { Result } from '@zipframes/core';
 
@@ -13,7 +11,7 @@ import type {
   RegisterUserUseCaseError,
   RegisterUserUseCaseInput,
   RegisterUserUseCaseOutput,
-} from './registerUser.types.js';
+} from './registerUser.dto.js';
 
 export interface RegisterUserUseCaseDeps {
   readonly userRepository: UserRepository;
@@ -29,17 +27,16 @@ export class RegisterUserUseCase {
   constructor(private readonly deps: RegisterUserUseCaseDeps) {}
 
   async execute(
-    input: RegisterUserUseCaseInput,
+    registration: RegisterUserUseCaseInput,
   ): Promise<Result<RegisterUserUseCaseOutput, RegisterUserUseCaseError>> {
-    const password = createPassword(input.password);
+    const password = createPassword(registration.password);
     if (!password.ok) {
       return err(new ValidationError(password.error.code, password.error.message));
     }
 
     const user = User.create({
-      id: randomUUID(),
-      name: input.name,
-      email: input.email,
+      name: registration.name,
+      email: registration.email,
       now: new Date(),
     });
     if (!user.ok) {
@@ -53,10 +50,10 @@ export class RegisterUserUseCase {
 
     const passwordHash = await this.deps.passwordHasher.hash(password.value);
     const created = await this.deps.userRepository.create(
-      user.value.withPasswordHash(passwordHash),
+      user.value.attachPasswordHash(passwordHash),
     );
 
-    await this.publishUserRegistered(input.correlationId, created);
+    await this.publishUserRegistered(registration.correlationId, created);
 
     return ok({
       userId: created.id,

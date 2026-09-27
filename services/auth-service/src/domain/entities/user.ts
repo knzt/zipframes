@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { err, ok, ValidationError } from '@zipframes/core';
 import type { Brand, Result } from '@zipframes/core';
 import { Email, Name } from '@zipframes/value-objects';
@@ -7,10 +9,14 @@ import type { PasswordHash } from '../valueObjects/password.js';
 
 export type UserId = Brand<string, 'UserId'>;
 
-export const asUserId = (id: string): UserId => id as UserId;
+/**
+ * Compile-time brand only. Does not parse or validate the string; a
+ * persisted or freshly generated UUID is already a user id.
+ */
+export const brandUserId = (id: string): UserId => id as UserId;
 
-export interface RegisterUserInput {
-  readonly id: string;
+export interface RegisterUserProps {
+  readonly id?: string;
   readonly name: string;
   readonly email: string;
   readonly now: Date;
@@ -35,45 +41,46 @@ interface UserState {
 }
 
 /**
- * Identity user. Created with {@link User.create} when registering a new
- * identity, or rehydrated through {@link User.fromPersistence} after reading
- * from storage.
+ * Identity user. {@link User.create} validates name and email and owns the
+ * id. The password hash is attached once with {@link User.attachPasswordHash}
+ * after uniqueness is confirmed. Stored rows come back through
+ * {@link User.fromPersistence}, which already includes the hash.
  */
 export class User {
   private constructor(private readonly state: UserState) {}
 
   /**
-   * Validates name and email. The password hash is attached later with
-   * {@link User.withPasswordHash}, after uniqueness is confirmed, because
-   * hashing is infrastructure and must not run before validation.
+   * Validates name and email. Generates {@link randomUUID} when `id` is
+   * omitted. The hash is not set here: hashing is infrastructure and must
+   * not run before validation and the uniqueness check.
    */
-  static create(input: RegisterUserInput): Result<User, ValidationError> {
-    const name = Name.create(input.name);
+  static create(props: RegisterUserProps): Result<User, ValidationError> {
+    const name = Name.create(props.name);
     if (!name.ok) {
       return err(new ValidationError('INVALID_NAME', name.error.message));
     }
 
-    const email = Email.create(input.email);
+    const email = Email.create(props.email);
     if (!email.ok) {
       return err(new ValidationError('INVALID_EMAIL', email.error.message));
     }
 
     return ok(
       new User({
-        id: asUserId(input.id),
+        id: brandUserId(props.id ?? randomUUID()),
         name: name.value,
         email: email.value,
         passwordHash: asPasswordHash(''),
-        createdAt: input.now,
-        updatedAt: input.now,
+        createdAt: props.now,
+        updatedAt: props.now,
       }),
     );
   }
 
-  /** Rehydrates a user that was already validated and stored. */
+  /** Rehydrates a user that was already validated, hashed, and stored. */
   static fromPersistence(data: PersistedUser): User {
     return new User({
-      id: asUserId(data.id),
+      id: brandUserId(data.id),
       name: data.name,
       email: data.email,
       passwordHash: asPasswordHash(data.passwordHash),
@@ -82,7 +89,12 @@ export class User {
     });
   }
 
-  withPasswordHash(passwordHash: string): User {
+  /**
+   * The one way to put a bcrypt hash on a newly created user, after the
+   * hasher has run. Stored users already have a hash via
+   * {@link User.fromPersistence}.
+   */
+  attachPasswordHash(passwordHash: string): User {
     return new User({
       ...this.state,
       passwordHash: asPasswordHash(passwordHash),

@@ -1,7 +1,7 @@
 import type { RetryOptions } from '@zipframes/communication';
 import { computeBackoffMs } from '@zipframes/communication';
 
-import { UPLOADED_RETRY_QUEUE } from './topology.js';
+import { UPLOADED_RETRY_QUEUE } from './amqpTopology.js';
 
 export const ATTEMPT_HEADER = 'x-attempt';
 

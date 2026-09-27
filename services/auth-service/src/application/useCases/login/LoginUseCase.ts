@@ -5,7 +5,7 @@ import { Email } from '@zipframes/value-objects';
 import type { UserRepository } from '../../interfaces/repositories/UserRepository.js';
 import type { PasswordHasher } from '../../interfaces/services/PasswordHasher.js';
 import type { TokenIssuer } from '../../interfaces/services/TokenIssuer.js';
-import type { LoginUseCaseError, LoginUseCaseInput, LoginUseCaseOutput } from './login.types.js';
+import type { LoginUseCaseError, LoginUseCaseInput, LoginUseCaseOutput } from './login.dto.js';
 
 /**
  * The same error for every failure, on purpose: telling "no such email"
@@ -26,8 +26,10 @@ export interface LoginUseCaseDeps {
 export class LoginUseCase {
   constructor(private readonly deps: LoginUseCaseDeps) {}
 
-  async execute(input: LoginUseCaseInput): Promise<Result<LoginUseCaseOutput, LoginUseCaseError>> {
-    const email = Email.create(input.email);
+  async execute(
+    credentials: LoginUseCaseInput,
+  ): Promise<Result<LoginUseCaseOutput, LoginUseCaseError>> {
+    const email = Email.create(credentials.email);
     if (!email.ok) {
       return err(invalidCredentials);
     }
@@ -37,7 +39,7 @@ export class LoginUseCase {
       return err(invalidCredentials);
     }
 
-    const matches = await this.deps.passwordHasher.verify(input.password, user.passwordHash);
+    const matches = await this.deps.passwordHasher.verify(credentials.password, user.passwordHash);
     if (!matches) {
       return err(invalidCredentials);
     }

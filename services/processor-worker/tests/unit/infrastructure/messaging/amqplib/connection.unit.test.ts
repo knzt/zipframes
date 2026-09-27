@@ -8,7 +8,7 @@ import {
   createAmqpPing,
   createRabbitMqConnection,
 } from '../../../../../src/infrastructure/messaging/amqplib/connection.js';
-import { createProcessorTopology } from '../../../../../src/infrastructure/messaging/amqplib/topology.js';
+import { createProcessorAmqpTopology } from '../../../../../src/infrastructure/messaging/amqplib/amqpTopology.js';
 
 const retry = { maxAttempts: 5, baseDelayMs: 10, maxDelayMs: 100 };
 
@@ -269,7 +269,7 @@ describe('createRabbitMqConnection', () => {
   it('asserts topology including dead-letter arguments', async () => {
     const fake = createFakeBroker();
     const connection = await createRabbitMqConnection('amqp://localhost', fake.connect);
-    await connection.assertTopology(createProcessorTopology());
+    await connection.assertTopology(createProcessorAmqpTopology());
     expect(fake.channel.assertExchange).toHaveBeenCalled();
     expect(fake.channel.assertQueue).toHaveBeenCalledWith(
       'processor.video.uploaded',

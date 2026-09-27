@@ -5,16 +5,20 @@ import type {
   LoginUseCaseError,
   LoginUseCaseInput,
   LoginUseCaseOutput,
-} from '../application/useCases/login/login.types.js';
+} from '../application/useCases/login/login.dto.js';
+
+export interface LoginControllerDeps {
+  readonly loginUseCase: LoginUseCase;
+}
 
 /**
  * Turns a validated login payload into the use case call.
  * HTTP status, anti-enumeration and problem+json stay in the handler.
  */
 export class LoginController {
-  constructor(private readonly loginUseCase: LoginUseCase) {}
+  constructor(private readonly deps: LoginControllerDeps) {}
 
-  handle(input: LoginUseCaseInput): Promise<Result<LoginUseCaseOutput, LoginUseCaseError>> {
-    return this.loginUseCase.execute(input);
+  handle(credentials: LoginUseCaseInput): Promise<Result<LoginUseCaseOutput, LoginUseCaseError>> {
+    return this.deps.loginUseCase.execute(credentials);
   }
 }

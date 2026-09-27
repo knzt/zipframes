@@ -12,7 +12,7 @@ Consumir `video.uploaded`, extrair frames (1 fps, PNG), empacotar em zip (store)
 
 As dependências apontam para dentro. Os quatro anéis e o composition root estão em [layers.md](../layers.md).
 
-O consumer em `infrastructure/messaging/amqplib` lê `video.uploaded` e chama `ProcessUploadedVideoController`. O controller entrega o envelope já decodificado a `ProcessUploadedVideoUseCase`. O caso de uso chama `ObjectStorage`, `FrameExtractor` e `EventPublisher` (`application/interfaces/gateways/`) e `ArchiveBuilder` e `WorkDirectory` (`application/interfaces/services/`). `start.ts` abre AMQP e `new S3Client` (`externals/s3.ts`), chama `createEventPublisher(amqp)` uma vez e passa esse gateway a `createProcessUploadedVideoController({ s3, events, bucket, workDir, processingTimeoutMs, onDiscardOriginalFailed })` e ao consumer. A factory do caso de uso faz `new S3ObjectStorage(s3)`, ffmpeg, zip e diretório temporário. Não há `handlers/` HTTP. O consumer confirma, agenda nova tentativa ou envia à dead-letter a partir do desfecho. O caso de uso não importa o SDK da AWS, o ffmpeg nem o cliente AMQP.
+O consumer em `infrastructure/messaging/amqplib` lê `video.uploaded` e chama `ProcessUploadedVideoController`. O controller entrega o envelope já decodificado a `ProcessUploadedVideoUseCase`. O caso de uso chama `ObjectStorage`, `FrameExtractor` e `EventPublisher` (`application/interfaces/gateways/`) e `ArchiveBuilder` e `WorkDirectory` (`application/interfaces/services/`). `start.ts` abre AMQP e `new S3Client` (`externals/s3.ts`), chama `createEventPublisherGateway(amqp)` uma vez e passa esse gateway a `createProcessUploadedVideoController({ s3, eventPublisher, bucket, workDir, processingTimeoutMs, onDiscardOriginalFailed })` e ao consumer. A factory do caso de uso faz `new S3ObjectStorageGateway({ s3, bucket })`, ffmpeg, zip e diretório temporário. Não há `handlers/` HTTP. O consumer confirma, agenda nova tentativa ou envia à dead-letter a partir do desfecho. O caso de uso não importa o SDK da AWS, o ffmpeg nem o cliente AMQP.
 
 ```
 main  →  interface-adapters / infrastructure  →  application  →  domain
@@ -33,7 +33,7 @@ main  →  interface-adapters / infrastructure  →  application  →  domain
 | `gateways/` | `ObjectStorage`, `EventPublisher`, `FrameExtractor` (o trabalho sai do processo) |
 | `services/` | `ArchiveBuilder`, `WorkDirectory` (capacidade local)                             |
 
-`ObjectStorage` não inclui `ping`. `S3ObjectStorage` implementa `Pingable` à parte (ISP). Sem HTTP de readiness neste processo.
+`ObjectStorage` não inclui `ping`. `S3ObjectStorageGateway` implementa `Pingable` à parte (ISP). Sem HTTP de readiness neste processo.
 
 ## Mapa de pastas
 
@@ -45,8 +45,7 @@ processor-worker/src/
 │   └── index.ts
 ├── application/
 │   ├── useCases/processUploadedVideo/
-│   │   ├── ProcessUploadedVideoUseCase.ts
-│   │   └── processUploadedVideo.types.ts  ← reexporta `ProcessingJob` / `ProcessingResult` do domínio
+│   │   └── ProcessUploadedVideoUseCase.ts  ← input/output são `ProcessingJob` / `ProcessingResult` do domínio
 │   └── interfaces/
 │       ├── gateways/{ObjectStorage,EventPublisher,FrameExtractor}.ts
 │       └── services/{ArchiveBuilder,WorkDirectory}.ts
@@ -59,7 +58,7 @@ processor-worker/src/
 │   ├── services/
 │   │   ├── media/zipArchiveBuilder.service.ts
 │   │   └── filesystem/fsWorkDirectory.service.ts
-│   ├── messaging/amqplib/{connection.ts,topology.ts,videoUploadedConsumer.ts,amqpSettle.ts}
+│   ├── messaging/amqplib/{connection.ts,amqpTopology.ts,videoUploadedConsumer.ts,amqpSettle.ts}
 │   ├── observability/jobMetrics.ts
 │   └── loadEnvConfig.ts
 └── main/
@@ -80,7 +79,7 @@ Falhas usam `throw` com `retryable` (alinhado a `InfrastructureError` em `@zipfr
 
 Payloads de eventos de saída tipados com `@zipframes/schemas/processor-worker`.
 
-O exchange de eventos é `EVENT_EXCHANGE` de `@zipframes/schemas/shared`; `topology.ts` reexporta o nome.
+O exchange de eventos é `EVENT_EXCHANGE` de `@zipframes/schemas/shared`; `amqpTopology.ts` reexporta o nome e declara filas, exchanges e bindings que o worker afirma no broker.
 
 ```mermaid
 flowchart LR

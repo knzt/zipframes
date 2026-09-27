@@ -20,7 +20,7 @@ const createdUser = (
   if (!result.ok) {
     throw result.error;
   }
-  return result.value.withPasswordHash(passwordHash);
+  return result.value.attachPasswordHash(passwordHash);
 };
 
 describe('User.create', () => {
@@ -33,6 +33,21 @@ describe('User.create', () => {
     expect(user.passwordHash).toBe(passwordHash);
     expect(user.createdAt).toBe(validInput.now);
     expect(user.updatedAt).toBe(validInput.now);
+  });
+
+  it('generates its own id when none is given', () => {
+    const result = User.create({
+      name: validInput.name,
+      email: validInput.email,
+      now: validInput.now,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.value.id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    );
   });
 
   it('normalizes the email, so two accounts cannot differ only by case', () => {

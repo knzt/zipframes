@@ -17,7 +17,7 @@ describe('PrismaUserRepository.findByEmail', () => {
   it('queries with findUnique on email', async () => {
     const findUnique = vi.fn(async () => null);
     const prisma = { user: { findUnique, create: vi.fn() } };
-    const repository = new PrismaUserRepository(prisma as never);
+    const repository = new PrismaUserRepository({ prisma: prisma as never });
 
     await repository.findByEmail('ada@example.com');
 
@@ -32,7 +32,7 @@ describe('PrismaUserRepository.findByEmail', () => {
         create: vi.fn(),
       },
     };
-    const repository = new PrismaUserRepository(prisma as never);
+    const repository = new PrismaUserRepository({ prisma: prisma as never });
 
     await expect(repository.findByEmail(sampleUser.email)).resolves.toEqual(sampleUser);
   });
@@ -42,7 +42,7 @@ describe('PrismaUserRepository.create', () => {
   it('inserts the user and returns the persisted entity', async () => {
     const create = vi.fn(async ({ data }: { data: ReturnType<User['toJSON']> }) => data);
     const prisma = { user: { findUnique: vi.fn(), create } };
-    const repository = new PrismaUserRepository(prisma as never);
+    const repository = new PrismaUserRepository({ prisma: prisma as never });
 
     await expect(repository.create(sampleUser)).resolves.toEqual(sampleUser);
 
@@ -63,7 +63,7 @@ describe('PrismaUserRepository.create', () => {
         }),
       },
     };
-    const repository = new PrismaUserRepository(prisma as never);
+    const repository = new PrismaUserRepository({ prisma: prisma as never });
 
     await expect(repository.create(sampleUser)).rejects.toBe(prismaError);
   });

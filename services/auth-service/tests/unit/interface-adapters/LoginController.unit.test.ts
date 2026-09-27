@@ -7,7 +7,7 @@ import type { LoginUseCase } from '../../../src/application/useCases/login/Login
 const payload = { email: 'ada@example.com', password: 'senha1234' };
 
 const controllerFor = (execute: LoginUseCase['execute']): LoginController =>
-  new LoginController({ execute } as unknown as LoginUseCase);
+  new LoginController({ loginUseCase: { execute } as unknown as LoginUseCase });
 
 describe('LoginController', () => {
   it('forwards the payload to the use case', async () => {

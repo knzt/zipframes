@@ -14,8 +14,8 @@ import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { framesPackageObjectKey } from '../../src/domain/policies/framesPackage.js';
-import { S3ObjectStorage } from '../../src/infrastructure/gateways/storage/s3ObjectStorage.gateway.js';
-import { EVENT_EXCHANGE } from '../../src/infrastructure/messaging/amqplib/topology.js';
+import { S3ObjectStorageGateway } from '../../src/infrastructure/gateways/storage/s3ObjectStorage.gateway.js';
+import { EVENT_EXCHANGE } from '../../src/infrastructure/messaging/amqplib/amqpTopology.js';
 import { startWorker } from '../../src/main/start.js';
 import { useBundledFfmpeg } from '../support/ffmpeg-bin.js';
 
@@ -187,7 +187,7 @@ describe('processUploadedVideo message flow', () => {
   });
 
   it('treats a missing source object as a permanent SOURCE_MISSING failure', async () => {
-    const storage = new S3ObjectStorage(client, bucket);
+    const storage = new S3ObjectStorageGateway({ s3: client, bucket });
     const destination = path.join(tmpdir(), 'zf-missing-source.mp4');
 
     await expect(

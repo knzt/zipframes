@@ -1,7 +1,9 @@
 import type { VideoUploadedEvent } from '@zipframes/schemas/video-service';
 
-import type { ProcessUploadedVideoUseCase } from '../application/useCases/processUploadedVideo/ProcessUploadedVideoUseCase.js';
-import type { ProcessUploadedVideoUseCaseOutput } from '../application/useCases/processUploadedVideo/processUploadedVideo.types.js';
+import type {
+  ProcessUploadedVideoUseCase,
+  ProcessUploadedVideoUseCaseOutput,
+} from '../application/useCases/processUploadedVideo/ProcessUploadedVideoUseCase.js';
 
 export interface ProcessUploadedVideoControllerRequest {
   readonly event: VideoUploadedEvent;
@@ -10,18 +12,22 @@ export interface ProcessUploadedVideoControllerRequest {
 
 export type ProcessUploadedVideoControllerResponse = ProcessUploadedVideoUseCaseOutput;
 
+export interface ProcessUploadedVideoControllerDeps {
+  readonly processUploadedVideoUseCase: ProcessUploadedVideoUseCase;
+}
+
 /**
  * Turns an already decoded `video.uploaded` envelope into the use case call.
  * AMQP settlement stays in the consumer.
  */
 export class ProcessUploadedVideoController {
-  constructor(private readonly processUploadedVideoUseCase: ProcessUploadedVideoUseCase) {}
+  constructor(private readonly deps: ProcessUploadedVideoControllerDeps) {}
 
   handle(
     request: ProcessUploadedVideoControllerRequest,
   ): Promise<ProcessUploadedVideoControllerResponse> {
     const { event, attempt } = request;
-    return this.processUploadedVideoUseCase.execute({
+    return this.deps.processUploadedVideoUseCase.execute({
       videoId: event.payload.videoId,
       ownerId: event.payload.ownerId,
       sourceKey: event.payload.sourceKey,

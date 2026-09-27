@@ -6,26 +6,29 @@ import {
 } from '../../../application/useCases/registerUser/RegisterUserUseCase.js';
 import type { Amqplib } from '../externals/amqplib.js';
 import type { Prisma } from '../externals/prisma.js';
-import { createEventPublisher } from '../gateways/eventPublisher.js';
+import { createEventPublisherGateway } from '../gateways/eventPublisherGateway.js';
 import { createUserRepository } from '../repositories/userRepository.js';
 import { createPasswordHasher } from '../services/passwordHasher.js';
 
-export interface RegisterUserExternals {
+/** Clients opened once in `start.ts` and reused for this use case. */
+export interface RegisterUserExternalDeps {
   readonly prisma: Prisma;
   readonly amqp: Amqplib;
   readonly logger: Logger;
   readonly onPublishFailed?: RegisterUserUseCaseDeps['onPublishFailed'];
 }
 
-export const createRegisterUser = (externals: RegisterUserExternals): RegisterUserUseCase =>
+export const createRegisterUserUseCase = (
+  externalDeps: RegisterUserExternalDeps,
+): RegisterUserUseCase =>
   new RegisterUserUseCase({
-    userRepository: createUserRepository(externals.prisma),
+    userRepository: createUserRepository(externalDeps.prisma),
     passwordHasher: createPasswordHasher(),
-    eventPublisher: createEventPublisher(externals.amqp),
+    eventPublisher: createEventPublisherGateway(externalDeps.amqp),
     onPublishFailed:
-      externals.onPublishFailed ??
+      externalDeps.onPublishFailed ??
       ((error, details) => {
-        externals.logger.error('failed to publish user.registered', {
+        externalDeps.logger.error('failed to publish user.registered', {
           err: error,
           userId: details.userId,
           correlationId: details.correlationId,

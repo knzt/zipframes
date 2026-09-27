@@ -1,17 +1,17 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  createProcessorTopology,
+  createProcessorAmqpTopology,
   DLQ_QUEUE,
   DLX_EXCHANGE,
   EVENT_EXCHANGE,
   UPLOADED_QUEUE,
   UPLOADED_RETRY_QUEUE,
-} from '../../../../../src/infrastructure/messaging/amqplib/topology.js';
+} from '../../../../../src/infrastructure/messaging/amqplib/amqpTopology.js';
 
-describe('createProcessorTopology', () => {
+describe('createProcessorAmqpTopology', () => {
   it('returns expired wait-queue messages to the main queue and dead-letters the main queue', () => {
-    const topology = createProcessorTopology();
+    const topology = createProcessorAmqpTopology();
     const wait = topology.queues.find((queue) => queue.name === UPLOADED_RETRY_QUEUE);
     const main = topology.queues.find((queue) => queue.name === UPLOADED_QUEUE);
 

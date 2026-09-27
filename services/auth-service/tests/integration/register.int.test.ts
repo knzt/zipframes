@@ -4,7 +4,7 @@ import type { RabbitMqHandle } from '@zipframes/test-toolkit';
 import amqp, { type Channel, type GetMessage } from 'amqplib';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { EVENT_EXCHANGE } from '../../src/infrastructure/messaging/amqplib/topology.js';
+import { EVENT_EXCHANGE } from '../../src/infrastructure/messaging/amqplib/amqpTopology.js';
 import { createAmqplib, type Amqplib } from '../../src/main/factories/externals/amqplib.js';
 import { startIdentityApp } from '../support/identity-app.js';
 import type { IdentityApp } from '../support/identity-app.js';

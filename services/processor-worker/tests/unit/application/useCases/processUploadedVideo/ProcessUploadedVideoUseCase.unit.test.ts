@@ -40,7 +40,7 @@ const useCase = (deps: ProcessUploadedVideoUseCaseDeps): ProcessUploadedVideoUse
 
 describe('ProcessUploadedVideoUseCase', () => {
   it('publishes started and processed, then deletes the source', async () => {
-    const events = eventsDouble();
+    const eventPublisher = eventsDouble();
     const downloadToFile = vi.fn(async () => undefined);
     const uploadFile = vi.fn(async () => undefined);
     const deleteObject = vi.fn(async () => undefined);
@@ -50,11 +50,11 @@ describe('ProcessUploadedVideoUseCase', () => {
     const removeDir = vi.fn(async () => undefined);
 
     const processUploadedVideo = useCase({
-      storage: { downloadToFile, uploadFile, deleteObject },
-      extractor: { extract },
-      archive: { createZip },
+      objectStorage: { downloadToFile, uploadFile, deleteObject },
+      frameExtractor: { extract },
+      archiveBuilder: { createZip },
       workDirectory: { createTempDir, removeDir },
-      events,
+      eventPublisher,
       processingTimeoutMs: 60_000,
     });
 
@@ -79,52 +79,52 @@ describe('ProcessUploadedVideoUseCase', () => {
     );
     expect(deleteObject).toHaveBeenCalledWith(job.sourceKey);
     expect(removeDir).toHaveBeenCalledWith('/tmp/job');
-    expect(publishedTypes(events)).toEqual(['video.processing.started', 'video.processed']);
+    expect(publishedTypes(eventPublisher)).toEqual(['video.processing.started', 'video.processed']);
   });
 
   it('publishes video.failed on unprocessable media and returns media_rejected', async () => {
-    const events = eventsDouble();
+    const eventPublisher = eventsDouble();
     const processUploadedVideo = useCase({
-      storage: {
+      objectStorage: {
         downloadToFile: async () => {
           throw new InternalServerError('UNSUPPORTED_MEDIA', 'bad file');
         },
         uploadFile: async () => undefined,
         deleteObject: async () => undefined,
       },
-      extractor: { extract: async () => [] },
-      archive: { createZip: async () => undefined },
+      frameExtractor: { extract: async () => [] },
+      archiveBuilder: { createZip: async () => undefined },
       workDirectory: {
         createTempDir: async () => '/tmp/job',
         removeDir: async () => undefined,
       },
-      events,
+      eventPublisher,
       processingTimeoutMs: 60_000,
     });
 
     const processingResult = await processUploadedVideo.execute(job);
 
     expect(processingResult).toBe('media_rejected');
-    expect(publishedTypes(events)).toEqual(['video.processing.started', 'video.failed']);
+    expect(publishedTypes(eventPublisher)).toEqual(['video.processing.started', 'video.failed']);
   });
 
   it('rethrows retryable errors for the consumer to retry', async () => {
-    const events = eventsDouble();
+    const eventPublisher = eventsDouble();
     const processUploadedVideo = useCase({
-      storage: {
+      objectStorage: {
         downloadToFile: async () => {
           throw new UnavailableError('STORAGE_DOWNLOAD_FAILED', 'down');
         },
         uploadFile: async () => undefined,
         deleteObject: async () => undefined,
       },
-      extractor: { extract: async () => [] },
-      archive: { createZip: async () => undefined },
+      frameExtractor: { extract: async () => [] },
+      archiveBuilder: { createZip: async () => undefined },
       workDirectory: {
         createTempDir: async () => '/tmp/job',
         removeDir: async () => undefined,
       },
-      events,
+      eventPublisher,
       processingTimeoutMs: 60_000,
     });
 
@@ -132,13 +132,13 @@ describe('ProcessUploadedVideoUseCase', () => {
       retryable: true,
       code: 'STORAGE_DOWNLOAD_FAILED',
     });
-    expect(publishedTypes(events)).toEqual(['video.processing.started']);
+    expect(publishedTypes(eventPublisher)).toEqual(['video.processing.started']);
   });
 
   it('aborts via AbortSignal on timeout and cleans up the work dir', async () => {
     const removeDir = vi.fn(async () => undefined);
     const processUploadedVideo = useCase({
-      storage: {
+      objectStorage: {
         downloadToFile: async (_key, _path, signal) => {
           await new Promise<void>((_resolve, reject) => {
             signal?.addEventListener('abort', () => {
@@ -149,13 +149,13 @@ describe('ProcessUploadedVideoUseCase', () => {
         uploadFile: async () => undefined,
         deleteObject: async () => undefined,
       },
-      extractor: { extract: async () => [] },
-      archive: { createZip: async () => undefined },
+      frameExtractor: { extract: async () => [] },
+      archiveBuilder: { createZip: async () => undefined },
       workDirectory: {
         createTempDir: async () => '/tmp/job',
         removeDir,
       },
-      events: { publish: vi.fn(async () => undefined) },
+      eventPublisher: { publish: vi.fn(async () => undefined) },
       processingTimeoutMs: 20,
     });
 
@@ -168,20 +168,20 @@ describe('ProcessUploadedVideoUseCase', () => {
   it('invokes onDiscardOriginalFailed when cleanup delete fails', async () => {
     const onDiscardOriginalFailed = vi.fn();
     const processUploadedVideo = useCase({
-      storage: {
+      objectStorage: {
         downloadToFile: async () => undefined,
         uploadFile: async () => undefined,
         deleteObject: async () => {
           throw new Error('delete boom');
         },
       },
-      extractor: { extract: async () => ['/tmp/frame_0001.png'] },
-      archive: { createZip: async () => undefined },
+      frameExtractor: { extract: async () => ['/tmp/frame_0001.png'] },
+      archiveBuilder: { createZip: async () => undefined },
       workDirectory: {
         createTempDir: async () => '/tmp/job',
         removeDir: async () => undefined,
       },
-      events: { publish: vi.fn(async () => undefined) },
+      eventPublisher: { publish: vi.fn(async () => undefined) },
       processingTimeoutMs: 60_000,
       onDiscardOriginalFailed,
     });
@@ -192,21 +192,21 @@ describe('ProcessUploadedVideoUseCase', () => {
   });
 
   it('rejects a video that yields no frames and deletes the source', async () => {
-    const events = eventsDouble();
+    const eventPublisher = eventsDouble();
     const deleteObject = vi.fn(async () => undefined);
     const processUploadedVideo = useCase({
-      storage: {
+      objectStorage: {
         downloadToFile: async () => undefined,
         uploadFile: async () => undefined,
         deleteObject,
       },
-      extractor: { extract: async () => [] },
-      archive: { createZip: async () => undefined },
+      frameExtractor: { extract: async () => [] },
+      archiveBuilder: { createZip: async () => undefined },
       workDirectory: {
         createTempDir: async () => '/tmp/job',
         removeDir: async () => undefined,
       },
-      events,
+      eventPublisher,
       processingTimeoutMs: 60_000,
     });
 
@@ -214,26 +214,26 @@ describe('ProcessUploadedVideoUseCase', () => {
 
     expect(processingResult).toBe('media_rejected');
     expect(deleteObject).toHaveBeenCalledWith(job.sourceKey);
-    expect(publishedTypes(events)).toEqual(['video.processing.started', 'video.failed']);
-    const failed = events.publish.mock.calls[1]?.[0] as EventPublisherInput;
+    expect(publishedTypes(eventPublisher)).toEqual(['video.processing.started', 'video.failed']);
+    const failed = eventPublisher.publish.mock.calls[1]?.[0] as EventPublisherInput;
     expect(failed.payload).toMatchObject({ errorCode: 'NO_FRAMES' });
   });
 
   it('stores an extensionless upload as original.bin', async () => {
     const downloadToFile = vi.fn(async () => undefined);
     const processUploadedVideo = useCase({
-      storage: {
+      objectStorage: {
         downloadToFile,
         uploadFile: async () => undefined,
         deleteObject: async () => undefined,
       },
-      extractor: { extract: async () => ['/tmp/frame_0001.png'] },
-      archive: { createZip: async () => undefined },
+      frameExtractor: { extract: async () => ['/tmp/frame_0001.png'] },
+      archiveBuilder: { createZip: async () => undefined },
       workDirectory: {
         createTempDir: async () => '/tmp/job',
         removeDir: async () => undefined,
       },
-      events: eventsDouble(),
+      eventPublisher: eventsDouble(),
       processingTimeoutMs: 60_000,
     });
 
@@ -249,18 +249,18 @@ describe('ProcessUploadedVideoUseCase', () => {
   it('lowercases the stored original extension', async () => {
     const downloadToFile = vi.fn(async () => undefined);
     const processUploadedVideo = useCase({
-      storage: {
+      objectStorage: {
         downloadToFile,
         uploadFile: async () => undefined,
         deleteObject: async () => undefined,
       },
-      extractor: { extract: async () => ['/tmp/frame_0001.png'] },
-      archive: { createZip: async () => undefined },
+      frameExtractor: { extract: async () => ['/tmp/frame_0001.png'] },
+      archiveBuilder: { createZip: async () => undefined },
       workDirectory: {
         createTempDir: async () => '/tmp/job',
         removeDir: async () => undefined,
       },
-      events: eventsDouble(),
+      eventPublisher: eventsDouble(),
       processingTimeoutMs: 60_000,
     });
 
@@ -274,22 +274,22 @@ describe('ProcessUploadedVideoUseCase', () => {
   });
 
   it('rethrows an unexpected error as retryable and does not publish video.failed', async () => {
-    const events = eventsDouble();
+    const eventPublisher = eventsDouble();
     const processUploadedVideo = useCase({
-      storage: {
+      objectStorage: {
         downloadToFile: async () => {
           throw new Error('disk full');
         },
         uploadFile: async () => undefined,
         deleteObject: async () => undefined,
       },
-      extractor: { extract: async () => [] },
-      archive: { createZip: async () => undefined },
+      frameExtractor: { extract: async () => [] },
+      archiveBuilder: { createZip: async () => undefined },
       workDirectory: {
         createTempDir: async () => '/tmp/job',
         removeDir: async () => undefined,
       },
-      events,
+      eventPublisher,
       processingTimeoutMs: 60_000,
     });
 
@@ -298,12 +298,12 @@ describe('ProcessUploadedVideoUseCase', () => {
       code: 'UNEXPECTED',
       message: 'disk full',
     });
-    expect(publishedTypes(events)).toEqual(['video.processing.started']);
+    expect(publishedTypes(eventPublisher)).toEqual(['video.processing.started']);
   });
 
   it('wraps a generic error as PROCESSING_TIMEOUT once the deadline has fired', async () => {
     const processUploadedVideo = useCase({
-      storage: {
+      objectStorage: {
         downloadToFile: async (_key, _path, signal) => {
           await new Promise<void>((_resolve, reject) => {
             signal?.addEventListener('abort', () => {
@@ -314,13 +314,13 @@ describe('ProcessUploadedVideoUseCase', () => {
         uploadFile: async () => undefined,
         deleteObject: async () => undefined,
       },
-      extractor: { extract: async () => [] },
-      archive: { createZip: async () => undefined },
+      frameExtractor: { extract: async () => [] },
+      archiveBuilder: { createZip: async () => undefined },
       workDirectory: {
         createTempDir: async () => '/tmp/job',
         removeDir: async () => undefined,
       },
-      events: eventsDouble(),
+      eventPublisher: eventsDouble(),
       processingTimeoutMs: 20,
     });
 

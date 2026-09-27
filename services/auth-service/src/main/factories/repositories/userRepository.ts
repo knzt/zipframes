@@ -2,4 +2,4 @@ import { PrismaUserRepository } from '../../../infrastructure/repositories/prism
 import type { Prisma } from '../externals/prisma.js';
 
 export const createUserRepository = (prisma: Prisma): PrismaUserRepository =>
-  new PrismaUserRepository(prisma);
+  new PrismaUserRepository({ prisma });

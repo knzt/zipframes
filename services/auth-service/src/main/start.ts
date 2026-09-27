@@ -6,9 +6,9 @@ import { bindHttpRoutes } from '../infrastructure/http/fastify/bindHttpRoutes.js
 import { registerHealthRoutes } from '../infrastructure/http/fastify/health.routes.js';
 import { createHttpServer } from '../infrastructure/http/fastify/server.js';
 import { loadConfig } from '../infrastructure/loadEnvConfig.js';
-import { assertTopology } from '../infrastructure/messaging/amqplib/topology.js';
-import { createLoginController } from './factories/controllers/login.js';
-import { createRegisterUserController } from './factories/controllers/registerUser.js';
+import { assertAmqpTopology } from '../infrastructure/messaging/amqplib/amqpTopology.js';
+import { createLoginController } from './factories/controllers/loginController.js';
+import { createRegisterUserController } from './factories/controllers/registerUserController.js';
 import { createAmqplib, createAmqpPing } from './factories/externals/amqplib.js';
 import { createPrisma, createPrismaPing } from './factories/externals/prisma.js';
 import { createTokenIssuer } from './factories/services/tokenIssuer.js';
@@ -41,7 +41,7 @@ export const startAuthService = async (): Promise<{ stop: () => Promise<void> }>
 
     const amqp = await createAmqplib(config.amqpUrl);
     closers.push(() => amqp.close());
-    await assertTopology(amqp.channel);
+    await assertAmqpTopology(amqp.channel);
 
     const app = await createHttpServer({ corsOrigin: config.corsOrigin, logger });
     bindHttpRoutes(
