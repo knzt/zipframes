@@ -16,22 +16,18 @@ export interface RegisterUserControllerContext {
   readonly correlationId: string;
 }
 
-export interface RegisterUserControllerDeps {
-  readonly registerUserUseCase: RegisterUserUseCase;
-}
-
 /**
  * Turns a validated register payload into the use case call.
  * HTTP status and problem+json stay in the handler.
  */
 export class RegisterUserController {
-  constructor(private readonly deps: RegisterUserControllerDeps) {}
+  constructor(private readonly registerUserUseCase: RegisterUserUseCase) {}
 
   handle(
     registration: RegisterUserControllerRequest,
     ctx: RegisterUserControllerContext,
   ): Promise<Result<RegisterUserUseCaseOutput, RegisterUserUseCaseError>> {
-    return this.deps.registerUserUseCase.execute({
+    return this.registerUserUseCase.execute({
       ...registration,
       correlationId: ctx.correlationId,
     });

@@ -7,18 +7,14 @@ import type {
   LoginUseCaseOutput,
 } from '../application/useCases/login/login.dto.js';
 
-export interface LoginControllerDeps {
-  readonly loginUseCase: LoginUseCase;
-}
-
 /**
  * Turns a validated login payload into the use case call.
  * HTTP status, anti-enumeration and problem+json stay in the handler.
  */
 export class LoginController {
-  constructor(private readonly deps: LoginControllerDeps) {}
+  constructor(private readonly loginUseCase: LoginUseCase) {}
 
   handle(credentials: LoginUseCaseInput): Promise<Result<LoginUseCaseOutput, LoginUseCaseError>> {
-    return this.deps.loginUseCase.execute(credentials);
+    return this.loginUseCase.execute(credentials);
   }
 }

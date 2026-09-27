@@ -6,7 +6,4 @@ import {
 
 export const createRegisterUserController = (
   externalDeps: RegisterUserExternalDeps,
-): RegisterUserController =>
-  new RegisterUserController({
-    registerUserUseCase: createRegisterUserUseCase(externalDeps),
-  });
+): RegisterUserController => new RegisterUserController(createRegisterUserUseCase(externalDeps));

@@ -16,11 +16,7 @@ export const createTokenIssuer = async (
 ): Promise<{ tokenIssuer: Rs256TokenIssuer; keys: RsaKeyMaterial }> => {
   const keys = await deriveRsaKeyMaterial(tokenIssuerConfig.privateKeyPem, tokenIssuerConfig.kid);
   return {
-    tokenIssuer: new Rs256TokenIssuer({
-      keys,
-      issuer: tokenIssuerConfig.issuer,
-      audience: tokenIssuerConfig.audience,
-    }),
+    tokenIssuer: new Rs256TokenIssuer(keys, tokenIssuerConfig.issuer, tokenIssuerConfig.audience),
     keys,
   };
 };

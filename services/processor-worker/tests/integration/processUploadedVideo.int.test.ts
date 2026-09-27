@@ -187,7 +187,7 @@ describe('processUploadedVideo message flow', () => {
   });
 
   it('treats a missing source object as a permanent SOURCE_MISSING failure', async () => {
-    const storage = new S3ObjectStorageGateway({ s3: client, bucket });
+    const storage = new S3ObjectStorageGateway(client, bucket);
     const destination = path.join(tmpdir(), 'zf-missing-source.mp4');
 
     await expect(

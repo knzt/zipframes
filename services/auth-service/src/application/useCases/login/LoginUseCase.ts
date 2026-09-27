@@ -17,14 +17,12 @@ export const invalidCredentials = new UnauthorizedError(
   'invalid email or password',
 );
 
-export interface LoginUseCaseDeps {
-  readonly userRepository: UserRepository;
-  readonly passwordHasher: PasswordHasher;
-  readonly tokenIssuer: TokenIssuer;
-}
-
 export class LoginUseCase {
-  constructor(private readonly deps: LoginUseCaseDeps) {}
+  constructor(
+    private readonly userRepository: UserRepository,
+    private readonly passwordHasher: PasswordHasher,
+    private readonly tokenIssuer: TokenIssuer,
+  ) {}
 
   async execute(
     credentials: LoginUseCaseInput,
@@ -34,17 +32,17 @@ export class LoginUseCase {
       return err(invalidCredentials);
     }
 
-    const user = await this.deps.userRepository.findByEmail(email.value);
+    const user = await this.userRepository.findByEmail(email.value);
     if (user === null) {
       return err(invalidCredentials);
     }
 
-    const matches = await this.deps.passwordHasher.verify(credentials.password, user.passwordHash);
+    const matches = await this.passwordHasher.verify(credentials.password, user.passwordHash);
     if (!matches) {
       return err(invalidCredentials);
     }
 
-    const { token, expiresInSeconds } = await this.deps.tokenIssuer.issue(user.id);
+    const { token, expiresInSeconds } = await this.tokenIssuer.issue(user.id);
 
     return ok({
       accessToken: token,

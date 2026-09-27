@@ -93,30 +93,24 @@ const classifyFailure = (
   );
 };
 
-export interface ProcessUploadedVideoUseCaseDeps {
-  readonly objectStorage: ObjectStorage;
-  readonly frameExtractor: FrameExtractor;
-  readonly archiveBuilder: ArchiveBuilder;
-  readonly workDirectory: WorkDirectory;
-  readonly eventPublisher: EventPublisher;
-  readonly processingTimeoutMs: number;
-  readonly onDiscardOriginalFailed?: (
-    job: ProcessUploadedVideoUseCaseInput,
-    error: unknown,
-  ) => void;
-}
-
 export class ProcessUploadedVideoUseCase {
-  constructor(private readonly deps: ProcessUploadedVideoUseCaseDeps) {}
+  constructor(
+    private readonly objectStorage: ObjectStorage,
+    private readonly frameExtractor: FrameExtractor,
+    private readonly archiveBuilder: ArchiveBuilder,
+    private readonly workDirectory: WorkDirectory,
+    private readonly eventPublisher: EventPublisher,
+    private readonly processingTimeoutMs: number,
+    private readonly onDiscardOriginalFailed?: (
+      job: ProcessUploadedVideoUseCaseInput,
+      error: unknown,
+    ) => void,
+  ) {}
 
   async execute(job: ProcessUploadedVideoUseCaseInput): Promise<ProcessUploadedVideoUseCaseOutput> {
-    const workspace = await openJobWorkspace(
-      this.deps.workDirectory,
-      job.videoId,
-      job.originalFileName,
-    );
+    const workspace = await openJobWorkspace(this.workDirectory, job.videoId, job.originalFileName);
     const startedAt = new Date().getTime();
-    const deadline = startDeadline(this.deps.processingTimeoutMs);
+    const deadline = startDeadline(this.processingTimeoutMs);
 
     try {
       await this.publishProcessingStarted(job);
@@ -125,7 +119,7 @@ export class ProcessUploadedVideoUseCase {
       await this.discardOriginalVideo(job);
       return 'frames_packaged';
     } catch (error) {
-      const failure = classifyFailure(error, deadline.timedOut(), this.deps.processingTimeoutMs);
+      const failure = classifyFailure(error, deadline.timedOut(), this.processingTimeoutMs);
       if (!failure.retryable) {
         await this.publishMediaRejected(job, failure);
         await this.discardOriginalVideo(job);
@@ -134,12 +128,12 @@ export class ProcessUploadedVideoUseCase {
       throw failure;
     } finally {
       deadline.cancel();
-      await this.deps.workDirectory.removeDir(workspace.rootDir);
+      await this.workDirectory.removeDir(workspace.rootDir);
     }
   }
 
   private async publishProcessingStarted(job: ProcessUploadedVideoUseCaseInput): Promise<void> {
-    await this.deps.eventPublisher.publish({
+    await this.eventPublisher.publish({
       eventType: 'video.processing.started',
       correlationId: job.correlationId,
       payload: { videoId: job.videoId, attempt: job.attempt },
@@ -151,18 +145,14 @@ export class ProcessUploadedVideoUseCase {
     workspace: JobWorkspace,
     signal: AbortSignal,
   ): Promise<void> {
-    await this.deps.objectStorage.downloadToFile(
-      job.sourceKey,
-      workspace.originalVideoPath,
-      signal,
-    );
+    await this.objectStorage.downloadToFile(job.sourceKey, workspace.originalVideoPath, signal);
   }
 
   private async extractFrames(
     workspace: JobWorkspace,
     signal: AbortSignal,
   ): Promise<readonly string[]> {
-    const framePaths = await this.deps.frameExtractor.extract(
+    const framePaths = await this.frameExtractor.extract(
       workspace.originalVideoPath,
       workspace.framesDirectory,
       signal,
@@ -179,10 +169,10 @@ export class ProcessUploadedVideoUseCase {
     framePaths: readonly string[],
     signal: AbortSignal,
   ): Promise<FramesPackageReady> {
-    await this.deps.archiveBuilder.createZip(framePaths, workspace.framesPackagePath);
+    await this.archiveBuilder.createZip(framePaths, workspace.framesPackagePath);
     ensureStillRunning(signal);
     const objectKey = framesPackageObjectKey(job.ownerId, job.videoId);
-    await this.deps.objectStorage.uploadFile(
+    await this.objectStorage.uploadFile(
       objectKey,
       workspace.framesPackagePath,
       'application/zip',
@@ -197,7 +187,7 @@ export class ProcessUploadedVideoUseCase {
     startedAt: number,
   ): Promise<void> {
     const durationMs = Math.max(0, new Date().getTime() - startedAt);
-    await this.deps.eventPublisher.publish({
+    await this.eventPublisher.publish({
       eventType: 'video.processed',
       correlationId: job.correlationId,
       payload: {
@@ -213,7 +203,7 @@ export class ProcessUploadedVideoUseCase {
     job: ProcessUploadedVideoUseCaseInput,
     failure: InfrastructureError,
   ): Promise<void> {
-    await this.deps.eventPublisher.publish({
+    await this.eventPublisher.publish({
       eventType: 'video.failed',
       correlationId: job.correlationId,
       payload: {
@@ -228,9 +218,9 @@ export class ProcessUploadedVideoUseCase {
 
   private async discardOriginalVideo(job: ProcessUploadedVideoUseCaseInput): Promise<void> {
     try {
-      await this.deps.objectStorage.deleteObject(job.sourceKey);
+      await this.objectStorage.deleteObject(job.sourceKey);
     } catch (error) {
-      this.deps.onDiscardOriginalFailed?.(job, error);
+      this.onDiscardOriginalFailed?.(job, error);
     }
   }
 

@@ -1,9 +1,6 @@
 import type { Logger } from '@zipframes/logger';
 
-import {
-  RegisterUserUseCase,
-  type RegisterUserUseCaseDeps,
-} from '../../../application/useCases/registerUser/RegisterUserUseCase.js';
+import { RegisterUserUseCase } from '../../../application/useCases/registerUser/RegisterUserUseCase.js';
 import type { Amqplib } from '../externals/amqplib.js';
 import type { Prisma } from '../externals/prisma.js';
 import { createEventPublisherGateway } from '../gateways/eventPublisherGateway.js';
@@ -15,18 +12,20 @@ export interface RegisterUserExternalDeps {
   readonly prisma: Prisma;
   readonly amqp: Amqplib;
   readonly logger: Logger;
-  readonly onPublishFailed?: RegisterUserUseCaseDeps['onPublishFailed'];
+  readonly onPublishFailed?: (
+    error: unknown,
+    details: { readonly userId: string; readonly correlationId: string },
+  ) => void;
 }
 
 export const createRegisterUserUseCase = (
   externalDeps: RegisterUserExternalDeps,
 ): RegisterUserUseCase =>
-  new RegisterUserUseCase({
-    userRepository: createUserRepository(externalDeps.prisma),
-    passwordHasher: createPasswordHasher(),
-    eventPublisher: createEventPublisherGateway(externalDeps.amqp),
-    onPublishFailed:
-      externalDeps.onPublishFailed ??
+  new RegisterUserUseCase(
+    createUserRepository(externalDeps.prisma),
+    createPasswordHasher(),
+    createEventPublisherGateway(externalDeps.amqp),
+    externalDeps.onPublishFailed ??
       ((error, details) => {
         externalDeps.logger.error('failed to publish user.registered', {
           err: error,
@@ -34,4 +33,4 @@ export const createRegisterUserUseCase = (
           correlationId: details.correlationId,
         });
       }),
-  });
+  );

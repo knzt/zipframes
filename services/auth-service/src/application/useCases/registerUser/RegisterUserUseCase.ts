@@ -13,18 +13,16 @@ import type {
   RegisterUserUseCaseOutput,
 } from './registerUser.dto.js';
 
-export interface RegisterUserUseCaseDeps {
-  readonly userRepository: UserRepository;
-  readonly passwordHasher: PasswordHasher;
-  readonly eventPublisher: EventPublisher;
-  readonly onPublishFailed?: (
-    error: unknown,
-    details: { readonly userId: string; readonly correlationId: string },
-  ) => void;
-}
-
 export class RegisterUserUseCase {
-  constructor(private readonly deps: RegisterUserUseCaseDeps) {}
+  constructor(
+    private readonly userRepository: UserRepository,
+    private readonly passwordHasher: PasswordHasher,
+    private readonly eventPublisher: EventPublisher,
+    private readonly onPublishFailed?: (
+      error: unknown,
+      details: { readonly userId: string; readonly correlationId: string },
+    ) => void,
+  ) {}
 
   async execute(
     registration: RegisterUserUseCaseInput,
@@ -43,15 +41,13 @@ export class RegisterUserUseCase {
       return err(user.error);
     }
 
-    const existing = await this.deps.userRepository.findByEmail(user.value.email);
+    const existing = await this.userRepository.findByEmail(user.value.email);
     if (existing !== null) {
       return err(new ConflictError('EMAIL_TAKEN', 'email is already registered'));
     }
 
-    const passwordHash = await this.deps.passwordHasher.hash(password.value);
-    const created = await this.deps.userRepository.create(
-      user.value.attachPasswordHash(passwordHash),
-    );
+    const passwordHash = await this.passwordHasher.hash(password.value);
+    const created = await this.userRepository.create(user.value.attachPasswordHash(passwordHash));
 
     await this.publishUserRegistered(registration.correlationId, created);
 
@@ -64,13 +60,13 @@ export class RegisterUserUseCase {
 
   private async publishUserRegistered(correlationId: string, user: User): Promise<void> {
     try {
-      await this.deps.eventPublisher.publish({
+      await this.eventPublisher.publish({
         eventType: 'user.registered',
         correlationId,
         payload: userRegisteredFrom(user),
       });
     } catch (error) {
-      this.deps.onPublishFailed?.(error, {
+      this.onPublishFailed?.(error, {
         userId: user.id,
         correlationId,
       });

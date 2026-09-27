@@ -7,6 +7,4 @@ import {
 export const createProcessUploadedVideoController = (
   externalDeps: ProcessUploadedVideoExternalDeps,
 ): ProcessUploadedVideoController =>
-  new ProcessUploadedVideoController({
-    processUploadedVideoUseCase: createProcessUploadedVideoUseCase(externalDeps),
-  });
+  new ProcessUploadedVideoController(createProcessUploadedVideoUseCase(externalDeps));

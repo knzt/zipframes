@@ -1,7 +1,7 @@
 import type { EventPublisher } from '../../../application/interfaces/gateways/EventPublisher.js';
 import {
   ProcessUploadedVideoUseCase,
-  type ProcessUploadedVideoUseCaseDeps,
+  type ProcessUploadedVideoUseCaseInput,
 } from '../../../application/useCases/processUploadedVideo/ProcessUploadedVideoUseCase.js';
 import type { S3 } from '../externals/s3.js';
 import { createFrameExtractorGateway } from '../gateways/frameExtractorGateway.js';
@@ -16,23 +16,24 @@ export interface ProcessUploadedVideoExternalDeps {
   readonly bucket: string;
   readonly workDir: string;
   readonly processingTimeoutMs: number;
-  readonly onDiscardOriginalFailed?: ProcessUploadedVideoUseCaseDeps['onDiscardOriginalFailed'];
+  readonly onDiscardOriginalFailed?: (
+    job: ProcessUploadedVideoUseCaseInput,
+    error: unknown,
+  ) => void;
 }
 
 export const createProcessUploadedVideoUseCase = (
   externalDeps: ProcessUploadedVideoExternalDeps,
 ): ProcessUploadedVideoUseCase =>
-  new ProcessUploadedVideoUseCase({
-    objectStorage: createObjectStorageGateway({
+  new ProcessUploadedVideoUseCase(
+    createObjectStorageGateway({
       s3: externalDeps.s3,
       bucket: externalDeps.bucket,
     }),
-    frameExtractor: createFrameExtractorGateway(),
-    archiveBuilder: createArchiveBuilder(),
-    workDirectory: createWorkDirectory(externalDeps.workDir),
-    eventPublisher: externalDeps.eventPublisher,
-    processingTimeoutMs: externalDeps.processingTimeoutMs,
-    ...(externalDeps.onDiscardOriginalFailed === undefined
-      ? {}
-      : { onDiscardOriginalFailed: externalDeps.onDiscardOriginalFailed }),
-  });
+    createFrameExtractorGateway(),
+    createArchiveBuilder(),
+    createWorkDirectory(externalDeps.workDir),
+    externalDeps.eventPublisher,
+    externalDeps.processingTimeoutMs,
+    externalDeps.onDiscardOriginalFailed,
+  );

@@ -10,7 +10,7 @@ describe('AmqpEventPublisherGateway', () => {
   it('publishes the envelope on the events exchange', async () => {
     const publish = vi.fn(async () => undefined);
     const publisher: Publisher = { publish };
-    const events = new AmqpEventPublisherGateway({ publisher });
+    const events = new AmqpEventPublisherGateway(publisher);
 
     await events.publish({
       eventType: 'video.processing.started',

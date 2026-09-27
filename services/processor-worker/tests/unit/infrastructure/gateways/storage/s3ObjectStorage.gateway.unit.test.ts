@@ -14,7 +14,7 @@ const config = {
 };
 
 const storageFor = (client: Pick<S3Client, 'send'>): S3ObjectStorageGateway =>
-  new S3ObjectStorageGateway({ s3: client as S3Client, bucket: config.bucket });
+  new S3ObjectStorageGateway(client as S3Client, config.bucket);
 
 const directories: string[] = [];
 

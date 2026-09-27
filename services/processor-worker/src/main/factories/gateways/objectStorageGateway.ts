@@ -6,6 +6,7 @@ export interface ObjectStorageGatewayDeps {
   readonly bucket: string;
 }
 
-export const createObjectStorageGateway = (
-  deps: ObjectStorageGatewayDeps,
-): S3ObjectStorageGateway => new S3ObjectStorageGateway(deps);
+export const createObjectStorageGateway = ({
+  s3,
+  bucket,
+}: ObjectStorageGatewayDeps): S3ObjectStorageGateway => new S3ObjectStorageGateway(s3, bucket);

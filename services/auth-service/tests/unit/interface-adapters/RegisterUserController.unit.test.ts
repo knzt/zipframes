@@ -8,9 +8,7 @@ const correlationId = 'corr-register';
 const payload = { name: 'Ada Lovelace', email: 'ada@example.com', password: 'senha1234' };
 
 const controllerFor = (execute: RegisterUserUseCase['execute']): RegisterUserController =>
-  new RegisterUserController({
-    registerUserUseCase: { execute } as unknown as RegisterUserUseCase,
-  });
+  new RegisterUserController({ execute } as unknown as RegisterUserUseCase);
 
 describe('RegisterUserController', () => {
   it('forwards the payload and correlation id to the use case', async () => {

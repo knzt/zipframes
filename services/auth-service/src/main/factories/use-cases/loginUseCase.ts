@@ -11,8 +11,8 @@ export interface LoginExternalDeps {
 }
 
 export const createLoginUseCase = (externalDeps: LoginExternalDeps): LoginUseCase =>
-  new LoginUseCase({
-    userRepository: createUserRepository(externalDeps.prisma),
-    passwordHasher: createPasswordHasher(),
-    tokenIssuer: externalDeps.tokenIssuer,
-  });
+  new LoginUseCase(
+    createUserRepository(externalDeps.prisma),
+    createPasswordHasher(),
+    externalDeps.tokenIssuer,
+  );

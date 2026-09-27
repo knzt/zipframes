@@ -22,11 +22,11 @@ beforeEach(async () => {
   passwordHasher = new FakeHasher();
   eventPublisher = new InMemoryEventPublisher();
 
-  const registered = await new RegisterUserUseCase({
+  const registered = await new RegisterUserUseCase(
     userRepository,
     passwordHasher,
     eventPublisher,
-  }).execute({
+  ).execute({
     name: 'Hellen Santos',
     email: 'hellen@example.com',
     password: 'senha1234',
@@ -37,7 +37,7 @@ beforeEach(async () => {
   }
   userId = registered.value.userId;
 
-  login = new LoginUseCase({ userRepository, passwordHasher, tokenIssuer });
+  login = new LoginUseCase(userRepository, passwordHasher, tokenIssuer);
   passwordHasher.verifiedAgainst.length = 0;
 });
 

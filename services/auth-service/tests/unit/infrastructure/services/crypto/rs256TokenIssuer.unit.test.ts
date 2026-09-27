@@ -23,7 +23,7 @@ const setUpIssuer = async (): Promise<RsaKeyMaterial> => {
 describe('the token an issuer signs', () => {
   it('carries the user id as the subject, and iss/aud/exp', async () => {
     const keys = await setUpIssuer();
-    const issuer = new Rs256TokenIssuer({ keys, issuer: ISSUER, audience: AUDIENCE });
+    const issuer = new Rs256TokenIssuer(keys, ISSUER, AUDIENCE);
 
     const { token, expiresInSeconds } = await issuer.issue(brandUserId('user-123'));
     expect(expiresInSeconds).toBe(15 * 60);
@@ -39,12 +39,7 @@ describe('the token an issuer signs', () => {
 
   it('honours a configured lifetime', async () => {
     const keys = await setUpIssuer();
-    const issuer = new Rs256TokenIssuer({
-      keys,
-      issuer: ISSUER,
-      audience: AUDIENCE,
-      expiresInSeconds: 60,
-    });
+    const issuer = new Rs256TokenIssuer(keys, ISSUER, AUDIENCE, 60);
 
     const { expiresInSeconds } = await issuer.issue(brandUserId('user-123'));
 
@@ -76,7 +71,7 @@ describe('cross-package compatibility with @zipframes/authenticator', () => {
   });
 
   it('is accepted by the real authenticator package, from the derived public JWK alone', async () => {
-    const issuer = new Rs256TokenIssuer({ keys, issuer: ISSUER, audience: AUDIENCE });
+    const issuer = new Rs256TokenIssuer(keys, ISSUER, AUDIENCE);
     const authenticator = createAuthenticator({
       jwks: { url: jwksUrl },
       issuer: ISSUER,
@@ -94,7 +89,7 @@ describe('cross-package compatibility with @zipframes/authenticator', () => {
   });
 
   it('is rejected once verified with the wrong audience, proving the check is real', async () => {
-    const issuer = new Rs256TokenIssuer({ keys, issuer: ISSUER, audience: AUDIENCE });
+    const issuer = new Rs256TokenIssuer(keys, ISSUER, AUDIENCE);
     const authenticator = createAuthenticator({
       jwks: { url: jwksUrl },
       issuer: ISSUER,
@@ -113,7 +108,7 @@ describe('cross-package compatibility with @zipframes/authenticator', () => {
 
   it('can also be verified directly against the derived public JWK, without HTTP', async () => {
     const publicKey = await importJWK(keys.publicJwk, 'RS256');
-    const issuer = new Rs256TokenIssuer({ keys, issuer: ISSUER, audience: AUDIENCE });
+    const issuer = new Rs256TokenIssuer(keys, ISSUER, AUDIENCE);
 
     const { token } = await issuer.issue(brandUserId('user-789'));
 

@@ -4,31 +4,29 @@ import type { TokenIssuer } from '../../../application/interfaces/services/Token
 import type { UserId } from '../../../domain/entities/user.js';
 import type { RsaKeyMaterial } from './rsaKeys.js';
 
-export interface Rs256TokenIssuerDeps {
-  readonly keys: RsaKeyMaterial;
-  readonly issuer: string;
-  readonly audience: string;
-  readonly expiresInSeconds?: number;
-}
-
 const DEFAULT_EXPIRES_IN_SECONDS = 15 * 60;
 
 export class Rs256TokenIssuer implements TokenIssuer {
   private readonly expiresInSeconds: number;
 
-  constructor(private readonly deps: Rs256TokenIssuerDeps) {
-    this.expiresInSeconds = deps.expiresInSeconds ?? DEFAULT_EXPIRES_IN_SECONDS;
+  constructor(
+    private readonly keys: RsaKeyMaterial,
+    private readonly issuer: string,
+    private readonly audience: string,
+    expiresInSeconds?: number,
+  ) {
+    this.expiresInSeconds = expiresInSeconds ?? DEFAULT_EXPIRES_IN_SECONDS;
   }
 
   async issue(userId: UserId): Promise<{ token: string; expiresInSeconds: number }> {
     const token = await new SignJWT({})
-      .setProtectedHeader({ alg: 'RS256', kid: this.deps.keys.kid })
+      .setProtectedHeader({ alg: 'RS256', kid: this.keys.kid })
       .setSubject(userId)
-      .setIssuer(this.deps.issuer)
-      .setAudience(this.deps.audience)
+      .setIssuer(this.issuer)
+      .setAudience(this.audience)
       .setIssuedAt()
       .setExpirationTime(`${String(this.expiresInSeconds)}s`)
-      .sign(this.deps.keys.privateKey);
+      .sign(this.keys.privateKey);
 
     return { token, expiresInSeconds: this.expiresInSeconds };
   }

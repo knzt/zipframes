@@ -24,21 +24,19 @@ export type S3ObjectStorageGatewayPort = ObjectStorage & Pingable;
 const abortedError = (): TimeoutError =>
   new TimeoutError('PROCESSING_TIMEOUT', 'storage operation cancelled');
 
-export interface S3ObjectStorageGatewayDeps {
-  readonly s3: S3Client;
-  readonly bucket: string;
-}
-
 export class S3ObjectStorageGateway implements S3ObjectStorageGatewayPort {
-  constructor(private readonly deps: S3ObjectStorageGatewayDeps) {}
+  constructor(
+    private readonly s3: S3Client,
+    private readonly bucket: string,
+  ) {}
 
   async downloadToFile(key: string, destinationPath: string, signal?: AbortSignal): Promise<void> {
     if (signal?.aborted) {
       throw abortedError();
     }
     try {
-      const response = await this.deps.s3.send(
-        new GetObjectCommand({ Bucket: this.deps.bucket, Key: key }),
+      const response = await this.s3.send(
+        new GetObjectCommand({ Bucket: this.bucket, Key: key }),
         signal ? { abortSignal: signal } : undefined,
       );
       if (!response.Body) {
@@ -76,9 +74,9 @@ export class S3ObjectStorageGateway implements S3ObjectStorageGatewayPort {
     try {
       const body = createReadStream(sourcePath);
       const info = await stat(sourcePath);
-      await this.deps.s3.send(
+      await this.s3.send(
         new PutObjectCommand({
-          Bucket: this.deps.bucket,
+          Bucket: this.bucket,
           Key: key,
           Body: body,
           ContentLength: info.size,
@@ -98,7 +96,7 @@ export class S3ObjectStorageGateway implements S3ObjectStorageGatewayPort {
 
   async deleteObject(key: string): Promise<void> {
     try {
-      await this.deps.s3.send(new DeleteObjectCommand({ Bucket: this.deps.bucket, Key: key }));
+      await this.s3.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
     } catch (error) {
       throw new UnavailableError('STORAGE_DELETE_FAILED', `failed to delete ${key}`, {
         cause: error,
@@ -107,6 +105,6 @@ export class S3ObjectStorageGateway implements S3ObjectStorageGatewayPort {
   }
 
   async ping(): Promise<void> {
-    await this.deps.s3.send(new HeadBucketCommand({ Bucket: this.deps.bucket }));
+    await this.s3.send(new HeadBucketCommand({ Bucket: this.bucket }));
   }
 }

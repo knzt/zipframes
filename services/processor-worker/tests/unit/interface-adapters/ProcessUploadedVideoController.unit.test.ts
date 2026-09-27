@@ -22,9 +22,7 @@ const event: VideoUploadedEvent = {
 const controllerFor = (
   execute: ProcessUploadedVideoUseCase['execute'],
 ): ProcessUploadedVideoController =>
-  new ProcessUploadedVideoController({
-    processUploadedVideoUseCase: { execute } as unknown as ProcessUploadedVideoUseCase,
-  });
+  new ProcessUploadedVideoController({ execute } as unknown as ProcessUploadedVideoUseCase);
 
 describe('ProcessUploadedVideoController', () => {
   it('maps the decoded envelope onto the use case and returns its result', async () => {

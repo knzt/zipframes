@@ -12,22 +12,18 @@ export interface ProcessUploadedVideoControllerRequest {
 
 export type ProcessUploadedVideoControllerResponse = ProcessUploadedVideoUseCaseOutput;
 
-export interface ProcessUploadedVideoControllerDeps {
-  readonly processUploadedVideoUseCase: ProcessUploadedVideoUseCase;
-}
-
 /**
  * Turns an already decoded `video.uploaded` envelope into the use case call.
  * AMQP settlement stays in the consumer.
  */
 export class ProcessUploadedVideoController {
-  constructor(private readonly deps: ProcessUploadedVideoControllerDeps) {}
+  constructor(private readonly processUploadedVideoUseCase: ProcessUploadedVideoUseCase) {}
 
   handle(
     request: ProcessUploadedVideoControllerRequest,
   ): Promise<ProcessUploadedVideoControllerResponse> {
     const { event, attempt } = request;
-    return this.deps.processUploadedVideoUseCase.execute({
+    return this.processUploadedVideoUseCase.execute({
       videoId: event.payload.videoId,
       ownerId: event.payload.ownerId,
       sourceKey: event.payload.sourceKey,

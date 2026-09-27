@@ -5,9 +5,13 @@ import type {
   EventPublisher,
   EventPublisherInput,
 } from '../../../../../src/application/interfaces/gateways/EventPublisher.js';
+import type { FrameExtractor } from '../../../../../src/application/interfaces/gateways/FrameExtractor.js';
+import type { ObjectStorage } from '../../../../../src/application/interfaces/gateways/ObjectStorage.js';
+import type { ArchiveBuilder } from '../../../../../src/application/interfaces/services/ArchiveBuilder.js';
+import type { WorkDirectory } from '../../../../../src/application/interfaces/services/WorkDirectory.js';
 import {
   ProcessUploadedVideoUseCase,
-  type ProcessUploadedVideoUseCaseDeps,
+  type ProcessUploadedVideoUseCaseInput,
 } from '../../../../../src/application/useCases/processUploadedVideo/ProcessUploadedVideoUseCase.js';
 
 const ownerId = 'user-1';
@@ -35,8 +39,35 @@ const publishedTypes = (events: { readonly publish: ReturnType<typeof vi.fn> }):
     return event.eventType;
   });
 
-const useCase = (deps: ProcessUploadedVideoUseCaseDeps): ProcessUploadedVideoUseCase =>
-  new ProcessUploadedVideoUseCase(deps);
+const useCase = ({
+  objectStorage,
+  frameExtractor,
+  archiveBuilder,
+  workDirectory,
+  eventPublisher,
+  processingTimeoutMs,
+  onDiscardOriginalFailed,
+}: {
+  readonly objectStorage: ObjectStorage;
+  readonly frameExtractor: FrameExtractor;
+  readonly archiveBuilder: ArchiveBuilder;
+  readonly workDirectory: WorkDirectory;
+  readonly eventPublisher: EventPublisher;
+  readonly processingTimeoutMs: number;
+  readonly onDiscardOriginalFailed?: (
+    job: ProcessUploadedVideoUseCaseInput,
+    error: unknown,
+  ) => void;
+}): ProcessUploadedVideoUseCase =>
+  new ProcessUploadedVideoUseCase(
+    objectStorage,
+    frameExtractor,
+    archiveBuilder,
+    workDirectory,
+    eventPublisher,
+    processingTimeoutMs,
+    onDiscardOriginalFailed,
+  );
 
 describe('ProcessUploadedVideoUseCase', () => {
   it('publishes started and processed, then deletes the source', async () => {
