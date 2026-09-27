@@ -14,7 +14,11 @@
     "infra:apps": "docker compose -f infra/docker-compose/docker-compose.yml --profile apps up -d --build",
     "infra:down": "docker compose -f infra/docker-compose/docker-compose.yml --profile apps down",
     "infra:logs": "docker compose -f infra/docker-compose/docker-compose.yml --profile apps logs -f",
-    "infra:reset": "docker compose -f infra/docker-compose/docker-compose.yml --profile apps down -v && docker compose -f infra/docker-compose/docker-compose.yml up -d"
+    "infra:reset": "docker compose -f infra/docker-compose/docker-compose.yml --profile apps down -v && docker compose -f infra/docker-compose/docker-compose.yml up -d",
+    "pnpm:auth": "pnpm --dir services/auth-service",
+    "pnpm:worker": "pnpm --dir services/processor-worker",
+    "deps:auth": "pnpm --dir services/auth-service add",
+    "deps:worker": "pnpm --dir services/processor-worker add"
   },
   "devDependencies": {
     "@commitlint/cli": "^19.8.1",

@@ -77,7 +77,21 @@ Copie o exemplo para `.env` ao lado. O processo não lê o `.example`.
 | `services/auth-service/.env.example`     | `pnpm dev` e `pnpm start` do auth, via `--env-file=.env` no diretório do serviço.                     |
 | `services/processor-worker/.env.example` | O mesmo, no worker.                                                                                   |
 
-A chave de desenvolvimento está em `infra/docker-compose/auth/jwt-dev.pem`. O `.env` do auth aponta para ela com caminho relativo ao diretório do serviço. Use `pnpm --dir` a partir da raiz.
+A chave de desenvolvimento está em `infra/docker-compose/auth/jwt-dev.pem`. O `.env` do auth aponta para ela com caminho relativo ao diretório do serviço.
+
+Da raiz, atalhos para o pnpm de cada serviço (o pnpm acrescenta o resto da linha):
+
+```bash
+pnpm pnpm:auth install
+pnpm pnpm:auth test:unit
+pnpm pnpm:worker dev
+
+pnpm deps:auth pkgname@3.1
+pnpm deps:auth -D pkgname@3.1
+pnpm deps:worker pkgname@3.1
+```
+
+Equivalente a `pnpm --dir services/auth-service …` e `pnpm --dir services/processor-worker …`.
 
 Credenciais locais, iguais no exemplo e em `infra/docker-compose/seaweedfs/s3.json`:
 
@@ -94,20 +108,20 @@ cp services/auth-service/.env.example services/auth-service/.env
 cp services/processor-worker/.env.example services/processor-worker/.env
 
 pnpm install
-pnpm --dir services/auth-service install
-pnpm --dir services/processor-worker install
+pnpm pnpm:auth install
+pnpm pnpm:worker install
 
 pnpm infra:up
 
-pnpm --dir services/auth-service db:generate
-pnpm --dir services/auth-service db:deploy
-pnpm --dir services/auth-service dev
+pnpm pnpm:auth db:generate
+pnpm pnpm:auth db:deploy
+pnpm pnpm:auth dev
 ```
 
 Em outro terminal:
 
 ```bash
-pnpm --dir services/processor-worker dev
+pnpm pnpm:worker dev
 ```
 
 `pnpm infra:up` sobe só a infra. Não constrói imagem de serviço. `db:deploy` aplica a migration que já existe (`20260101000000_init`). `db:migrate` é `prisma migrate dev`, para mudar o schema, não para a primeira subida.
@@ -133,8 +147,8 @@ Portas, Mailpit e o caminho em que os dois processos rodam dentro de container e
 Na raiz: `pnpm format` e `pnpm lint`. Em cada serviço, `pnpm test:unit` não precisa de Docker. `pnpm test` roda a unidade e depois a integração, e a integração precisa de Docker. O teste de integração do worker usa o binário do `ffmpeg-static`, não o `ffmpeg` do sistema.
 
 ```bash
-pnpm --dir services/auth-service test:unit
-pnpm --dir services/processor-worker test:unit
+pnpm pnpm:auth test:unit
+pnpm pnpm:worker test:unit
 ```
 
 ## Build
@@ -142,11 +156,11 @@ pnpm --dir services/processor-worker test:unit
 Os pacotes `@zipframes/*` não são buildados neste repositório. Cada serviço:
 
 ```bash
-pnpm --dir services/auth-service build
-pnpm --dir services/processor-worker build
+pnpm pnpm:auth build
+pnpm pnpm:worker build
 ```
 
-A imagem do worker não baixa dependência. Antes dela, `pnpm --dir services/processor-worker stage-runtime` copia os `node_modules` de produção para `.runtime/`. A imagem do auth instala o lockfile do serviço durante o build e exige `NODE_AUTH_TOKEN`.
+A imagem do worker não baixa dependência. Antes dela, `pnpm pnpm:worker stage-runtime` copia os `node_modules` de produção para `.runtime/`. A imagem do auth instala o lockfile do serviço durante o build e exige `NODE_AUTH_TOKEN`.
 
 ## Limitações
 
