@@ -1,22 +1,14 @@
-# Checks scoped to the processor-worker.
+# Checks for the processor-worker.
 #
-# Triggered by path, so a change to another service does not run this suite.
-# The image build uses the staged runtime; it does not download packages again.
+# Pull requests targeting main always run this suite so every synchronize
+# is covered. Pushes to main still filter by path so an untouched service
+# is skipped on merge. The image build uses the staged runtime; it does
+# not download packages again.
 name: processor-worker
 
 on:
   pull_request:
     branches: [main]
-    paths:
-      - 'services/processor-worker/**'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
-      - '.npmrc'
-      - 'tsconfig.base.json'
-      - 'eslint.config.mjs'
-      - '.dependency-cruiser.mjs'
-      - '.github/workflows/processor-worker.yml'
-      - '.github/workflows/service-ci.yml'
   push:
     branches: [main]
     paths:
