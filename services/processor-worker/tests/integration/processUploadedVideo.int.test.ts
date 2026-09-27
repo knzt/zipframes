@@ -15,7 +15,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { framesPackageObjectKey } from '../../src/domain/policies/framesPackage.js';
 import { S3ObjectStorage } from '../../src/infrastructure/gateways/storage/s3ObjectStorage.gateway.js';
-import { EVENT_EXCHANGE } from '../../src/infrastructure/messaging/topology.js';
+import { EVENT_EXCHANGE } from '../../src/infrastructure/messaging/amqplib/topology.js';
 import { startWorker } from '../../src/main/start.js';
 import { useBundledFfmpeg } from '../support/ffmpeg-bin.js';
 

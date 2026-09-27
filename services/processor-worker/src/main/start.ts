@@ -3,11 +3,14 @@ import { createLogger } from '@zipframes/logger';
 import { createMetrics } from '@zipframes/telemetry';
 
 import { loadConfig } from '../infrastructure/loadEnvConfig.js';
-import { createProcessorTopology, UPLOADED_QUEUE } from '../infrastructure/messaging/topology.js';
-import { createVideoUploadedConsumer } from '../infrastructure/messaging/videoUploadedConsumer.js';
+import { createVideoUploadedConsumer } from '../infrastructure/messaging/amqplib/videoUploadedConsumer.js';
+import {
+  createProcessorTopology,
+  UPLOADED_QUEUE,
+} from '../infrastructure/messaging/amqplib/topology.js';
 import { createJobMetrics } from '../infrastructure/observability/jobMetrics.js';
 import { createProcessUploadedVideoController } from './factories/controllers/processUploadedVideo.js';
-import { createAmqp } from './factories/externals/amqp.js';
+import { createAmqplib } from './factories/externals/amqplib.js';
 import { createS3 } from './factories/externals/s3.js';
 import { createEventPublisher } from './factories/gateways/eventPublisher.js';
 
@@ -32,9 +35,9 @@ export const startWorker = async (): Promise<{ stop: () => Promise<void> }> => {
   const closers: (() => Promise<void>)[] = [];
 
   try {
-    const connection = await createAmqp(config.amqpUrl);
-    closers.push(() => connection.close());
-    await connection.assertTopology(createProcessorTopology());
+    const amqp = await createAmqplib(config.amqpUrl);
+    closers.push(() => amqp.close());
+    await amqp.assertTopology(createProcessorTopology());
 
     const s3 = createS3({
       endpoint: config.s3Endpoint,
@@ -43,24 +46,36 @@ export const startWorker = async (): Promise<{ stop: () => Promise<void> }> => {
       secretKey: config.s3SecretKey,
       forcePathStyle: config.s3ForcePathStyle,
     });
+    const events = createEventPublisher(amqp);
 
     const processUploadedVideoController = createProcessUploadedVideoController({
-      connection,
       s3,
-      config,
-      logger,
-      technicalMetrics,
+      events,
+      bucket: config.s3Bucket,
+      workDir: config.workDir,
+      processingTimeoutMs: config.processingTimeoutMs,
+      onDiscardOriginalFailed: (job, error) => {
+        logger.error('failed to discard original object after processing', {
+          videoId: job.videoId,
+          sourceKey: job.sourceKey,
+          errorCode: error instanceof Error ? error.message : 'unknown',
+        });
+        technicalMetrics.messagesHandledTotal.inc({
+          destination: UPLOADED_QUEUE,
+          outcome: 'delete_original_failed',
+        });
+      },
     });
 
     const consumer = createVideoUploadedConsumer({
       controller: processUploadedVideoController,
-      events: createEventPublisher(connection),
+      events,
       retry,
       logger,
       metrics: jobMetrics,
     });
 
-    await connection.consume(UPLOADED_QUEUE, consumer, { retry });
+    await amqp.consume(UPLOADED_QUEUE, consumer, { retry });
 
     logger.info('processor-worker started', {
       queue: UPLOADED_QUEUE,
@@ -68,7 +83,7 @@ export const startWorker = async (): Promise<{ stop: () => Promise<void> }> => {
 
     return {
       stop: async () => {
-        await connection.close();
+        await amqp.close();
         logger.info('processor-worker stopped');
       },
     };

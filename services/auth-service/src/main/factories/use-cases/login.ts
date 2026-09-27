@@ -1,12 +1,11 @@
-import type { PrismaClient } from '@prisma/client';
-
 import type { TokenIssuer } from '../../../application/interfaces/services/TokenIssuer.js';
 import { LoginUseCase } from '../../../application/useCases/login/LoginUseCase.js';
+import type { Prisma } from '../externals/prisma.js';
 import { createUserRepository } from '../repositories/userRepository.js';
 import { createPasswordHasher } from '../services/passwordHasher.js';
 
 export interface LoginExternals {
-  readonly prisma: PrismaClient;
+  readonly prisma: Prisma;
   readonly tokenIssuer: TokenIssuer;
 }
 

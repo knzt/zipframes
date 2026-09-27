@@ -6,13 +6,11 @@ import { bindHttpRoutes } from '../infrastructure/http/fastify/bindHttpRoutes.js
 import { registerHealthRoutes } from '../infrastructure/http/fastify/health.routes.js';
 import { createHttpServer } from '../infrastructure/http/fastify/server.js';
 import { loadConfig } from '../infrastructure/loadEnvConfig.js';
-import { createAmqpPing } from '../infrastructure/messaging/amqpConnection.js';
-import { assertTopology } from '../infrastructure/messaging/topology.js';
-import { createPrismaPing } from '../infrastructure/repositories/prisma/client.js';
+import { assertTopology } from '../infrastructure/messaging/amqplib/topology.js';
 import { createLoginController } from './factories/controllers/login.js';
 import { createRegisterUserController } from './factories/controllers/registerUser.js';
-import { createAmqp } from './factories/externals/amqp.js';
-import { createPrisma } from './factories/externals/prisma.js';
+import { createAmqplib, createAmqpPing } from './factories/externals/amqplib.js';
+import { createPrisma, createPrismaPing } from './factories/externals/prisma.js';
 import { createTokenIssuer } from './factories/services/tokenIssuer.js';
 import { identityRoutes } from './handlers/identityRoutes.js';
 
@@ -41,7 +39,7 @@ export const startAuthService = async (): Promise<{ stop: () => Promise<void> }>
       audience: config.jwtAudience,
     });
 
-    const amqp = await createAmqp(config.amqpUrl);
+    const amqp = await createAmqplib(config.amqpUrl);
     closers.push(() => amqp.close());
     await assertTopology(amqp.channel);
 

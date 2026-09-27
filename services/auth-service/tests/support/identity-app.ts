@@ -3,19 +3,19 @@ import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import { promisify } from 'node:util';
 
-import { startPostgres } from '@zipframes/test-toolkit';
-import type { PostgresHandle } from '@zipframes/test-toolkit';
+import { startPostgres, startRabbitMq } from '@zipframes/test-toolkit';
+import type { PostgresHandle, RabbitMqHandle } from '@zipframes/test-toolkit';
 import { exportPKCS8, generateKeyPair } from 'jose';
 import type { JWK } from 'jose';
-import type { PrismaClient } from '@prisma/client';
 
-import type { EventPublisher } from '../../src/application/interfaces/gateways/EventPublisher.js';
 import { bindHttpRoutes } from '../../src/infrastructure/http/fastify/bindHttpRoutes.js';
 import { registerHealthRoutes } from '../../src/infrastructure/http/fastify/health.routes.js';
 import { createHttpServer } from '../../src/infrastructure/http/fastify/server.js';
+import { assertTopology } from '../../src/infrastructure/messaging/amqplib/topology.js';
 import { createLoginController } from '../../src/main/factories/controllers/login.js';
 import { createRegisterUserController } from '../../src/main/factories/controllers/registerUser.js';
-import { createPrisma } from '../../src/main/factories/externals/prisma.js';
+import { createAmqplib, type Amqplib } from '../../src/main/factories/externals/amqplib.js';
+import { createPrisma, type Prisma } from '../../src/main/factories/externals/prisma.js';
 import { createTokenIssuer } from '../../src/main/factories/services/tokenIssuer.js';
 import { identityRoutes } from '../../src/main/handlers/identityRoutes.js';
 import { silentLogger } from './silent-logger.js';
@@ -27,13 +27,14 @@ const AUDIENCE = 'zipframes';
 
 export interface IdentityApp {
   readonly baseUrl: string;
-  readonly prisma: PrismaClient;
+  readonly prisma: Prisma;
   readonly publicJwk: JWK;
+  readonly closeAmqp: () => Promise<void>;
   readonly stop: () => Promise<void>;
 }
 
 export interface IdentityAppOptions {
-  readonly eventPublisher?: EventPublisher;
+  readonly amqp?: Amqplib;
   readonly onPublishFailed?: (
     error: unknown,
     details: { readonly userId: string; readonly correlationId: string },
@@ -56,9 +57,17 @@ export const startIdentityApp = async (options?: IdentityAppOptions): Promise<Id
     issuer: ISSUER,
     audience: AUDIENCE,
   });
-  const eventPublisher: EventPublisher = options?.eventPublisher ?? {
-    publish: () => Promise.resolve(),
-  };
+
+  let ownedRabbit: RabbitMqHandle | undefined;
+  let amqp: Amqplib;
+  if (options?.amqp) {
+    amqp = options.amqp;
+  } else {
+    ownedRabbit = await startRabbitMq();
+    amqp = await createAmqplib(ownedRabbit.amqpUri);
+  }
+  await assertTopology(amqp.channel);
+
   const logger = silentLogger();
   const onPublishFailed =
     options?.onPublishFailed ??
@@ -76,8 +85,8 @@ export const startIdentityApp = async (options?: IdentityAppOptions): Promise<Id
     identityRoutes({
       registerUser: createRegisterUserController({
         prisma,
+        amqp,
         logger,
-        eventPublisher,
         onPublishFailed,
       }),
       login: createLoginController({ prisma, tokenIssuer }),
@@ -92,14 +101,28 @@ export const startIdentityApp = async (options?: IdentityAppOptions): Promise<Id
   await app.listen({ port: 0, host: '127.0.0.1' });
   const address = app.server.address() as AddressInfo;
 
+  let amqpClosed = false;
+  const closeAmqp = async (): Promise<void> => {
+    if (amqpClosed) {
+      return;
+    }
+    amqpClosed = true;
+    await amqp.close();
+  };
+
   return {
     baseUrl: `http://127.0.0.1:${String(address.port)}`,
     prisma,
     publicJwk: keys.publicJwk,
+    closeAmqp,
     stop: async () => {
       await app.close();
+      if (ownedRabbit) {
+        await closeAmqp().catch(() => undefined);
+      }
       await prisma.$disconnect();
       await postgres.stop();
+      await ownedRabbit?.stop();
     },
   };
 };

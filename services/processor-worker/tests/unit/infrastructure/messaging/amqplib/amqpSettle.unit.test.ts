@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { planAmqpSettle } from '../../../../src/infrastructure/messaging/amqpSettle.js';
-import { UPLOADED_RETRY_QUEUE } from '../../../../src/infrastructure/messaging/topology.js';
+import { planAmqpSettle } from '../../../../../src/infrastructure/messaging/amqplib/amqpSettle.js';
+import { UPLOADED_RETRY_QUEUE } from '../../../../../src/infrastructure/messaging/amqplib/topology.js';
 
 describe('planAmqpSettle (adapter settle ≠ DLQ on retry)', () => {
   const retry = { maxAttempts: 5, baseDelayMs: 1000, maxDelayMs: 30_000 };

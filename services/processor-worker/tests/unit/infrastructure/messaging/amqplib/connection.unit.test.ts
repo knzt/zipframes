@@ -7,8 +7,8 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   createAmqpPing,
   createRabbitMqConnection,
-} from '../../../../src/infrastructure/messaging/rabbitmqConnection.js';
-import { createProcessorTopology } from '../../../../src/infrastructure/messaging/topology.js';
+} from '../../../../../src/infrastructure/messaging/amqplib/connection.js';
+import { createProcessorTopology } from '../../../../../src/infrastructure/messaging/amqplib/topology.js';
 
 const retry = { maxAttempts: 5, baseDelayMs: 10, maxDelayMs: 100 };
 

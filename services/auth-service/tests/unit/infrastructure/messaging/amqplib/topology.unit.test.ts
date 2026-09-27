@@ -4,7 +4,7 @@ import {
   assertTopology,
   createIdentityTopology,
   EVENT_EXCHANGE,
-} from '../../../../src/infrastructure/messaging/topology.js';
+} from '../../../../../src/infrastructure/messaging/amqplib/topology.js';
 
 describe('createIdentityTopology', () => {
   it('asserts the events topic exchange', async () => {

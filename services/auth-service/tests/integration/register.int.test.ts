@@ -1,14 +1,11 @@
-import { createPublisher } from '@zipframes/communication';
 import { authService } from '@zipframes/schemas';
-import { EVENT_EXCHANGE } from '@zipframes/schemas/shared';
 import { startRabbitMq } from '@zipframes/test-toolkit';
 import type { RabbitMqHandle } from '@zipframes/test-toolkit';
 import amqp, { type Channel, type GetMessage } from 'amqplib';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { AmqpEventPublisher } from '../../src/infrastructure/gateways/amqpEventPublisher.gateway.js';
-import { connectAmqp } from '../../src/infrastructure/messaging/amqpConnection.js';
-import { createAmqpPublishPort } from '../../src/infrastructure/messaging/amqpPublisher.js';
+import { EVENT_EXCHANGE } from '../../src/infrastructure/messaging/amqplib/topology.js';
+import { createAmqplib, type Amqplib } from '../../src/main/factories/externals/amqplib.js';
 import { startIdentityApp } from '../support/identity-app.js';
 import type { IdentityApp } from '../support/identity-app.js';
 
@@ -35,21 +32,14 @@ const pollQueue = async (channel: Channel, queue: string): Promise<GetMessage> =
 describe('POST /register against Postgres and RabbitMQ', () => {
   let app: IdentityApp;
   let rabbit: RabbitMqHandle;
-  let stopPublisher: () => Promise<void>;
+  let publisherAmqp: Amqplib;
   let probe: Awaited<ReturnType<typeof amqp.connect>>;
   let channel: Channel;
   let outcomesQueue: string;
 
   beforeAll(async () => {
     rabbit = await startRabbitMq();
-    const amqpConnection = await connectAmqp(rabbit.amqpUri);
-    await amqpConnection.channel.assertExchange(EVENT_EXCHANGE, 'topic', { durable: true });
-    const eventPublisher = new AmqpEventPublisher(
-      createPublisher(createAmqpPublishPort(amqpConnection.channel)),
-    );
-    stopPublisher = async () => {
-      await amqpConnection.close();
-    };
+    publisherAmqp = await createAmqplib(rabbit.amqpUri);
 
     probe = await amqp.connect(rabbit.amqpUri);
     channel = await probe.createChannel();
@@ -58,12 +48,12 @@ describe('POST /register against Postgres and RabbitMQ', () => {
     outcomesQueue = outcomes.queue;
     await channel.bindQueue(outcomesQueue, EVENT_EXCHANGE, 'user.registered');
 
-    app = await startIdentityApp({ eventPublisher });
+    app = await startIdentityApp({ amqp: publisherAmqp });
   }, 180_000);
 
   afterAll(async () => {
     await app.stop();
-    await stopPublisher();
+    await publisherAmqp.close();
     await channel.close();
     await probe.close();
     await rabbit.stop();

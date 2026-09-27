@@ -20,3 +20,5 @@ export const createS3 = (config: S3ClientConfig): S3Client =>
       secretAccessKey: config.secretKey,
     },
   });
+
+export type S3 = ReturnType<typeof createS3>;

@@ -15,7 +15,7 @@ describe('POST /login against Postgres', () => {
 
   beforeAll(async () => {
     app = await startIdentityApp();
-  });
+  }, 180_000);
 
   afterAll(async () => {
     await app.stop();
@@ -76,9 +76,6 @@ describe('POST /register when event publish fails', () => {
     let publishedError: unknown;
     let publishedDetails: { readonly userId: string; readonly correlationId: string } | undefined;
     const app = await startIdentityApp({
-      eventPublisher: {
-        publish: () => Promise.reject(new Error('broker down')),
-      },
       onPublishFailed: (error, details) => {
         publishedError = error;
         publishedDetails = details;
@@ -86,6 +83,7 @@ describe('POST /register when event publish fails', () => {
     });
 
     try {
+      await app.closeAmqp();
       const created = await fetch(`${app.baseUrl}/register`, {
         method: 'POST',
         headers: {
@@ -104,5 +102,5 @@ describe('POST /register when event publish fails', () => {
     } finally {
       await app.stop();
     }
-  });
+  }, 180_000);
 });

@@ -4,9 +4,9 @@ import { createLogger } from '@zipframes/logger';
 import { getCorrelationId } from '@zipframes/logger';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { ProcessUploadedVideoController } from '../../../../src/interface-adapters/ProcessUploadedVideoController.js';
-import type { EventPublisher } from '../../../../src/application/interfaces/gateways/EventPublisher.js';
-import { createVideoUploadedConsumer } from '../../../../src/infrastructure/messaging/videoUploadedConsumer.js';
+import type { EventPublisher } from '../../../../../src/application/interfaces/gateways/EventPublisher.js';
+import { createVideoUploadedConsumer } from '../../../../../src/infrastructure/messaging/amqplib/videoUploadedConsumer.js';
+import type { ProcessUploadedVideoController } from '../../../../../src/interface-adapters/ProcessUploadedVideoController.js';
 
 const ownerId = 'user-1';
 const videoId = '11111111-1111-4111-8111-111111111111';

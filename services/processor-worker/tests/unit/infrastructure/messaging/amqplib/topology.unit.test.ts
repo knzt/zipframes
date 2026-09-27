@@ -7,7 +7,7 @@ import {
   EVENT_EXCHANGE,
   UPLOADED_QUEUE,
   UPLOADED_RETRY_QUEUE,
-} from '../../../../src/infrastructure/messaging/topology.js';
+} from '../../../../../src/infrastructure/messaging/amqplib/topology.js';
 
 describe('createProcessorTopology', () => {
   it('returns expired wait-queue messages to the main queue and dead-letters the main queue', () => {
