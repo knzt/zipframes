@@ -12,7 +12,7 @@ Consumir `video.uploaded`, extrair frames (1 fps, PNG), empacotar em zip (store)
 
 As dependências apontam para dentro. Os quatro anéis e o composition root estão em [layers.md](../layers.md).
 
-O consumer em `infrastructure/messaging` lê `video.uploaded` e chama `ProcessUploadedVideoController`. O controller entrega o envelope já decodificado a `ProcessUploadedVideoUseCase`. O caso de uso chama `ObjectStorage`, `FrameExtractor` e `EventPublisher` (`application/interfaces/gateways/`) e `ArchiveBuilder` e `WorkDirectory` (`application/interfaces/services/`). `start.ts` abre AMQP e `new S3Client` (`externals/s3.ts`) e chama `createProcessUploadedVideoController({ connection, s3, config, logger, … })`. Essa factory chama `createProcessUploadedVideo`, que faz `new S3ObjectStorage(s3)`, ffmpeg, zip, diretório temporário e o publisher. Não há `handlers/` HTTP. O consumer confirma, agenda nova tentativa ou envia à dead-letter a partir do desfecho. O caso de uso não importa o SDK da AWS, o ffmpeg nem o cliente AMQP.
+O consumer em `infrastructure/messaging/amqplib` lê `video.uploaded` e chama `ProcessUploadedVideoController`. O controller entrega o envelope já decodificado a `ProcessUploadedVideoUseCase`. O caso de uso chama `ObjectStorage`, `FrameExtractor` e `EventPublisher` (`application/interfaces/gateways/`) e `ArchiveBuilder` e `WorkDirectory` (`application/interfaces/services/`). `start.ts` abre AMQP e `new S3Client` (`externals/s3.ts`), chama `createEventPublisher(amqp)` uma vez e passa esse gateway a `createProcessUploadedVideoController({ s3, events, bucket, workDir, processingTimeoutMs, onDiscardOriginalFailed })` e ao consumer. A factory do caso de uso faz `new S3ObjectStorage(s3)`, ffmpeg, zip e diretório temporário. Não há `handlers/` HTTP. O consumer confirma, agenda nova tentativa ou envia à dead-letter a partir do desfecho. O caso de uso não importa o SDK da AWS, o ffmpeg nem o cliente AMQP.
 
 ```
 main  →  interface-adapters / infrastructure  →  application  →  domain
@@ -55,11 +55,11 @@ processor-worker/src/
 │   ├── gateways/
 │   │   ├── storage/s3ObjectStorage.gateway.ts
 │   │   ├── media/ffmpegFrameExtractor.gateway.ts
-│   │   └── amqpEventPublisher.gateway.ts
+│   │   └── amqpEventPublisherGateway.ts
 │   ├── services/
 │   │   ├── media/zipArchiveBuilder.service.ts
 │   │   └── filesystem/fsWorkDirectory.service.ts
-│   ├── messaging/{rabbitmqConnection,topology,videoUploadedConsumer}.ts
+│   ├── messaging/amqplib/{connection.ts,topology.ts,videoUploadedConsumer.ts,amqpSettle.ts}
 │   ├── observability/jobMetrics.ts
 │   └── loadEnvConfig.ts
 └── main/

@@ -20,7 +20,7 @@ src/
 │   ├── repositories/prisma/
 │   ├── gateways/           # EventPublisher AMQP
 │   ├── services/crypto/
-│   └── messaging/          # conexão e PublishPort
+│   └── messaging/amqplib/  # conexão e topologia
 └── main/                   # start.ts, factories, handlers (catálogo HTTP)
 ```
 

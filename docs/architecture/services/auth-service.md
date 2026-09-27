@@ -47,10 +47,10 @@ auth-service/src/
 ├── interface-adapters/{RegisterUserController.ts, LoginController.ts}
 ├── infrastructure/
 │   ├── http/{httpRoute.ts,openapi.ts,problemDetails.schema.ts,fastify/{server.ts,bindHttpRoutes.ts,fastifyAdapter.ts,health.routes.ts,openapi.ts}}
-│   ├── repositories/prisma/{schema.prisma,migrations/,client.ts,user.repository.ts}
-│   ├── gateways/amqpEventPublisher.gateway.ts
+│   ├── repositories/prisma/{schema.prisma,migrations/,user.repository.ts}
+│   ├── gateways/amqpEventPublisherGateway.ts
 │   ├── services/crypto/{bcryptPasswordHasher,rs256TokenIssuer,rsaKeys}.ts
-│   ├── messaging/{amqpConnection,amqpPublisher,topology}.ts
+│   ├── messaging/amqplib/{connection.ts,topology.ts}
 │   └── loadEnvConfig.ts
 └── main/
     ├── index.ts
@@ -59,7 +59,7 @@ auth-service/src/
     └── handlers/{registerUser.ts,login.ts,jwks.ts,identityRoutes.ts}
 ```
 
-A persistência é repository: `UserRepository` em `application/interfaces/repositories/` e `PrismaUserRepository` em `infrastructure/repositories/prisma/`. A publicação AMQP é gateway: `EventPublisher` em `application/interfaces/gateways/` e `AmqpEventPublisher` em `infrastructure/gateways/`. `messaging/` só tem a conexão e o `PublishPort`. Quem o caso de uso chama é `EventPublisher`. Prisma só tem `users`.
+A persistência é repository: `UserRepository` em `application/interfaces/repositories/` e `PrismaUserRepository` em `infrastructure/repositories/prisma/`. A publicação AMQP é gateway: `EventPublisher` em `application/interfaces/gateways/` e `AmqpEventPublisherGateway` em `infrastructure/gateways/`. `messaging/amqplib` só tem a conexão e a topologia. Quem o caso de uso chama é `EventPublisher`. Prisma só tem `users`.
 
 ## Casos de uso
 
