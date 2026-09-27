@@ -1,0 +1,18 @@
+# pnpm 12 reads install-script approval from this file.
+# No packages list: this service is not installed with the others.
+allowBuilds:
+  '@prisma/client': true
+  '@prisma/engines': true
+  cpu-features: true
+  esbuild: true
+  prisma: true
+  protobufjs: true
+  ssh2: true
+minimumReleaseAgeExclude:
+  - '@zipframes/core@0.4.0'
+  - '@zipframes/test-toolkit@0.2.1'
+  - '@zipframes/http@0.2.0'
+  - '@zipframes/authenticator@0.1.3'
+  - '@zipframes/schemas@0.1.3'
+  - '@zipframes/schemas@0.2.0-pr45-20260927180514'
+  - '@zipframes/communication@0.2.0'
