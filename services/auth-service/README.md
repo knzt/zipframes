@@ -21,7 +21,7 @@ src/
 │   ├── gateways/           # EventPublisher AMQP
 │   ├── services/crypto/
 │   └── messaging/amqplib/  # conexão e topologia
-└── main/                   # start.ts, factories, handlers (catálogo HTTP)
+└── main/                   # start.ts, factories
 ```
 
 ```

@@ -24,7 +24,7 @@ main  →  interface-adapters / infrastructure  →  application  →  domain
 | `src/application/`        | Casos de uso e ports | `ProcessUploadedVideoUseCase`, tipos e interfaces                                       |
 | `src/interface-adapters/` | Controllers          | `ProcessUploadedVideoController`                                                        |
 | `src/infrastructure/`     | Drivers              | Consumer AMQP, S3/ffmpeg, zip/fs                                                        |
-| `src/main/`               | Composition root     | `index.ts`, `start.ts`, `factories/` — sem `handlers/`                                  |
+| `src/main/`               | Composition root     | `index.ts`, `start.ts`, `factories/`                                                    |
 
 ### Gateway e service
 

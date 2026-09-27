@@ -1,35 +1,26 @@
-import type { Result } from '@zipframes/core';
+import { defineHandler, type HttpReply, type HttpRequest } from '@zipframes/http';
+import { authService } from '@zipframes/schemas';
 
 import type { RegisterUserUseCase } from '../application/useCases/registerUser/RegisterUserUseCase.js';
-import type {
-  RegisterUserUseCaseError,
-  RegisterUserUseCaseOutput,
-} from '../application/useCases/registerUser/registerUser.dto.js';
-
-export interface RegisterUserControllerRequest {
-  readonly name: string;
-  readonly email: string;
-  readonly password: string;
-}
-
-export interface RegisterUserControllerContext {
-  readonly correlationId: string;
-}
 
 /**
- * Turns a validated register payload into the use case call.
- * HTTP status and problem+json stay in the handler.
+ * Validates the register request, calls the use case with the correlation id
+ * and turns its `Result` into an HTTP reply (201 or problem+json).
  */
 export class RegisterUserController {
-  constructor(private readonly registerUserUseCase: RegisterUserUseCase) {}
+  private readonly handler: (request: HttpRequest) => Promise<HttpReply>;
 
-  handle(
-    registration: RegisterUserControllerRequest,
-    ctx: RegisterUserControllerContext,
-  ): Promise<Result<RegisterUserUseCaseOutput, RegisterUserUseCaseError>> {
-    return this.registerUserUseCase.execute({
-      ...registration,
-      correlationId: ctx.correlationId,
+  constructor(private readonly registerUserUseCase: RegisterUserUseCase) {
+    this.handler = defineHandler({
+      inputSchema: authService.registerRequestSchema,
+      outputSchema: authService.registerResponseSchema,
+      successStatus: 201,
+      handler: (registration, ctx) =>
+        this.registerUserUseCase.execute({ ...registration, correlationId: ctx.correlationId }),
     });
+  }
+
+  handle(request: HttpRequest): Promise<HttpReply> {
+    return this.handler(request);
   }
 }

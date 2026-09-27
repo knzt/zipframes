@@ -2,10 +2,10 @@ import type { JWK } from 'jose';
 
 import { authService } from '@zipframes/schemas';
 
-import { jsonSchemaOf } from '../../infrastructure/http/openapi.js';
-import type { HttpRouteDefinition } from '../../infrastructure/http/httpRoute.js';
+import { jsonSchemaOf } from '../openapi.js';
+import type { HttpRouteDefinition } from '../httpRoute.js';
 
-export const jwksHandler = (jwks: readonly JWK[]): HttpRouteDefinition => {
+export const jwksRoute = (jwks: readonly JWK[]): HttpRouteDefinition => {
   const body = authService.jwksResponseSchema.parse({ keys: jwks });
   return {
     method: 'GET',

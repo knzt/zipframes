@@ -112,8 +112,7 @@ export default {
 
     {
       name: 'nada-importa-main-exceto-o-próprio-main',
-      comment:
-        'Só src/main/ (index, start, factories, handlers) importa main/. Testes ficam fora de src/.',
+      comment: 'Só src/main/ (index, start, factories) importa main/. Testes ficam fora de src/.',
       severity: 'error',
       from: { path: '/src/', pathNot: '/src/main/' },
       to: { path: '/src/main/' },
