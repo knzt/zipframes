@@ -24,7 +24,7 @@ const packageRootFrom = (resolver, name) => {
   throw new Error(`package root not found for ${name}`);
 };
 
-const copyPackage = (name, resolver) => {
+const copyPackage = (name, resolver, { recurse = true } = {}) => {
   if (seen.has(name)) {
     return;
   }
@@ -41,6 +41,10 @@ const copyPackage = (name, resolver) => {
   mkdirSync(path.dirname(destination), { recursive: true });
   cpSync(source, destination, { recursive: true, dereference: true });
 
+  if (!recurse) {
+    return;
+  }
+
   const manifest = JSON.parse(readFileSync(path.join(source, 'package.json'), 'utf8'));
   const dependencyResolver = createRequire(path.join(source, 'package.json'));
   for (const dependency of Object.keys(manifest.dependencies ?? {})) {
@@ -48,10 +52,52 @@ const copyPackage = (name, resolver) => {
   }
 };
 
+const assertStagedMatchesService = (directDependencies) => {
+  for (const name of directDependencies) {
+    let expectedRoot;
+    try {
+      expectedRoot = packageRootFrom(require, name);
+    } catch {
+      continue;
+    }
+    const expected = JSON.parse(readFileSync(path.join(expectedRoot, 'package.json'), 'utf8'));
+    const stagedManifest = path.join(destinationRoot, name, 'package.json');
+    if (!existsSync(stagedManifest)) {
+      throw new Error(`stage-runtime did not copy ${name}`);
+    }
+    const staged = JSON.parse(readFileSync(stagedManifest, 'utf8'));
+    if (staged.version !== expected.version) {
+      throw new Error(
+        `staged ${name}@${staged.version} does not match the service resolution ${name}@${expected.version}`,
+      );
+    }
+  }
+};
+
 rmSync(path.join(serviceRoot, '.runtime'), { recursive: true, force: true });
 mkdirSync(destinationRoot, { recursive: true });
 
 const root = JSON.parse(readFileSync(path.join(serviceRoot, 'package.json'), 'utf8'));
-for (const dependency of Object.keys(root.dependencies)) {
-  copyPackage(dependency, require);
+const directDependencies = Object.keys(root.dependencies);
+
+// Copy the service's own production versions first. Recursing from
+// `@zipframes/communication` (or schemas/telemetry) would otherwise pin
+// nested `@zipframes/core@0.2.0` and skip the worker's `^0.4.0`.
+for (const dependency of directDependencies) {
+  copyPackage(dependency, require, { recurse: false });
 }
+for (const dependency of directDependencies) {
+  let source;
+  try {
+    source = packageRootFrom(require, dependency);
+  } catch {
+    continue;
+  }
+  const manifest = JSON.parse(readFileSync(path.join(source, 'package.json'), 'utf8'));
+  const dependencyResolver = createRequire(path.join(source, 'package.json'));
+  for (const nested of Object.keys(manifest.dependencies ?? {})) {
+    copyPackage(nested, dependencyResolver);
+  }
+}
+
+assertStagedMatchesService(directDependencies);
