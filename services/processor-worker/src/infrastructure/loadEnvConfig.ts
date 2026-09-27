@@ -17,28 +17,57 @@ const configSchema = z.object({
   maxAttempts: z.coerce.number().int().positive(),
   retryBaseDelayMs: z.coerce.number().int().nonnegative(),
   retryMaxDelayMs: z.coerce.number().int().positive(),
-  healthPort: z.coerce.number().int().positive(),
   logLevel: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
   serviceVersion: z.string().min(1),
 });
 
 export type WorkerConfig = z.infer<typeof configSchema>;
 
-export const loadConfig = (env: NodeJS.ProcessEnv = process.env): WorkerConfig =>
-  configSchema.parse({
-    amqpUrl: env.AMQP_URL,
-    s3Endpoint: env.S3_ENDPOINT,
-    s3AccessKey: env.S3_ACCESS_KEY,
-    s3SecretKey: env.S3_SECRET_KEY,
-    s3Region: env.S3_REGION ?? 'us-east-1',
-    s3Bucket: env.S3_BUCKET,
-    s3ForcePathStyle: env.S3_FORCE_PATH_STYLE ?? 'true',
-    workDir: env.WORK_DIR ?? '/tmp/zipframes-processor',
-    processingTimeoutMs: env.PROCESSING_TIMEOUT_MS ?? '300000',
-    maxAttempts: env.MAX_ATTEMPTS ?? '5',
-    retryBaseDelayMs: env.RETRY_BASE_DELAY_MS ?? '1000',
-    retryMaxDelayMs: env.RETRY_MAX_DELAY_MS ?? '30000',
-    healthPort: env.HEALTH_PORT ?? '8081',
-    logLevel: env.LOG_LEVEL ?? 'info',
-    serviceVersion: env.SERVICE_VERSION ?? '0.0.0',
-  });
+const ENV_BY_FIELD: Record<string, string> = {
+  amqpUrl: 'AMQP_URL',
+  s3Endpoint: 'S3_ENDPOINT',
+  s3AccessKey: 'S3_ACCESS_KEY',
+  s3SecretKey: 'S3_SECRET_KEY',
+  s3Region: 'S3_REGION',
+  s3Bucket: 'S3_BUCKET',
+  s3ForcePathStyle: 'S3_FORCE_PATH_STYLE',
+  workDir: 'WORK_DIR',
+  processingTimeoutMs: 'PROCESSING_TIMEOUT_MS',
+  maxAttempts: 'MAX_ATTEMPTS',
+  retryBaseDelayMs: 'RETRY_BASE_DELAY_MS',
+  retryMaxDelayMs: 'RETRY_MAX_DELAY_MS',
+  logLevel: 'LOG_LEVEL',
+  serviceVersion: 'SERVICE_VERSION',
+};
+
+const formatZodError = (error: z.ZodError): Error => {
+  const path = error.issues[0]?.path[0];
+  const field = ENV_BY_FIELD[String(path)] ?? String(path);
+  return new Error(`invalid environment variable: ${field}`);
+};
+
+export const loadConfig = (env: NodeJS.ProcessEnv = process.env): WorkerConfig => {
+  try {
+    return configSchema.parse({
+      amqpUrl: env.AMQP_URL,
+      s3Endpoint: env.S3_ENDPOINT,
+      s3AccessKey: env.S3_ACCESS_KEY,
+      s3SecretKey: env.S3_SECRET_KEY,
+      s3Region: env.S3_REGION ?? 'us-east-1',
+      s3Bucket: env.S3_BUCKET,
+      s3ForcePathStyle: env.S3_FORCE_PATH_STYLE ?? 'true',
+      workDir: env.WORK_DIR ?? '/tmp/zipframes-processor',
+      processingTimeoutMs: env.PROCESSING_TIMEOUT_MS ?? '300000',
+      maxAttempts: env.MAX_ATTEMPTS ?? '5',
+      retryBaseDelayMs: env.RETRY_BASE_DELAY_MS ?? '1000',
+      retryMaxDelayMs: env.RETRY_MAX_DELAY_MS ?? '30000',
+      logLevel: env.LOG_LEVEL ?? 'info',
+      serviceVersion: env.SERVICE_VERSION ?? '0.0.0',
+    });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      throw formatZodError(error);
+    }
+    throw error;
+  }
+};

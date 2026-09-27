@@ -1,0 +1,214 @@
+import type { FastifyInstance } from 'fastify';
+import { InternalServerError, ValidationError } from '@zipframes/core';
+import { getCorrelationId } from '@zipframes/logger';
+import { describe, expect, it, vi } from 'vitest';
+
+import type { Logger } from '@zipframes/logger';
+
+import { createHttpServer } from '../../../../../src/infrastructure/http/fastify/server.js';
+
+const INTERNAL_MESSAGE = 'database exploded';
+
+const loggerStub = (): Logger => {
+  const stub: Logger = {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    child: vi.fn(() => stub),
+  };
+  return stub;
+};
+
+const buildApp = async (
+  logger: Logger = loggerStub(),
+): Promise<{ app: FastifyInstance; logger: Logger }> => {
+  const app = await createHttpServer({ corsOrigin: '*', logger });
+  app.get('/boom', async () => {
+    throw new Error(INTERNAL_MESSAGE);
+  });
+  app.get('/boom-internal', async () => {
+    throw new InternalServerError('UNEXPECTED', INTERNAL_MESSAGE);
+  });
+  app.get('/validation', async () => {
+    throw new ValidationError('INVALID_NAME', 'name is too short');
+  });
+  app.post('/echo', async () => ({ ok: true }));
+  return { app, logger };
+};
+
+describe('unhandled HTTP errors', () => {
+  it('answers 500 problem details when a handler throws, without leaking the internal message', async () => {
+    const { app, logger } = await buildApp();
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/boom',
+      headers: { 'x-correlation-id': 'corr-500' },
+    });
+
+    expect(response.statusCode).toBe(500);
+    expect(response.headers['content-type']).toContain('application/problem+json');
+    expect(response.json()).toEqual({
+      type: 'about:blank',
+      status: 500,
+      title: 'Internal server error',
+      correlationId: 'corr-500',
+    });
+    expect(response.body).not.toContain(INTERNAL_MESSAGE);
+    expect(logger.error).toHaveBeenCalledWith(
+      'unhandled http error',
+      expect.objectContaining({
+        correlationId: 'corr-500',
+        err: expect.anything(),
+      }),
+    );
+    await app.close();
+  });
+
+  it('mints a correlation id for an unexpected throw when the header is missing', async () => {
+    const { app } = await buildApp();
+
+    const response = await app.inject({ method: 'GET', url: '/boom' });
+
+    expect(response.statusCode).toBe(500);
+    expect(response.json().correlationId).toEqual(expect.any(String));
+    expect(response.json().correlationId).not.toBe('');
+    expect(response.body).not.toContain(INTERNAL_MESSAGE);
+    await app.close();
+  });
+
+  it('logs an InternalServerError without wrapping it again', async () => {
+    const { app, logger } = await buildApp();
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/boom-internal',
+      headers: { 'x-correlation-id': 'corr-internal' },
+    });
+
+    expect(response.statusCode).toBe(500);
+    expect(response.json()).toEqual({
+      type: 'about:blank',
+      status: 500,
+      title: 'Internal server error',
+      correlationId: 'corr-internal',
+    });
+    expect(response.body).not.toContain(INTERNAL_MESSAGE);
+    expect(logger.error).toHaveBeenCalledWith(
+      'unhandled http error',
+      expect.objectContaining({
+        correlationId: 'corr-internal',
+        err: expect.objectContaining({ code: 'UNEXPECTED' }),
+      }),
+    );
+    await app.close();
+  });
+
+  it('answers 400 problem details for a thrown ValidationError, using the error message', async () => {
+    const { app, logger } = await buildApp();
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/validation',
+      headers: { 'x-correlation-id': 'corr-validation' },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.headers['content-type']).toContain('application/problem+json');
+    expect(response.json()).toEqual({
+      type: 'about:blank',
+      status: 400,
+      title: 'name is too short',
+      correlationId: 'corr-validation',
+    });
+    expect(response.body).not.toHaveProperty('detail');
+    expect(logger.error).not.toHaveBeenCalled();
+    await app.close();
+  });
+});
+
+describe('Fastify client errors as problem details', () => {
+  it('answers 404 problem details for an unknown route', async () => {
+    const { app } = await buildApp();
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/no-such-route',
+      headers: { 'x-correlation-id': 'corr-404' },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.headers['content-type']).toContain('application/problem+json');
+    expect(response.json()).toEqual({
+      type: 'about:blank',
+      status: 404,
+      title: 'Not found',
+      correlationId: 'corr-404',
+    });
+    expect(response.json()).not.toHaveProperty('message');
+    expect(response.json()).not.toHaveProperty('statusCode');
+    await app.close();
+  });
+
+  it('mints a correlation id for a 404 when the header is empty', async () => {
+    const { app } = await buildApp();
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/no-such-route',
+      headers: { 'x-correlation-id': '' },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json().correlationId).toEqual(expect.any(String));
+    expect(response.json().correlationId).not.toBe('');
+    await app.close();
+  });
+
+  it('answers 400 problem details for malformed JSON, without the parser message', async () => {
+    const { app } = await buildApp();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/echo',
+      headers: {
+        'content-type': 'application/json',
+        'x-correlation-id': 'corr-400',
+      },
+      payload: '{not-json',
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.headers['content-type']).toContain('application/problem+json');
+    expect(response.json()).toEqual({
+      type: 'about:blank',
+      status: 400,
+      title: 'Invalid request',
+      correlationId: 'corr-400',
+    });
+    expect(response.body).not.toContain('Unexpected');
+    expect(response.json()).not.toHaveProperty('message');
+    await app.close();
+  });
+
+  it('runs the request under the correlation id from the header', async () => {
+    const { app } = await buildApp();
+    let seen: string | undefined;
+    app.get('/corr', async (request) => {
+      seen = getCorrelationId();
+      return { correlationId: request.correlationId };
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/corr',
+      headers: { 'x-correlation-id': 'corr-als' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ correlationId: 'corr-als' });
+    expect(seen).toBe('corr-als');
+    await app.close();
+  });
+});

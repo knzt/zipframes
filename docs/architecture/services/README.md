@@ -1,6 +1,6 @@
 # Arquitetura por serviço
 
-Documentos de arquitetura interna de cada microsserviço. A Clean Architecture é a base. `application/` junta o que o livro separa: casos de uso e interface adapters. O que vive nessa pasta, o que é um interface adapter aqui, como um pedido atravessa até a infraestrutura e por que a dependência aponta para dentro está em [layers.md](../layers.md), junto com a taxonomia das interfaces e a nomenclatura. O HTTP comum (saúde e OpenAPI) está em [http.md](../http.md). Cada serviço detalha aqui o mapa de pastas, componentes e fluxos do seu contexto.
+Documentos de arquitetura interna de cada microsserviço. A Clean Architecture é a base. Os quatro anéis em `src/` são `domain/`, `application/` (casos de uso e ports), `interface-adapters/` (controllers) e `infrastructure/` (drivers). `main/` é o composition root (`start.ts`, factories, e `handlers/` só no auth). O que vive em cada pasta, a direção da dependência e a nomenclatura estão em [layers.md](../layers.md). O HTTP comum (saúde e OpenAPI) está em [http.md](../http.md). Cada serviço detalha aqui o mapa de pastas, componentes e fluxos do seu contexto.
 
 | Serviço            | Documento                                    | Persistência         |
 | ------------------ | -------------------------------------------- | -------------------- |

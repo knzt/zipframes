@@ -1,4 +1,4 @@
-import { startAuthService } from './compose.js';
+import { startAuthService } from './start.js';
 
 const main = async (): Promise<void> => {
   const service = await startAuthService();

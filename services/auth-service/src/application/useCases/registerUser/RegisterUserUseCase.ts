@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { ConflictError, ValidationError, err, ok } from '@zipframes/core';
 import type { Result } from '@zipframes/core';
 
@@ -6,8 +8,6 @@ import { User } from '../../../domain/entities/user.js';
 import { createPassword } from '../../../domain/valueObjects/password.js';
 import type { EventPublisher } from '../../interfaces/gateways/EventPublisher.js';
 import type { UserRepository } from '../../interfaces/repositories/UserRepository.js';
-import type { Clock } from '../../interfaces/services/Clock.js';
-import type { IdGenerator } from '../../interfaces/services/IdGenerator.js';
 import type { PasswordHasher } from '../../interfaces/services/PasswordHasher.js';
 import type {
   RegisterUserUseCaseError,
@@ -15,18 +15,18 @@ import type {
   RegisterUserUseCaseOutput,
 } from './registerUser.types.js';
 
+export interface RegisterUserUseCaseDeps {
+  readonly userRepository: UserRepository;
+  readonly passwordHasher: PasswordHasher;
+  readonly eventPublisher: EventPublisher;
+  readonly onPublishFailed?: (
+    error: unknown,
+    details: { readonly userId: string; readonly correlationId: string },
+  ) => void;
+}
+
 export class RegisterUserUseCase {
-  constructor(
-    private readonly userRepository: UserRepository,
-    private readonly passwordHasher: PasswordHasher,
-    private readonly idGenerator: IdGenerator,
-    private readonly clock: Clock,
-    private readonly eventPublisher: EventPublisher,
-    private readonly onPublishFailed?: (
-      error: unknown,
-      details: { readonly userId: string; readonly correlationId: string },
-    ) => void,
-  ) {}
+  constructor(private readonly deps: RegisterUserUseCaseDeps) {}
 
   async execute(
     input: RegisterUserUseCaseInput,
@@ -36,23 +36,25 @@ export class RegisterUserUseCase {
       return err(new ValidationError(password.error.code, password.error.message));
     }
 
-    const passwordHash = await this.passwordHasher.hash(password.value);
-    const now = this.clock.now();
-
-    const user = new User({
-      id: this.idGenerator.next(),
+    const user = User.create({
+      id: randomUUID(),
       name: input.name,
       email: input.email,
-      passwordHash,
-      now,
+      now: new Date(),
     });
+    if (!user.ok) {
+      return err(user.error);
+    }
 
-    const existing = await this.userRepository.findByEmail(user.email);
+    const existing = await this.deps.userRepository.findByEmail(user.value.email);
     if (existing !== null) {
       return err(new ConflictError('EMAIL_TAKEN', 'email is already registered'));
     }
 
-    const created = await this.userRepository.create(user);
+    const passwordHash = await this.deps.passwordHasher.hash(password.value);
+    const created = await this.deps.userRepository.create(
+      user.value.withPasswordHash(passwordHash),
+    );
 
     await this.publishUserRegistered(input.correlationId, created);
 
@@ -65,13 +67,13 @@ export class RegisterUserUseCase {
 
   private async publishUserRegistered(correlationId: string, user: User): Promise<void> {
     try {
-      await this.eventPublisher.publish({
+      await this.deps.eventPublisher.publish({
         eventType: 'user.registered',
         correlationId,
         payload: userRegisteredFrom(user),
       });
     } catch (error) {
-      this.onPublishFailed?.(error, {
+      this.deps.onPublishFailed?.(error, {
         userId: user.id,
         correlationId,
       });

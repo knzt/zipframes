@@ -121,11 +121,10 @@ curl -fsS -X POST http://localhost:3000/register \
   -H 'content-type: application/json' \
   -d '{"name":"Ada Lovelace","email":"ada@example.com","password":"senha1234"}'
 
-curl -fsS http://localhost:8081/health/ready
 curl -fsS http://localhost:9333/cluster/healthz
 ```
 
-A senha do exemplo tem letra e dígito, entre 8 e 72 caracteres. `GET /health/ready` do auth responde 200 com Postgres e RabbitMQ alcançáveis, e 503 com `reason` se um dos dois falhar. O do worker responde 200 com RabbitMQ e o bucket alcançáveis. `GET /health/live` só diz que o processo está de pé. `GET /docs` é o OpenAPI gerado. `GET /metrics` é o texto Prometheus.
+A senha do exemplo tem letra e dígito, entre 8 e 72 caracteres. `GET /health/ready` do auth responde 200 com Postgres e RabbitMQ alcançáveis, e 503 com `reason` se um dos dois falhar. `GET /health/live` só diz que o processo está de pé. `GET /docs` é o OpenAPI gerado. `GET /metrics` é o texto Prometheus. O worker não escuta HTTP.
 
 Portas, Mailpit e o caminho em que os dois processos rodam dentro de container estão em [`infra/docker-compose/README.md`](infra/docker-compose/README.md).
 

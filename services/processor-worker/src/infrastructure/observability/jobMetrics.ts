@@ -1,7 +1,7 @@
 import type { TechnicalMetrics } from '@zipframes/telemetry';
 
-import type { JobMetrics } from '../messaging/videoUploadedConsumer.js';
-import { UPLOADED_QUEUE } from '../messaging/topology.js';
+import type { JobMetrics } from '../messaging/amqplib/videoUploadedConsumer.js';
+import { UPLOADED_QUEUE } from '../messaging/amqplib/topology.js';
 
 export const createJobMetrics = (metrics: TechnicalMetrics): JobMetrics => {
   const destination = UPLOADED_QUEUE;

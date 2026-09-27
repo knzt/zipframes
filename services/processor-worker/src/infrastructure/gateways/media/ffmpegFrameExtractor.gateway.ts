@@ -73,8 +73,12 @@ const runFfmpeg = (args: string[], signal?: AbortSignal): Promise<void> =>
     });
   });
 
-export const createFfmpegFrameExtractor = (): FrameExtractor => ({
-  extract: async (originalVideoPath, framesDirectory, signal) => {
+export class FfmpegFrameExtractor implements FrameExtractor {
+  async extract(
+    originalVideoPath: string,
+    framesDirectory: string,
+    signal?: AbortSignal,
+  ): Promise<readonly string[]> {
     await mkdir(framesDirectory, { recursive: true });
     const pattern = path.join(framesDirectory, `frame_%04d.${FRAME_EXTENSION}`);
     await runFfmpeg(
@@ -98,5 +102,5 @@ export const createFfmpegFrameExtractor = (): FrameExtractor => ({
     }
 
     return framePaths;
-  },
-});
+  }
+}

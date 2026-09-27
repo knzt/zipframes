@@ -28,6 +28,19 @@ const configSchema = z.object({
 
 export type Config = z.infer<typeof configSchema>;
 
+const ENV_BY_FIELD: Record<string, string> = {
+  port: 'PORT',
+  corsOrigin: 'CORS_ORIGIN',
+  databaseUrl: 'AUTH_DATABASE_URL',
+  amqpUrl: 'AMQP_URL',
+  jwtPrivateKeyPem: 'JWT_PRIVATE_KEY_PEM',
+  jwtKid: 'JWT_KID',
+  jwtIssuer: 'JWT_ISSUER',
+  jwtAudience: 'JWT_AUDIENCE',
+  logLevel: 'LOG_LEVEL',
+  serviceVersion: 'SERVICE_VERSION',
+};
+
 const resolveJwtPrivateKeyPem = (env: NodeJS.ProcessEnv): string => {
   const inline = env.JWT_PRIVATE_KEY_PEM;
   if (inline !== undefined && inline.length > 0) {
@@ -40,27 +53,9 @@ const resolveJwtPrivateKeyPem = (env: NodeJS.ProcessEnv): string => {
   return readFileSync(file, 'utf8');
 };
 
-const formatZodError = (error: z.ZodError): Error => {
-  const issue = error.issues[0];
-  const path = issue?.path[0];
-  const field =
-    path === 'databaseUrl'
-      ? 'AUTH_DATABASE_URL'
-      : path === 'amqpUrl'
-        ? 'AMQP_URL'
-        : path === 'jwtPrivateKeyPem'
-          ? 'JWT_PRIVATE_KEY_PEM'
-          : path === 'jwtKid'
-            ? 'JWT_KID'
-            : path === 'jwtIssuer'
-              ? 'JWT_ISSUER'
-              : path === 'jwtAudience'
-                ? 'JWT_AUDIENCE'
-                : path === 'port'
-                  ? 'PORT'
-                  : path === 'logLevel'
-                    ? 'LOG_LEVEL'
-                    : String(path);
+export const formatZodError = (error: z.ZodError): Error => {
+  const path = error.issues[0]?.path[0];
+  const field = ENV_BY_FIELD[String(path)] ?? String(path);
   return new Error(`invalid environment variable: ${field}`);
 };
 

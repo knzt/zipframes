@@ -6,8 +6,8 @@ import path from 'node:path';
 import type { ArchiveBuilder } from '../../../application/interfaces/services/ArchiveBuilder.js';
 
 /** Zip with store method only — PNGs are already compressed. */
-export const createZipArchiveBuilder = (): ArchiveBuilder => ({
-  createZip: async (framePaths, framesPackagePath) => {
+export class ZipArchiveBuilder implements ArchiveBuilder {
+  async createZip(framePaths: readonly string[], framesPackagePath: string): Promise<void> {
     await new Promise<void>((resolve, reject) => {
       const packageStream = createWriteStream(framesPackagePath);
       const archive = archiver('zip', { zlib: { level: 0 }, store: true });
@@ -28,5 +28,5 @@ export const createZipArchiveBuilder = (): ArchiveBuilder => ({
       }
       void archive.finalize();
     });
-  },
-});
+  }
+}

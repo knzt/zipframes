@@ -3,8 +3,9 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { z } from 'zod';
 
-import { loadConfig } from '../../../src/infrastructure/loadEnvConfig.js';
+import { formatZodError, loadConfig } from '../../../src/infrastructure/loadEnvConfig.js';
 
 const REQUIRED_VARS = {
   AUTH_DATABASE_URL: 'postgresql://localhost/auth_db',
@@ -143,7 +144,7 @@ describe('loadConfig', () => {
         ...process.env,
         SERVICE_VERSION: { length: 1 } as unknown as string,
       }),
-    ).toThrow('serviceVersion');
+    ).toThrow('SERVICE_VERSION');
   });
 
   it('rejects a non-numeric port', () => {
@@ -156,6 +157,18 @@ describe('loadConfig', () => {
     process.env.PORT = '';
 
     expect(loadConfig().port).toBe(3000);
+  });
+
+  it('falls back to the field name when it is not a known env var', () => {
+    const error = new z.ZodError([
+      {
+        code: 'custom',
+        path: ['notAMappedField'],
+        message: 'invalid',
+      },
+    ]);
+
+    expect(formatZodError(error).message).toBe('invalid environment variable: notAMappedField');
   });
 
   it('rejects an unknown log level', () => {

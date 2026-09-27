@@ -58,16 +58,15 @@ pnpm --dir services/processor-worker stage-runtime
 pnpm infra:apps
 ```
 
-`pnpm infra:apps` é `docker compose ... --profile apps up -d --build`. O container do auth aplica as migrations na subida (`prisma migrate deploy`) e escuta na porta 3000. O worker escuta na 8081. A chave montada no auth é `infra/docker-compose/auth/jwt-dev.pem`, com `JWT_KID=auth-dev-1`.
+`pnpm infra:apps` é `docker compose ... --profile apps up -d --build`. O container do auth aplica as migrations na subida (`prisma migrate deploy`) e escuta na porta 3000. O worker consome AMQP e não publica porta HTTP. A chave montada no auth é `infra/docker-compose/auth/jwt-dev.pem`, com `JWT_KID=auth-dev-1`.
 
 ```bash
 curl -fsS http://localhost:3000/health/ready
-curl -fsS http://localhost:8081/health/ready
 ```
 
-`GET /health/ready` do auth exige Postgres e RabbitMQ. O do worker exige RabbitMQ e o bucket. `GET /health/live` e `GET /metrics` existem nos dois. `GET /docs` publica o OpenAPI.
+`GET /health/ready` do auth exige Postgres e RabbitMQ. `GET /health/live` e `GET /metrics` existem no auth. `GET /docs` publica o OpenAPI. O worker usa healthcheck exec (`kill -0 1`).
 
-Não rode o mesmo processo na máquina e no container ao mesmo tempo: os dois usam as portas 3000 e 8081.
+Não rode o mesmo processo na máquina e no container ao mesmo tempo: os dois usam a porta 3000 no auth.
 
 ## O que este Compose não é
 

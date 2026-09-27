@@ -1,6 +1,6 @@
 # C4 nível 3: componentes do video-service
 
-Abre o video-service e mostra o caminho de uma requisição. Os nomes das caixas ajudam a ler o fluxo. Não são o mapa de pastas do repositório. Nos serviços que já existem, `application/` junta casos de uso e interface adapters, e a implementação fica em `infrastructure/`; o porquê está em [layers.md](../../architecture/layers.md). O video-service ainda não está implementado.
+Abre o video-service e mostra o caminho de uma requisição. Os nomes das caixas ajudam a ler o fluxo. Não são o mapa de pastas do repositório. Nos serviços que já existem, os quatro anéis em `src/` são `domain/`, `application/` (casos de uso e ports), `interface-adapters/` (controllers) e `infrastructure/` (drivers); o porquê está em [layers.md](../../architecture/layers.md). O video-service ainda não está implementado.
 
 ```mermaid
 flowchart TB

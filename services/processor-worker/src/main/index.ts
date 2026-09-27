@@ -1,16 +1,28 @@
-import { startWorker } from './compose.js';
+import { startWorker } from './start.js';
 
-const worker = await startWorker();
+const main = async (): Promise<void> => {
+  const service = await startWorker();
+  let stopping = false;
 
-const shutdown = async (signal: string): Promise<void> => {
-  console.info(`received ${signal}, shutting down`);
-  await worker.stop();
-  process.exit(0);
+  const shutdown = async (signal: string): Promise<void> => {
+    if (stopping) {
+      return;
+    }
+    stopping = true;
+    console.info(`received ${signal}, shutting down`);
+    await service.stop();
+    process.exit(0);
+  };
+
+  process.on('SIGINT', () => {
+    void shutdown('SIGINT');
+  });
+  process.on('SIGTERM', () => {
+    void shutdown('SIGTERM');
+  });
 };
 
-process.on('SIGINT', () => {
-  void shutdown('SIGINT');
-});
-process.on('SIGTERM', () => {
-  void shutdown('SIGTERM');
+main().catch((error: unknown) => {
+  console.error(error);
+  process.exit(1);
 });
