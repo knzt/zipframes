@@ -7,11 +7,11 @@ import {
   UploadNotFoundError,
 } from '../../../domain/errors/videoErrors.js';
 import { videoQueuedFrom } from '../../../domain/events/videoQueued.js';
+import { VideoNotFoundError } from '../../errors/VideoNotFoundError.js';
 import type { EventPublisher } from '../../interfaces/gateways/EventPublisher.js';
 import type { ObjectStorage } from '../../interfaces/gateways/ObjectStorage.js';
 import type { VideoListCache } from '../../interfaces/gateways/VideoListCache.js';
 import type { VideoRepository } from '../../interfaces/repositories/VideoRepository.js';
-import { VideoNotFoundError } from '../../errors/VideoNotFoundError.js';
 import type {
   ConfirmUploadUseCaseError,
   ConfirmUploadUseCaseInput,
@@ -21,10 +21,18 @@ import type {
 /**
  * Queues an uploaded video for processing.
  *
- * `video.uploaded` is published inside the transaction that writes `QUEUED`:
- * when the broker does not confirm, nothing is stored and the caller gets a
- * 503 to retry. Publishing after the commit would instead leave a video
- * `QUEUED` forever with no worker ever told about it.
+ * `video.uploaded` is published before the video is written as `QUEUED`,
+ * not after: when the broker does not confirm, nothing about the video
+ * changes and the caller gets a 503 to retry. Publishing after a successful
+ * write would risk the opposite failure — a video stuck `QUEUED` forever
+ * with no worker ever told about it — which this order cannot produce.
+ *
+ * The narrower risk this order takes on instead — the publish succeeds but
+ * the write that follows fails — is already handled on the consuming side:
+ * `ApplyProcessingEventUseCase` treats a status event for a video that is
+ * not yet `QUEUED` as retryable, so the worker's `started` event simply
+ * waits with backoff for this write to land, the same as any other
+ * transient failure.
  */
 export class ConfirmUploadUseCase {
   constructor(
@@ -38,9 +46,9 @@ export class ConfirmUploadUseCase {
   async execute(
     confirmation: ConfirmUploadUseCaseInput,
   ): Promise<Result<ConfirmUploadUseCaseOutput, ConfirmUploadUseCaseError>> {
-    const video = await this.videoRepository.findByOwnerId(
-      confirmation.ownerId,
+    const video = await this.videoRepository.findByIdForOwner(
       confirmation.videoId,
+      confirmation.ownerId,
     );
     if (video === null) {
       return err(new VideoNotFoundError());
@@ -55,9 +63,8 @@ export class ConfirmUploadUseCase {
       return err(await this.rejection(video, queued.error));
     }
 
-    await this.videoRepository.save(queued.value, () =>
-      this.publishVideoUploaded(queued.value, confirmation.correlationId),
-    );
+    await this.publishVideoUploaded(queued.value, confirmation.correlationId);
+    await this.videoRepository.save(queued.value);
     await this.videoListCache.invalidate(video.ownerId);
 
     return ok({ videoId: video.id, status: 'QUEUED' as const });

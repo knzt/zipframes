@@ -286,23 +286,6 @@ describe('PrismaVideoRepository against Postgres', () => {
     expect((await repository.findById(video.id))?.version).toBe(1);
   });
 
-  it('discards the write when beforeCommit throws', async () => {
-    const repository = new PrismaVideoRepository(app.prisma);
-    const video = aVideo('AWAITING_UPLOAD', { id: randomUUID(), ownerId: randomUUID() });
-    await repository.create(video);
-    const confirmed = video.confirmUpload({
-      storedObject: { sizeBytes: 1024 },
-      maxSizeBytes: MAX_UPLOAD_BYTES,
-      now: new Date(),
-    });
-    if (!confirmed.ok) throw confirmed.error;
-
-    await expect(
-      repository.save(confirmed.value, () => Promise.reject(new Error('broker down'))),
-    ).rejects.toThrow('broker down');
-    expect((await repository.findById(video.id))?.status).toBe('AWAITING_UPLOAD');
-  });
-
   it('finds DONE videos whose window ended, and nothing else', async () => {
     const repository = new PrismaVideoRepository(app.prisma);
     const ownerId = randomUUID();

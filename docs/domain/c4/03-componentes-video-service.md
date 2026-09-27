@@ -102,7 +102,7 @@ Não existe `ProcessedEventStore` nem tabela de eventos processados: a máquina 
 | Use Cases            | Interfaces                                            | Declaradas pelos casos de uso em `application/interfaces/`                                        |
 | Interface Adapters   | Controllers HTTP                                      | `defineAuthenticatedHandler`: validam o token (JWKS), a entrada e traduzem o `Result` em resposta |
 | Interface Adapters   | `ApplyProcessingEventController`                      | `defineMessageHandler`: valida o envelope contra os três eventos do worker e chama o caso de uso  |
-| Frameworks & Drivers | `PrismaVideoRepository`                               | Persistência com lock otimista por `version`; `beforeCommit` na mesma transação                   |
+| Frameworks & Drivers | `PrismaVideoRepository`                               | Persistência com lock otimista por `version` (`UPDATE ... WHERE version = $1`)                    |
 | Frameworks & Drivers | `AmqpEventPublisherGateway`                           | Monta o envelope e publica no exchange `zipframes.events` com confirmação do broker               |
 | Frameworks & Drivers | `S3ObjectStorageGateway`, `S3StorageUrlSignerGateway` | Conferem e apagam objetos; assinam URLs com o endpoint público                                    |
 | Frameworks & Drivers | `RedisVideoListCacheGateway`                          | Cache-aside que degrada para miss quando o Redis cai                                              |

@@ -26,7 +26,7 @@ export class DeleteVideoUseCase {
   async execute(
     request: DeleteVideoUseCaseInput,
   ): Promise<Result<DeleteVideoUseCaseOutput, DeleteVideoUseCaseError>> {
-    const video = await this.videoRepository.findByOwnerId(request.ownerId, request.videoId);
+    const video = await this.videoRepository.findByIdForOwner(request.videoId, request.ownerId);
     if (video === null) {
       return err(new VideoNotFoundError());
     }

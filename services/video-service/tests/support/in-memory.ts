@@ -24,8 +24,8 @@ import { Video } from '../../src/domain/entities/video.js';
 
 /**
  * In-memory stand-ins for the interfaces the use cases declare. The
- * repository keeps the same guarantees as the Prisma one: an optimistic lock
- * on `version`, and `beforeCommit` that discards the write when it throws.
+ * repository keeps the same guarantee as the Prisma one: an optimistic lock
+ * on `version`.
  */
 export class InMemoryVideoRepository implements VideoRepository {
   readonly rows = new Map<string, Video>();
@@ -47,7 +47,7 @@ export class InMemoryVideoRepository implements VideoRepository {
     return Promise.resolve(this.rows.get(videoId) ?? null);
   }
 
-  findByOwnerId(ownerId: string, videoId: string): Promise<Video | null> {
+  findByIdForOwner(videoId: string, ownerId: string): Promise<Video | null> {
     const video = this.rows.get(videoId);
     return Promise.resolve(video?.ownerId === ownerId ? video : null);
   }
@@ -76,17 +76,17 @@ export class InMemoryVideoRepository implements VideoRepository {
     );
   }
 
-  async save(video: Video, beforeCommit?: () => Promise<void>): Promise<void> {
+  save(video: Video): Promise<void> {
     const current = this.rows.get(video.id);
     if (current?.version !== video.version) {
       throw new ConflictError(CONCURRENT_VIDEO_UPDATE, 'the video changed meanwhile, try again');
     }
-    await beforeCommit?.();
     this.rows.set(
       video.id,
       Video.fromPersistence({ ...video.toJSON(), version: video.version + 1 }),
     );
     this.saves += 1;
+    return Promise.resolve();
   }
 }
 

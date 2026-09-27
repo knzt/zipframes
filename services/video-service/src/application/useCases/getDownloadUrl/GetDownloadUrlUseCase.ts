@@ -26,7 +26,7 @@ export class GetDownloadUrlUseCase {
   async execute(
     query: GetDownloadUrlUseCaseInput,
   ): Promise<Result<GetDownloadUrlUseCaseOutput, GetDownloadUrlUseCaseError>> {
-    const video = await this.videoRepository.findByOwnerId(query.ownerId, query.videoId);
+    const video = await this.videoRepository.findByIdForOwner(query.videoId, query.ownerId);
     if (video === null) {
       return err(new VideoNotFoundError());
     }

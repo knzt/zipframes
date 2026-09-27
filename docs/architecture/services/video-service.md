@@ -91,7 +91,7 @@ video-service/src/
 
 Casos de uso HTTP devolvem `Result` (como no auth). Os de mensagem e do agendador lançam (como no worker): exceção falha a tentativa e `defineMessageHandler` decide entre retry e DLQ. Nenhum caso de uso mistura os dois estilos.
 
-Todo acesso a um vídeo pelo dono passa por `VideoRepository.findByOwnerId(ownerId, videoId)`, que filtra pelo dono na própria consulta: vídeo de outro dono e vídeo inexistente dão o mesmo `VideoNotFoundError` (404).
+Todo acesso a um vídeo pelo dono passa por `VideoRepository.findByIdForOwner(videoId, ownerId)`, que filtra pelo dono na própria consulta: vídeo de outro dono e vídeo inexistente dão o mesmo `VideoNotFoundError` (404). O repositório também expõe `findById(videoId)`, sem dono, só para o caminho que já confia no id por vir de um evento (`ApplyProcessingEventUseCase`).
 
 ## Máquina de estados
 
@@ -117,15 +117,17 @@ stateDiagram-v2
 
 ## Publicação de `video.uploaded`
 
-Aqui a publicação não é dual-write depois do commit, como no auth. O caso de uso chama `VideoRepository.save(video, beforeCommit)`, e o repositório Prisma executa o `UPDATE` e o `publish` (que só resolve com o confirm do broker) dentro da mesma transação interativa:
+`VideoRepository` não sabe nada sobre publicar eventos — `save(video)` só grava. A ordem de quem chama o quê é decisão do caso de uso: `ConfirmUploadUseCase` publica `video.uploaded` **antes** de chamar `save`, não depois.
 
-| Falha                            | Resultado                                                                                                  |
-| -------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| Broker não confirma              | Rollback. Nada muda, o cliente recebe `503` e confirma de novo                                             |
-| Commit falha depois do confirm   | O evento saiu e o vídeo continua `AWAITING_UPLOAD`. O worker processa; os eventos dele caem no caso abaixo |
-| Evento do worker antes do commit | O vídeo ainda está `AWAITING_UPLOAD`: o caso de uso lança erro retentável e a mensagem volta com backoff   |
+A ordem inversa (persistir e só então publicar, como o auth faz) tem uma consequência pior aqui: no auth, um usuário gravado sem `user.registered` ainda consegue logar; um vídeo gravado `QUEUED` sem `video.uploaded` ficaria parado para sempre, sem o worker jamais saber dele, e uma nova tentativa de confirmar já bateria em "upload já confirmado" (409) sem consertar nada. Publicar primeiro elimina esse desfecho: se o broker não confirma, nada muda no banco.
 
-No auth, um usuário gravado sem `user.registered` ainda consegue logar. Aqui, um vídeo `QUEUED` sem evento ficaria parado para sempre, por isso a troca. A janela que sobra (commit que falha depois do confirm) é a mesma de qualquer dual-write e continua sem outbox.
+| Falha                                   | Resultado                                                                                                                                                                                                                    |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Broker não confirma                     | Nada é gravado. O cliente recebe `503` e confirma de novo                                                                                                                                                                    |
+| `save` falha depois do publish          | O evento já saiu; o vídeo continua `AWAITING_UPLOAD`. O `started` do worker chega, encontra um vídeo ainda não `QUEUED` e a mensagem volta com backoff até o `save` ter tempo de suceder (ver `ApplyProcessingEventUseCase`) |
+| Confirmação concorrente perde a corrida | As duas leituras publicam (evento duplicado, tolerado: chave de resultado determinística, consumidor idempotente); só um `save` vence, o outro recebe `409`                                                                  |
+
+O preço dessa ordem é uma corrida mais estreita: duas confirmações (ou uma confirmação e uma exclusão) simultâneas para o mesmo vídeo podem publicar antes que o `save` decida qual delas venceu. O sistema já tolera isso — reprocessar a mesma chave de resultado não duplica nada, e um evento para um vídeo que acabou `DELETED` é apenas ignorado (estado terminal) — então o efeito é, no pior caso, uma tentativa de processamento desperdiçada, nunca dado corrompido.
 
 ## Mensageria
 

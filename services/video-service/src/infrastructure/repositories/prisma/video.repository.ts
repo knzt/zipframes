@@ -8,8 +8,6 @@ import {
 } from '../../../application/interfaces/repositories/VideoRepository.js';
 import { Video } from '../../../domain/entities/video.js';
 
-const TRANSACTION_TIMEOUT_MS = 10_000;
-
 const toDomain = (row: VideoRow): Video =>
   Video.fromPersistence({ ...row, sizeBytes: Number(row.sizeBytes) });
 
@@ -31,9 +29,6 @@ const mutableColumnsOf = (video: Video): Prisma.VideoUpdateManyMutationInput => 
   };
 };
 
-const concurrentUpdate = (): ConflictError =>
-  new ConflictError(CONCURRENT_VIDEO_UPDATE, 'the video changed meanwhile, try again');
-
 export class PrismaVideoRepository implements VideoRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
@@ -49,7 +44,7 @@ export class PrismaVideoRepository implements VideoRepository {
     return row === null ? null : toDomain(row);
   }
 
-  async findByOwnerId(ownerId: string, videoId: string): Promise<Video | null> {
+  async findByIdForOwner(videoId: string, ownerId: string): Promise<Video | null> {
     const row = await this.prisma.video.findFirst({ where: { id: videoId, ownerId } });
     return row === null ? null : toDomain(row);
   }
@@ -76,28 +71,13 @@ export class PrismaVideoRepository implements VideoRepository {
     return rows.map(toDomain);
   }
 
-  async save(video: Video, beforeCommit?: () => Promise<void>): Promise<void> {
-    const write = async (client: Prisma.TransactionClient | PrismaClient): Promise<void> => {
-      const { count } = await client.video.updateMany({
-        where: { id: video.id, version: video.version },
-        data: mutableColumnsOf(video),
-      });
-      if (count === 0) {
-        throw concurrentUpdate();
-      }
-    };
-
-    if (beforeCommit === undefined) {
-      await write(this.prisma);
-      return;
+  async save(video: Video): Promise<void> {
+    const { count } = await this.prisma.video.updateMany({
+      where: { id: video.id, version: video.version },
+      data: mutableColumnsOf(video),
+    });
+    if (count === 0) {
+      throw new ConflictError(CONCURRENT_VIDEO_UPDATE, 'the video changed meanwhile, try again');
     }
-
-    await this.prisma.$transaction(
-      async (tx) => {
-        await write(tx);
-        await beforeCommit();
-      },
-      { timeout: TRANSACTION_TIMEOUT_MS },
-    );
   }
 }
