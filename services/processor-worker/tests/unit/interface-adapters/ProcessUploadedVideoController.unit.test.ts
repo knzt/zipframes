@@ -1,8 +1,10 @@
+import { UnavailableError } from '@zipframes/core';
 import type { VideoUploadedEvent } from '@zipframes/schemas/video-service';
 import { describe, expect, it, vi } from 'vitest';
 
-import { ProcessUploadedVideoController } from '../../../src/interface-adapters/ProcessUploadedVideoController.js';
+import type { EventPublisher } from '../../../src/application/interfaces/gateways/EventPublisher.js';
 import type { ProcessUploadedVideoUseCase } from '../../../src/application/useCases/processUploadedVideo/ProcessUploadedVideoUseCase.js';
+import { ProcessUploadedVideoController } from '../../../src/interface-adapters/ProcessUploadedVideoController.js';
 
 const event: VideoUploadedEvent = {
   eventId: '33333333-3333-4333-8333-333333333333',
@@ -19,19 +21,27 @@ const event: VideoUploadedEvent = {
   },
 };
 
-const controllerFor = (
+const retry = { maxAttempts: 5, baseDelayMs: 10, maxDelayMs: 100 };
+
+const setup = (
   execute: ProcessUploadedVideoUseCase['execute'],
-): ProcessUploadedVideoController =>
-  new ProcessUploadedVideoController({ execute } as unknown as ProcessUploadedVideoUseCase);
+): { controller: ProcessUploadedVideoController; eventPublisher: EventPublisher } => {
+  const eventPublisher: EventPublisher = { publish: vi.fn(async () => undefined) };
+  const controller = new ProcessUploadedVideoController(
+    { execute } as unknown as ProcessUploadedVideoUseCase,
+    eventPublisher,
+    retry,
+  );
+  return { controller, eventPublisher };
+};
 
 describe('ProcessUploadedVideoController', () => {
-  it('maps the decoded envelope onto the use case and returns its result', async () => {
+  it('maps the envelope onto the use case and acks its outcome', async () => {
     const execute = vi.fn(async () => 'frames_packaged' as const);
-    const controller = controllerFor(execute);
+    const { controller } = setup(execute);
 
-    const result = await controller.handle({ event, attempt: 2 });
+    const decision = await controller.handle({ envelope: event, attempt: 2 });
 
-    expect(result).toBe('frames_packaged');
     expect(execute).toHaveBeenCalledWith({
       videoId: event.payload.videoId,
       ownerId: event.payload.ownerId,
@@ -41,14 +51,102 @@ describe('ProcessUploadedVideoController', () => {
       attempt: 2,
       correlationId: event.correlationId,
     });
+    expect(decision).toEqual({ action: 'ack', event, outcome: 'frames_packaged' });
   });
 
-  it('lets a retryable failure leave the controller for the consumer', async () => {
-    const execute = vi.fn(async () => {
-      throw new Error('storage down');
-    });
-    const controller = controllerFor(execute);
+  it('acks a rejected media', async () => {
+    const { controller } = setup(async () => 'media_rejected');
 
-    await expect(controller.handle({ event, attempt: 1 })).rejects.toThrow('storage down');
+    const decision = await controller.handle({ envelope: event, attempt: 1 });
+
+    expect(decision).toMatchObject({ action: 'ack', outcome: 'media_rejected' });
+  });
+
+  it('dead-letters a poison envelope without calling the use case', async () => {
+    const execute = vi.fn();
+    const { controller, eventPublisher } = setup(execute);
+
+    const decision = await controller.handle({
+      envelope: { ...event, eventType: 'not.a.real.event' },
+      attempt: 1,
+    });
+
+    expect(decision).toMatchObject({ action: 'dead_letter', reason: 'poison' });
+    expect(execute).not.toHaveBeenCalled();
+    expect(eventPublisher.publish).not.toHaveBeenCalled();
+  });
+
+  it('retries a retryable failure without publishing video.failed', async () => {
+    const { controller, eventPublisher } = setup(async () => {
+      throw new UnavailableError('STORAGE_DOWNLOAD_FAILED', 'down');
+    });
+
+    const decision = await controller.handle({ envelope: event, attempt: 1 });
+
+    expect(decision).toEqual({
+      action: 'retry',
+      event,
+      failure: { errorCode: 'STORAGE_DOWNLOAD_FAILED', retryable: true },
+    });
+    expect(eventPublisher.publish).not.toHaveBeenCalled();
+  });
+
+  it('treats a non-processing error as an unexpected retry', async () => {
+    const { controller } = setup(async () => {
+      throw new Error('socket hang up');
+    });
+
+    const decision = await controller.handle({ envelope: event, attempt: 1 });
+
+    expect(decision).toMatchObject({
+      action: 'retry',
+      failure: { errorCode: 'UNEXPECTED' },
+    });
+  });
+
+  it('publishes video.failed and dead-letters when attempts are exhausted', async () => {
+    const { controller, eventPublisher } = setup(async () => {
+      throw new UnavailableError('FFMPEG_FAILED', 'busy');
+    });
+
+    const decision = await controller.handle({ envelope: event, attempt: 5 });
+
+    expect(eventPublisher.publish).toHaveBeenCalledWith({
+      eventType: 'video.failed',
+      correlationId: event.correlationId,
+      payload: {
+        videoId: event.payload.videoId,
+        ownerId: event.payload.ownerId,
+        errorCode: 'FFMPEG_FAILED',
+        reason: 'busy',
+        attempts: 5,
+      },
+    });
+    expect(decision).toEqual({
+      action: 'dead_letter',
+      reason: 'retries_exhausted',
+      event,
+      failure: { errorCode: 'FFMPEG_FAILED', retryable: true },
+    });
+  });
+
+  it('uses a fallback reason when exhaustion throws a non-error', async () => {
+    const { controller, eventPublisher } = setup(async () => {
+      // Exercises the branch where exhaustion does not carry an Error.
+      // eslint-disable-next-line @typescript-eslint/only-throw-error
+      throw 'offline';
+    });
+
+    await controller.handle({ envelope: event, attempt: 5 });
+
+    expect(eventPublisher.publish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: 'video.failed',
+        payload: expect.objectContaining({
+          errorCode: 'UNEXPECTED',
+          reason: 'max attempts exhausted',
+        }),
+      }),
+    );
   });
 });

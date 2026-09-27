@@ -54,6 +54,7 @@ export const startWorker = async (): Promise<{ stop: () => Promise<void> }> => {
       bucket: config.s3Bucket,
       workDir: config.workDir,
       processingTimeoutMs: config.processingTimeoutMs,
+      retry,
       onDiscardOriginalFailed: (job, error) => {
         logger.error('failed to discard original object after processing', {
           videoId: job.videoId,
@@ -69,8 +70,6 @@ export const startWorker = async (): Promise<{ stop: () => Promise<void> }> => {
 
     const consumer = createVideoUploadedConsumer({
       controller: processUploadedVideoController,
-      eventPublisher,
-      retry,
       logger,
       metrics: jobMetrics,
     });
