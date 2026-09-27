@@ -19,14 +19,14 @@ import type { Readable } from 'node:stream';
 
 import type { ObjectStorage } from '../../../application/interfaces/gateways/ObjectStorage.js';
 
-export type S3ObjectStoragePort = ObjectStorage & Pingable;
+export type S3ObjectStorageGatewayPort = ObjectStorage & Pingable;
 
 const abortedError = (): TimeoutError =>
   new TimeoutError('PROCESSING_TIMEOUT', 'storage operation cancelled');
 
-export class S3ObjectStorage implements S3ObjectStoragePort {
+export class S3ObjectStorageGateway implements S3ObjectStorageGatewayPort {
   constructor(
-    private readonly client: S3Client,
+    private readonly s3: S3Client,
     private readonly bucket: string,
   ) {}
 
@@ -35,7 +35,7 @@ export class S3ObjectStorage implements S3ObjectStoragePort {
       throw abortedError();
     }
     try {
-      const response = await this.client.send(
+      const response = await this.s3.send(
         new GetObjectCommand({ Bucket: this.bucket, Key: key }),
         signal ? { abortSignal: signal } : undefined,
       );
@@ -74,7 +74,7 @@ export class S3ObjectStorage implements S3ObjectStoragePort {
     try {
       const body = createReadStream(sourcePath);
       const info = await stat(sourcePath);
-      await this.client.send(
+      await this.s3.send(
         new PutObjectCommand({
           Bucket: this.bucket,
           Key: key,
@@ -96,7 +96,7 @@ export class S3ObjectStorage implements S3ObjectStoragePort {
 
   async deleteObject(key: string): Promise<void> {
     try {
-      await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
+      await this.s3.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
     } catch (error) {
       throw new UnavailableError('STORAGE_DELETE_FAILED', `failed to delete ${key}`, {
         cause: error,
@@ -105,6 +105,6 @@ export class S3ObjectStorage implements S3ObjectStoragePort {
   }
 
   async ping(): Promise<void> {
-    await this.client.send(new HeadBucketCommand({ Bucket: this.bucket }));
+    await this.s3.send(new HeadBucketCommand({ Bucket: this.bucket }));
   }
 }

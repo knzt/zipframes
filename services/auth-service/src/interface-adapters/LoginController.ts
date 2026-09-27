@@ -5,7 +5,7 @@ import type {
   LoginUseCaseError,
   LoginUseCaseInput,
   LoginUseCaseOutput,
-} from '../application/useCases/login/login.types.js';
+} from '../application/useCases/login/login.dto.js';
 
 /**
  * Turns a validated login payload into the use case call.
@@ -14,7 +14,7 @@ import type {
 export class LoginController {
   constructor(private readonly loginUseCase: LoginUseCase) {}
 
-  handle(input: LoginUseCaseInput): Promise<Result<LoginUseCaseOutput, LoginUseCaseError>> {
-    return this.loginUseCase.execute(input);
+  handle(credentials: LoginUseCaseInput): Promise<Result<LoginUseCaseOutput, LoginUseCaseError>> {
+    return this.loginUseCase.execute(credentials);
   }
 }

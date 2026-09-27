@@ -12,7 +12,7 @@ Cadastrar usuário, autenticar e emitir JWT RS256. Depois de gravar o usuário, 
 
 As dependências apontam para dentro. Os quatro anéis e o composition root estão em [layers.md](../layers.md).
 
-Neste serviço, Fastify fica em `infrastructure/http/fastify/` (`server.ts`, `bindHttpRoutes`, adapter, health, plugins). `bindHttpRoutes` é o único `app.route`. O correlation id é calculado no `onRequest` de `server.ts`. `HttpRouteDefinition`, `jsonSchemaOf` e o schema de problem+json ficam em `infrastructure/http/`, fora da pasta do driver. Os handlers em `main/handlers/` são `defineHandler` de `@zipframes/http` (JWKS tem o próprio handler): validam o pedido, chamam o controller e devolvem `HttpReply`. `identityRoutes.ts` lista `method`/`path`/`openApi`/`handle`. O controller em `interface-adapters/` chama `RegisterUserUseCase` ou `LoginUseCase` e devolve `Result`. Cadastro usa o `errorHelper` padrão (`statusCode` + `message`). Login passa um `errorHelper` que sempre responde 401. O caso de uso só enxerga as interfaces que declara. `start.ts` abre Prisma/AMQP, deriva o `tokenIssuer` para o JWKS, chama as factories de controller e dá `listen`. `createRegisterUserController({ prisma, amqp, logger })` chama `createRegisterUser`, que instancia repositório, hasher e publisher. O controller não importa Fastify, Prisma nem bcrypt. `@zipframes/authenticator` continua só em teste — o auth emite JWT, não verifica nas rotas de register/login.
+Neste serviço, Fastify fica em `infrastructure/http/fastify/` (`server.ts`, `bindHttpRoutes`, adapter, health, plugins). `bindHttpRoutes` é o único `app.route`. O correlation id é calculado no `onRequest` de `server.ts`. `HttpRouteDefinition`, `jsonSchemaOf` e o schema de problem+json ficam em `infrastructure/http/`, fora da pasta do driver. Os handlers em `main/handlers/` são `defineHandler` de `@zipframes/http` (JWKS tem o próprio handler): validam o pedido, chamam o controller e devolvem `HttpReply`. `identityRoutes.ts` lista `method`/`path`/`openApi`/`handle`. O controller em `interface-adapters/` chama `RegisterUserUseCase` ou `LoginUseCase` e devolve `Result`. Cadastro usa o `errorHelper` padrão (`statusCode` + `message`). Login passa um `errorHelper` que sempre responde 401. O caso de uso só enxerga as interfaces que declara. `start.ts` abre Prisma/AMQP, deriva o `tokenIssuer` para o JWKS, chama as factories de controller e dá `listen`. `createRegisterUserController({ prisma, amqp, logger })` chama `createRegisterUserUseCase`, que instancia repositório, hasher e publisher. O controller não importa Fastify, Prisma nem bcrypt. `@zipframes/authenticator` continua só em teste — o auth emite JWT, não verifica nas rotas de register/login.
 
 ```
 main  →  interface-adapters / infrastructure  →  application  →  domain
@@ -38,8 +38,8 @@ auth-service/src/
 │   └── index.ts
 ├── application/
 │   ├── useCases/
-│   │   ├── registerUser/{RegisterUserUseCase.ts, registerUser.types.ts}
-│   │   └── login/{LoginUseCase.ts, login.types.ts}
+│   │   ├── registerUser/{RegisterUserUseCase.ts, registerUser.dto.ts}
+│   │   └── login/{LoginUseCase.ts, login.dto.ts}
 │   └── interfaces/
 │       ├── repositories/UserRepository.ts
 │       ├── gateways/EventPublisher.ts
@@ -50,7 +50,7 @@ auth-service/src/
 │   ├── repositories/prisma/{schema.prisma,migrations/,user.repository.ts}
 │   ├── gateways/amqpEventPublisherGateway.ts
 │   ├── services/crypto/{bcryptPasswordHasher,rs256TokenIssuer,rsaKeys}.ts
-│   ├── messaging/amqplib/{connection.ts,topology.ts}
+│   ├── messaging/amqplib/{connection.ts,amqpTopology.ts}
 │   └── loadEnvConfig.ts
 └── main/
     ├── index.ts
@@ -59,14 +59,14 @@ auth-service/src/
     └── handlers/{registerUser.ts,login.ts,jwks.ts,identityRoutes.ts}
 ```
 
-A persistência é repository: `UserRepository` em `application/interfaces/repositories/` e `PrismaUserRepository` em `infrastructure/repositories/prisma/`. A publicação AMQP é gateway: `EventPublisher` em `application/interfaces/gateways/` e `AmqpEventPublisherGateway` em `infrastructure/gateways/`. `messaging/amqplib` só tem a conexão e a topologia. Quem o caso de uso chama é `EventPublisher`. Prisma só tem `users`.
+A persistência é repository: `UserRepository` em `application/interfaces/repositories/` e `PrismaUserRepository` em `infrastructure/repositories/prisma/`. A publicação AMQP é gateway: `EventPublisher` em `application/interfaces/gateways/` e `AmqpEventPublisherGateway` em `infrastructure/gateways/`. `messaging/amqplib` só tem a conexão e a declaração de topologia (`amqpTopology.ts` lista o exchange de eventos que o auth afirma ao subir). Quem o caso de uso chama é `EventPublisher`. Prisma só tem `users`.
 
 ## Casos de uso
 
-| Caso de uso           | O que faz                                                                                                                                                                                                                                                            |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `RegisterUserUseCase` | Valida a senha, monta o `User` (`User.create` valida nome e e-mail), verifica o e-mail com `findByEmail`, pede o hash, grava com `UserRepository.create(user)` e publica `UserRegistered` pelo `EventPublisher`. Não faz bcrypt antes da validação nem da unicidade. |
-| `LoginUseCase`        | Normaliza o e-mail, busca o usuário e compara a senha. E-mail desconhecido responde `INVALID_CREDENTIALS` sem comparar hash. Emite o token. Não publica evento.                                                                                                      |
+| Caso de uso           | O que faz                                                                                                                                                                                                                                                                                                 |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `RegisterUserUseCase` | Valida a senha, monta o `User` (`User.create` valida nome e e-mail e gera o id), verifica o e-mail com `findByEmail`, pede o hash, grava com `UserRepository.create(user.attachPasswordHash(hash))` e publica `UserRegistered` pelo `EventPublisher`. Não faz bcrypt antes da validação nem da unicidade. |
+| `LoginUseCase`        | Normaliza o e-mail, busca o usuário e compara a senha. E-mail desconhecido responde `INVALID_CREDENTIALS` sem comparar hash. Emite o token. Não publica evento.                                                                                                                                           |
 
 Falha de login é sempre `INVALID_CREDENTIALS`. Erros de aplicação usam `Result` de `@zipframes/core`. Erros HTTP usam Problem Details (RFC 9457) via `@zipframes/core`.
 

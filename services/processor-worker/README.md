@@ -35,6 +35,8 @@ tests/integration   # fluxo de video.uploaded contra RabbitMQ e SeaweedFS (sem m
 
 `pnpm infra:up` sobe RabbitMQ e o SeaweedFS. Não sobe este processo. Na máquina, com `ffmpeg` no `PATH`, `pnpm dev` lê `services/processor-worker/.env`:
 
+Da raiz, `pnpm deps:worker pkgname@3.1` (e `-D`) adiciona dependência neste serviço.
+
 ```bash
 cp services/processor-worker/.env.example services/processor-worker/.env
 pnpm --dir services/processor-worker install

@@ -1,7 +1,9 @@
 import type { VideoUploadedEvent } from '@zipframes/schemas/video-service';
 
-import type { ProcessUploadedVideoUseCase } from '../application/useCases/processUploadedVideo/ProcessUploadedVideoUseCase.js';
-import type { ProcessUploadedVideoUseCaseOutput } from '../application/useCases/processUploadedVideo/processUploadedVideo.types.js';
+import type {
+  ProcessUploadedVideoUseCase,
+  ProcessUploadedVideoUseCaseOutput,
+} from '../application/useCases/processUploadedVideo/ProcessUploadedVideoUseCase.js';
 
 export interface ProcessUploadedVideoControllerRequest {
   readonly event: VideoUploadedEvent;

@@ -4,7 +4,7 @@ import type { RegisterUserUseCase } from '../application/useCases/registerUser/R
 import type {
   RegisterUserUseCaseError,
   RegisterUserUseCaseOutput,
-} from '../application/useCases/registerUser/registerUser.types.js';
+} from '../application/useCases/registerUser/registerUser.dto.js';
 
 export interface RegisterUserControllerRequest {
   readonly name: string;
@@ -24,11 +24,11 @@ export class RegisterUserController {
   constructor(private readonly registerUserUseCase: RegisterUserUseCase) {}
 
   handle(
-    input: RegisterUserControllerRequest,
+    registration: RegisterUserControllerRequest,
     ctx: RegisterUserControllerContext,
   ): Promise<Result<RegisterUserUseCaseOutput, RegisterUserUseCaseError>> {
     return this.registerUserUseCase.execute({
-      ...input,
+      ...registration,
       correlationId: ctx.correlationId,
     });
   }

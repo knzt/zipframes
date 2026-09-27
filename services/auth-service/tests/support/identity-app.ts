@@ -11,9 +11,9 @@ import type { JWK } from 'jose';
 import { bindHttpRoutes } from '../../src/infrastructure/http/fastify/bindHttpRoutes.js';
 import { registerHealthRoutes } from '../../src/infrastructure/http/fastify/health.routes.js';
 import { createHttpServer } from '../../src/infrastructure/http/fastify/server.js';
-import { assertTopology } from '../../src/infrastructure/messaging/amqplib/topology.js';
-import { createLoginController } from '../../src/main/factories/controllers/login.js';
-import { createRegisterUserController } from '../../src/main/factories/controllers/registerUser.js';
+import { assertAmqpTopology } from '../../src/infrastructure/messaging/amqplib/amqpTopology.js';
+import { createLoginController } from '../../src/main/factories/controllers/loginController.js';
+import { createRegisterUserController } from '../../src/main/factories/controllers/registerUserController.js';
 import { createAmqplib, type Amqplib } from '../../src/main/factories/externals/amqplib.js';
 import { createPrisma, type Prisma } from '../../src/main/factories/externals/prisma.js';
 import { createTokenIssuer } from '../../src/main/factories/services/tokenIssuer.js';
@@ -33,7 +33,7 @@ export interface IdentityApp {
   readonly stop: () => Promise<void>;
 }
 
-export interface IdentityAppOptions {
+export interface IdentityAppDeps {
   readonly amqp?: Amqplib;
   readonly onPublishFailed?: (
     error: unknown,
@@ -41,7 +41,7 @@ export interface IdentityAppOptions {
   ) => void;
 }
 
-export const startIdentityApp = async (options?: IdentityAppOptions): Promise<IdentityApp> => {
+export const startIdentityApp = async (deps?: IdentityAppDeps): Promise<IdentityApp> => {
   const postgres: PostgresHandle = await startPostgres();
   const serviceRoot = path.resolve(import.meta.dirname, '../../');
   await execFileAsync('pnpm', ['exec', 'prisma', 'migrate', 'deploy'], {
@@ -60,17 +60,17 @@ export const startIdentityApp = async (options?: IdentityAppOptions): Promise<Id
 
   let ownedRabbit: RabbitMqHandle | undefined;
   let amqp: Amqplib;
-  if (options?.amqp) {
-    amqp = options.amqp;
+  if (deps?.amqp) {
+    amqp = deps.amqp;
   } else {
     ownedRabbit = await startRabbitMq();
     amqp = await createAmqplib(ownedRabbit.amqpUri);
   }
-  await assertTopology(amqp.channel);
+  await assertAmqpTopology(amqp.channel);
 
   const logger = silentLogger();
   const onPublishFailed =
-    options?.onPublishFailed ??
+    deps?.onPublishFailed ??
     ((error, details) => {
       logger.error('failed to publish user.registered', {
         err: error,

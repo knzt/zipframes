@@ -7,14 +7,14 @@ import type { S3Client } from '@aws-sdk/client-s3';
 import { InternalServerError, TimeoutError, UnavailableError } from '@zipframes/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { S3ObjectStorage } from '../../../../../src/infrastructure/gateways/storage/s3ObjectStorage.gateway.js';
+import { S3ObjectStorageGateway } from '../../../../../src/infrastructure/gateways/storage/s3ObjectStorage.gateway.js';
 
 const config = {
   bucket: 'videos',
 };
 
-const storageFor = (client: Pick<S3Client, 'send'>): S3ObjectStorage =>
-  new S3ObjectStorage(client as S3Client, config.bucket);
+const storageFor = (client: Pick<S3Client, 'send'>): S3ObjectStorageGateway =>
+  new S3ObjectStorageGateway(client as S3Client, config.bucket);
 
 const directories: string[] = [];
 
@@ -28,7 +28,7 @@ const tempDir = async (): Promise<string> => {
   return dir;
 };
 
-describe('S3ObjectStorage', () => {
+describe('S3ObjectStorageGateway', () => {
   it('downloads an object body to a file', async () => {
     const send = vi.fn(async () => ({ Body: Readable.from(['hello']) }));
     const storage = storageFor({ send });

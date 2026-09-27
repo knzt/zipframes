@@ -11,17 +11,17 @@ import type {
 export class AmqpEventPublisherGateway implements EventPublisher {
   constructor(private readonly publisher: Publisher) {}
 
-  async publish(input: EventPublisherInput): Promise<void> {
+  async publish(publication: EventPublisherInput): Promise<void> {
     await this.publisher.publish(
       {
         eventId: randomUUID(),
-        eventType: input.eventType,
+        eventType: publication.eventType,
         version: 1,
         occurredAt: new Date().toISOString(),
-        correlationId: input.correlationId,
-        payload: input.payload,
+        correlationId: publication.correlationId,
+        payload: publication.payload,
       },
-      { exchange: EVENT_EXCHANGE, routingKey: input.eventType },
+      { exchange: EVENT_EXCHANGE, routingKey: publication.eventType },
     );
   }
 }

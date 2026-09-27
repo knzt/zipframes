@@ -6,5 +6,5 @@ import {
 } from '../../../infrastructure/gateways/amqpEventPublisherGateway.js';
 import type { Amqplib } from '../externals/amqplib.js';
 
-export const createEventPublisher = (amqp: Amqplib): AmqpEventPublisherGateway =>
+export const createEventPublisherGateway = (amqp: Amqplib): AmqpEventPublisherGateway =>
   new AmqpEventPublisherGateway(createPublisher(createAmqpPublishPort(amqp.channel)));

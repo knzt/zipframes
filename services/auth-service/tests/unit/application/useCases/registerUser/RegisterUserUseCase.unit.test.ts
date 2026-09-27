@@ -20,12 +20,12 @@ beforeEach(() => {
   eventPublisher = new InMemoryEventPublisher();
   passwordHasher = new FakeHasher();
   onPublishFailed = vi.fn();
-  registerUser = new RegisterUserUseCase({
+  registerUser = new RegisterUserUseCase(
     userRepository,
     passwordHasher,
     eventPublisher,
     onPublishFailed,
-  });
+  );
 });
 
 const validInput = {
@@ -148,11 +148,7 @@ describe('repository create failure', () => {
         throw new Error('unique constraint');
       },
     };
-    const useCase = new RegisterUserUseCase({
-      userRepository: raceRepository,
-      passwordHasher: new FakeHasher(),
-      eventPublisher,
-    });
+    const useCase = new RegisterUserUseCase(raceRepository, new FakeHasher(), eventPublisher);
 
     await expect(useCase.execute(validInput)).rejects.toThrow('unique constraint');
     expect(eventPublisher.published).toHaveLength(0);
@@ -187,11 +183,11 @@ describe('publish after create', () => {
   it('still succeeds when publish fails and no failure handler is provided', async () => {
     const eventPublisher = new InMemoryEventPublisher();
     eventPublisher.failWith = new Error('broker down');
-    const useCase = new RegisterUserUseCase({
-      userRepository: new InMemoryUserRepository(),
-      passwordHasher: new FakeHasher(),
+    const useCase = new RegisterUserUseCase(
+      new InMemoryUserRepository(),
+      new FakeHasher(),
       eventPublisher,
-    });
+    );
 
     const result = await useCase.execute(validInput);
 

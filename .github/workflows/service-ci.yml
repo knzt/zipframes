@@ -1,5 +1,6 @@
 # Reusable checks for one service: install, test, and a local image.
-# Callers filter by path. Nothing here pushes an image or deploys.
+# Callers on push to main may filter by path. Pull requests targeting
+# main always invoke this. Nothing here pushes an image or deploys.
 name: service-ci
 
 on:

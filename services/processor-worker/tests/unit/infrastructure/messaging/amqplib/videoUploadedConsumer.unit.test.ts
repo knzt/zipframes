@@ -59,11 +59,11 @@ const controllerWith = (
 
 describe('failure contract: video uploaded consumer', () => {
   it('acks after the use case rejects the media', async () => {
-    const events: EventPublisher = { publish: vi.fn(async () => undefined) };
+    const eventPublisher: EventPublisher = { publish: vi.fn(async () => undefined) };
     const context = createContext(1);
     const consumer = createVideoUploadedConsumer({
       controller: controllerWith(async () => 'media_rejected'),
-      events,
+      eventPublisher,
       retry: { maxAttempts: 5, baseDelayMs: 10, maxDelayMs: 100 },
       logger: silentLogger,
     });
@@ -79,13 +79,13 @@ describe('failure contract: video uploaded consumer', () => {
   });
 
   it('retries retryable failures without publishing video.failed', async () => {
-    const events: EventPublisher = { publish: vi.fn(async () => undefined) };
+    const eventPublisher: EventPublisher = { publish: vi.fn(async () => undefined) };
     const context = createContext(1);
     const consumer = createVideoUploadedConsumer({
       controller: controllerWith(async () => {
         throw new UnavailableError('STORAGE_DOWNLOAD_FAILED', 'down');
       }),
-      events,
+      eventPublisher,
       retry: { maxAttempts: 5, baseDelayMs: 10, maxDelayMs: 100 },
       logger: silentLogger,
     });
@@ -97,17 +97,17 @@ describe('failure contract: video uploaded consumer', () => {
 
     expect(context.retry).toHaveBeenCalledOnce();
     expect(context.deadLetter).not.toHaveBeenCalled();
-    expect(events.publish).not.toHaveBeenCalled();
+    expect(eventPublisher.publish).not.toHaveBeenCalled();
   });
 
   it('publishes video.failed then DLQs when attempts are exhausted', async () => {
-    const events: EventPublisher = { publish: vi.fn(async () => undefined) };
+    const eventPublisher: EventPublisher = { publish: vi.fn(async () => undefined) };
     const context = createContext(5);
     const consumer = createVideoUploadedConsumer({
       controller: controllerWith(async () => {
         throw new UnavailableError('FFMPEG_FAILED', 'busy');
       }),
-      events,
+      eventPublisher,
       retry: { maxAttempts: 5, baseDelayMs: 10, maxDelayMs: 100 },
       logger: silentLogger,
     });
@@ -117,7 +117,7 @@ describe('failure contract: video uploaded consumer', () => {
       context,
     );
 
-    expect(events.publish).toHaveBeenCalledWith({
+    expect(eventPublisher.publish).toHaveBeenCalledWith({
       eventType: 'video.failed',
       correlationId,
       payload: expect.objectContaining({
@@ -132,11 +132,11 @@ describe('failure contract: video uploaded consumer', () => {
   });
 
   it('dead-letters poison envelopes without video.failed', async () => {
-    const events: EventPublisher = { publish: vi.fn(async () => undefined) };
+    const eventPublisher: EventPublisher = { publish: vi.fn(async () => undefined) };
     const context = createContext(1);
     const consumer = createVideoUploadedConsumer({
       controller: controllerWith(async () => 'frames_packaged'),
-      events,
+      eventPublisher,
       retry: { maxAttempts: 5, baseDelayMs: 10, maxDelayMs: 100 },
       logger: silentLogger,
     });
@@ -151,7 +151,7 @@ describe('failure contract: video uploaded consumer', () => {
     );
 
     expect(context.deadLetter).toHaveBeenCalledOnce();
-    expect(events.publish).not.toHaveBeenCalled();
+    expect(eventPublisher.publish).not.toHaveBeenCalled();
     expect(context.retry).not.toHaveBeenCalled();
   });
 
@@ -163,7 +163,7 @@ describe('failure contract: video uploaded consumer', () => {
         seen = getCorrelationId();
         return 'frames_packaged';
       }),
-      events: { publish: async () => undefined },
+      eventPublisher: { publish: async () => undefined },
       retry: { maxAttempts: 5, baseDelayMs: 10, maxDelayMs: 100 },
       logger: silentLogger,
     });
@@ -176,13 +176,13 @@ describe('failure contract: video uploaded consumer', () => {
   });
 
   it('treats a non-processing error as an unexpected retryable retry', async () => {
-    const events: EventPublisher = { publish: vi.fn(async () => undefined) };
+    const eventPublisher: EventPublisher = { publish: vi.fn(async () => undefined) };
     const context = createContext(1);
     const consumer = createVideoUploadedConsumer({
       controller: controllerWith(async () => {
         throw new Error('socket hang up');
       }),
-      events,
+      eventPublisher,
       retry: { maxAttempts: 5, baseDelayMs: 10, maxDelayMs: 100 },
       logger: silentLogger,
     });
@@ -193,11 +193,11 @@ describe('failure contract: video uploaded consumer', () => {
     );
 
     expect(context.retry).toHaveBeenCalledOnce();
-    expect(events.publish).not.toHaveBeenCalled();
+    expect(eventPublisher.publish).not.toHaveBeenCalled();
   });
 
   it('uses a fallback reason when exhaustion throws a non-error', async () => {
-    const events: EventPublisher = { publish: vi.fn(async () => undefined) };
+    const eventPublisher: EventPublisher = { publish: vi.fn(async () => undefined) };
     const context = createContext(5);
     const consumer = createVideoUploadedConsumer({
       controller: controllerWith(async () => {
@@ -205,7 +205,7 @@ describe('failure contract: video uploaded consumer', () => {
         // eslint-disable-next-line @typescript-eslint/only-throw-error
         throw 'offline';
       }),
-      events,
+      eventPublisher,
       retry: { maxAttempts: 5, baseDelayMs: 10, maxDelayMs: 100 },
       logger: silentLogger,
     });
@@ -215,7 +215,7 @@ describe('failure contract: video uploaded consumer', () => {
       context,
     );
 
-    expect(events.publish).toHaveBeenCalledWith(
+    expect(eventPublisher.publish).toHaveBeenCalledWith(
       expect.objectContaining({
         eventType: 'video.failed',
         payload: expect.objectContaining({

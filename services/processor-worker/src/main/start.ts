@@ -5,14 +5,14 @@ import { createMetrics } from '@zipframes/telemetry';
 import { loadConfig } from '../infrastructure/loadEnvConfig.js';
 import { createVideoUploadedConsumer } from '../infrastructure/messaging/amqplib/videoUploadedConsumer.js';
 import {
-  createProcessorTopology,
+  createProcessorAmqpTopology,
   UPLOADED_QUEUE,
-} from '../infrastructure/messaging/amqplib/topology.js';
+} from '../infrastructure/messaging/amqplib/amqpTopology.js';
 import { createJobMetrics } from '../infrastructure/observability/jobMetrics.js';
-import { createProcessUploadedVideoController } from './factories/controllers/processUploadedVideo.js';
+import { createProcessUploadedVideoController } from './factories/controllers/processUploadedVideoController.js';
 import { createAmqplib } from './factories/externals/amqplib.js';
 import { createS3 } from './factories/externals/s3.js';
-import { createEventPublisher } from './factories/gateways/eventPublisher.js';
+import { createEventPublisherGateway } from './factories/gateways/eventPublisherGateway.js';
 
 export const startWorker = async (): Promise<{ stop: () => Promise<void> }> => {
   const config = loadConfig();
@@ -37,7 +37,7 @@ export const startWorker = async (): Promise<{ stop: () => Promise<void> }> => {
   try {
     const amqp = await createAmqplib(config.amqpUrl);
     closers.push(() => amqp.close());
-    await amqp.assertTopology(createProcessorTopology());
+    await amqp.assertTopology(createProcessorAmqpTopology());
 
     const s3 = createS3({
       endpoint: config.s3Endpoint,
@@ -46,11 +46,11 @@ export const startWorker = async (): Promise<{ stop: () => Promise<void> }> => {
       secretKey: config.s3SecretKey,
       forcePathStyle: config.s3ForcePathStyle,
     });
-    const events = createEventPublisher(amqp);
+    const eventPublisher = createEventPublisherGateway(amqp);
 
     const processUploadedVideoController = createProcessUploadedVideoController({
       s3,
-      events,
+      eventPublisher,
       bucket: config.s3Bucket,
       workDir: config.workDir,
       processingTimeoutMs: config.processingTimeoutMs,
@@ -69,7 +69,7 @@ export const startWorker = async (): Promise<{ stop: () => Promise<void> }> => {
 
     const consumer = createVideoUploadedConsumer({
       controller: processUploadedVideoController,
-      events,
+      eventPublisher,
       retry,
       logger,
       metrics: jobMetrics,

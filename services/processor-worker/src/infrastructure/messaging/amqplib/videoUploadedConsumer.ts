@@ -18,7 +18,7 @@ export interface JobMetrics {
 
 export interface VideoUploadedConsumerDeps {
   readonly controller: ProcessUploadedVideoController;
-  readonly events: EventPublisher;
+  readonly eventPublisher: EventPublisher;
   readonly retry: RetryOptions;
   readonly logger: Logger;
   readonly metrics?: JobMetrics;
@@ -75,7 +75,7 @@ export const createVideoUploadedConsumer = (deps: VideoUploadedConsumerDeps): Co
         const retryable = isRetryableError(error);
 
         if (decideRetry(context.attempt, deps.retry) === 'dlq') {
-          await deps.events.publish({
+          await deps.eventPublisher.publish({
             eventType: 'video.failed',
             correlationId: event.correlationId,
             payload: {

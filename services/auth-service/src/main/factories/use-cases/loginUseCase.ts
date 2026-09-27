@@ -4,14 +4,15 @@ import type { Prisma } from '../externals/prisma.js';
 import { createUserRepository } from '../repositories/userRepository.js';
 import { createPasswordHasher } from '../services/passwordHasher.js';
 
-export interface LoginExternals {
+/** Clients opened once in `start.ts` and reused for this use case. */
+export interface LoginExternalDeps {
   readonly prisma: Prisma;
   readonly tokenIssuer: TokenIssuer;
 }
 
-export const createLogin = (externals: LoginExternals): LoginUseCase =>
-  new LoginUseCase({
-    userRepository: createUserRepository(externals.prisma),
-    passwordHasher: createPasswordHasher(),
-    tokenIssuer: externals.tokenIssuer,
-  });
+export const createLoginUseCase = (externalDeps: LoginExternalDeps): LoginUseCase =>
+  new LoginUseCase(
+    createUserRepository(externalDeps.prisma),
+    createPasswordHasher(),
+    externalDeps.tokenIssuer,
+  );

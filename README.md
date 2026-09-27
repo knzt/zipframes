@@ -79,6 +79,14 @@ Copie o exemplo para `.env` ao lado. O processo não lê o `.example`.
 
 A chave de desenvolvimento está em `infra/docker-compose/auth/jwt-dev.pem`. O `.env` do auth aponta para ela com caminho relativo ao diretório do serviço. Use `pnpm --dir` a partir da raiz.
 
+Para adicionar um pacote em um serviço, da raiz (o pnpm acrescenta o resto da linha):
+
+```bash
+pnpm deps:auth pkgname@3.1
+pnpm deps:auth -D pkgname@3.1
+pnpm deps:worker pkgname@3.1
+```
+
 Credenciais locais, iguais no exemplo e em `infra/docker-compose/seaweedfs/s3.json`:
 
 - Postgres `zipframes` / `zipframes`, banco `auth_db`, porta 5432

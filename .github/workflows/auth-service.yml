@@ -1,21 +1,13 @@
-# Checks scoped to the auth-service.
+# Checks for the auth-service.
 #
-# Triggered by path, so a change to another service does not run this suite.
+# Pull requests targeting main always run this suite so every synchronize
+# is covered. Pushes to main still filter by path so an untouched service
+# is skipped on merge.
 name: auth-service
 
 on:
   pull_request:
     branches: [main]
-    paths:
-      - 'services/auth-service/**'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
-      - '.npmrc'
-      - 'tsconfig.base.json'
-      - 'eslint.config.mjs'
-      - '.dependency-cruiser.mjs'
-      - '.github/workflows/auth-service.yml'
-      - '.github/workflows/service-ci.yml'
   push:
     branches: [main]
     paths:

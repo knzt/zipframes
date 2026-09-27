@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { createAuthenticator } from '@zipframes/authenticator';
 
-import { asUserId } from '../../../../../src/domain/entities/user.js';
+import { brandUserId } from '../../../../../src/domain/entities/user.js';
 import { deriveRsaKeyMaterial } from '../../../../../src/infrastructure/services/crypto/rsaKeys.js';
 import type { RsaKeyMaterial } from '../../../../../src/infrastructure/services/crypto/rsaKeys.js';
 import { Rs256TokenIssuer } from '../../../../../src/infrastructure/services/crypto/rs256TokenIssuer.js';
@@ -23,9 +23,9 @@ const setUpIssuer = async (): Promise<RsaKeyMaterial> => {
 describe('the token an issuer signs', () => {
   it('carries the user id as the subject, and iss/aud/exp', async () => {
     const keys = await setUpIssuer();
-    const issuer = new Rs256TokenIssuer({ keys, issuer: ISSUER, audience: AUDIENCE });
+    const issuer = new Rs256TokenIssuer(keys, ISSUER, AUDIENCE);
 
-    const { token, expiresInSeconds } = await issuer.issue(asUserId('user-123'));
+    const { token, expiresInSeconds } = await issuer.issue(brandUserId('user-123'));
     expect(expiresInSeconds).toBe(15 * 60);
 
     const { payload } = await jwtVerify(token, keys.privateKey, {
@@ -39,14 +39,9 @@ describe('the token an issuer signs', () => {
 
   it('honours a configured lifetime', async () => {
     const keys = await setUpIssuer();
-    const issuer = new Rs256TokenIssuer({
-      keys,
-      issuer: ISSUER,
-      audience: AUDIENCE,
-      expiresInSeconds: 60,
-    });
+    const issuer = new Rs256TokenIssuer(keys, ISSUER, AUDIENCE, 60);
 
-    const { expiresInSeconds } = await issuer.issue(asUserId('user-123'));
+    const { expiresInSeconds } = await issuer.issue(brandUserId('user-123'));
 
     expect(expiresInSeconds).toBe(60);
   });
@@ -76,14 +71,14 @@ describe('cross-package compatibility with @zipframes/authenticator', () => {
   });
 
   it('is accepted by the real authenticator package, from the derived public JWK alone', async () => {
-    const issuer = new Rs256TokenIssuer({ keys, issuer: ISSUER, audience: AUDIENCE });
+    const issuer = new Rs256TokenIssuer(keys, ISSUER, AUDIENCE);
     const authenticator = createAuthenticator({
       jwks: { url: jwksUrl },
       issuer: ISSUER,
       audience: AUDIENCE,
     });
 
-    const { token } = await issuer.issue(asUserId('user-456'));
+    const { token } = await issuer.issue(brandUserId('user-456'));
     const result = await authenticator.verify(token);
 
     expect(result.ok).toBe(true);
@@ -94,14 +89,14 @@ describe('cross-package compatibility with @zipframes/authenticator', () => {
   });
 
   it('is rejected once verified with the wrong audience, proving the check is real', async () => {
-    const issuer = new Rs256TokenIssuer({ keys, issuer: ISSUER, audience: AUDIENCE });
+    const issuer = new Rs256TokenIssuer(keys, ISSUER, AUDIENCE);
     const authenticator = createAuthenticator({
       jwks: { url: jwksUrl },
       issuer: ISSUER,
       audience: 'some-other-system',
     });
 
-    const { token } = await issuer.issue(asUserId('user-456'));
+    const { token } = await issuer.issue(brandUserId('user-456'));
     const result = await authenticator.verify(token);
 
     expect(result.ok).toBe(false);
@@ -113,9 +108,9 @@ describe('cross-package compatibility with @zipframes/authenticator', () => {
 
   it('can also be verified directly against the derived public JWK, without HTTP', async () => {
     const publicKey = await importJWK(keys.publicJwk, 'RS256');
-    const issuer = new Rs256TokenIssuer({ keys, issuer: ISSUER, audience: AUDIENCE });
+    const issuer = new Rs256TokenIssuer(keys, ISSUER, AUDIENCE);
 
-    const { token } = await issuer.issue(asUserId('user-789'));
+    const { token } = await issuer.issue(brandUserId('user-789'));
 
     const { payload } = await jwtVerify(token, publicKey, { issuer: ISSUER, audience: AUDIENCE });
     expect(payload.sub).toBe('user-789');

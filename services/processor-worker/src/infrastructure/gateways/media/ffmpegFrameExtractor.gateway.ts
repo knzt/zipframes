@@ -73,7 +73,7 @@ const runFfmpeg = (args: string[], signal?: AbortSignal): Promise<void> =>
     });
   });
 
-export class FfmpegFrameExtractor implements FrameExtractor {
+export class FfmpegFrameExtractorGateway implements FrameExtractor {
   async extract(
     originalVideoPath: string,
     framesDirectory: string,

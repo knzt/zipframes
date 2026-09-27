@@ -1,3 +1,13 @@
+/**
+ * AMQP topology declaration for the processor worker.
+ *
+ * This is the list of exchanges, queues, and bindings this process
+ * asserts at boot so consume/publish do not race an undeclared broker
+ * object. The wait queue uses TTL + DLX to return expired retries to
+ * `video.uploaded`. The main queue dead-letters to the shared DLQ.
+ * Assertion itself lives on the connection (`assertTopology`); this
+ * file only declares what to assert. It is not a layer.
+ */
 import type { Topology } from '@zipframes/communication';
 import { EVENT_EXCHANGE } from '@zipframes/schemas/shared';
 
@@ -8,11 +18,7 @@ export const UPLOADED_RETRY_QUEUE = 'processor.video.uploaded.wait';
 export const DLX_EXCHANGE = 'zipframes.events.dlx';
 export const DLQ_QUEUE = 'zipframes.events.dlq';
 
-/**
- * Worker topology: main queue (DLX → DLQ) plus a wait queue whose expired
- * messages return to the main queue via the events exchange (TTL retry).
- */
-export const createProcessorTopology = (): Topology => ({
+export const createProcessorAmqpTopology = (): Topology => ({
   exchanges: [
     { name: EVENT_EXCHANGE, type: 'topic', durable: true },
     { name: DLX_EXCHANGE, type: 'topic', durable: true },
