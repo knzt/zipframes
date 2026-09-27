@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   createProcessorAmqpTopology,
+  DEFAULT_EXCHANGE,
   DLQ_QUEUE,
   DLX_EXCHANGE,
   EVENT_EXCHANGE,
@@ -10,13 +11,13 @@ import {
 } from '../../../../../src/infrastructure/messaging/amqplib/amqpTopology.js';
 
 describe('createProcessorAmqpTopology', () => {
-  it('returns expired wait-queue messages to the main queue and dead-letters the main queue', () => {
+  it('returns expired retries to the main queue and dead-letters the main queue', () => {
     const topology = createProcessorAmqpTopology();
-    const wait = topology.queues.find((queue) => queue.name === UPLOADED_RETRY_QUEUE);
+    const retry = topology.queues.find((queue) => queue.name === UPLOADED_RETRY_QUEUE);
     const main = topology.queues.find((queue) => queue.name === UPLOADED_QUEUE);
 
-    expect(wait?.deadLetterExchange).toBe(EVENT_EXCHANGE);
-    expect(wait?.deadLetterRoutingKey).toBe('video.uploaded');
+    expect(retry?.deadLetterExchange).toBe(DEFAULT_EXCHANGE);
+    expect(retry?.deadLetterRoutingKey).toBe(UPLOADED_QUEUE);
     expect(main?.deadLetterExchange).toBe(DLX_EXCHANGE);
     expect(main?.deadLetterRoutingKey).toBe(UPLOADED_QUEUE);
     expect(topology.bindings).toEqual(
@@ -25,5 +26,14 @@ describe('createProcessorAmqpTopology', () => {
         { queue: UPLOADED_QUEUE, exchange: EVENT_EXCHANGE, routingKey: 'video.uploaded' },
       ]),
     );
+  });
+
+  it('never routes a retry through the shared events exchange', () => {
+    const retry = createProcessorAmqpTopology().queues.find(
+      (queue) => queue.name === UPLOADED_RETRY_QUEUE,
+    );
+
+    // Another subscriber of video.uploaded would get every retry as a new upload.
+    expect(retry?.deadLetterExchange).not.toBe(EVENT_EXCHANGE);
   });
 });
