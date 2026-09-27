@@ -6,18 +6,20 @@ Os schemas são criados por migrations do Prisma. O SQL desta página é a refer
 
 ## Decisões comuns a todos os bancos
 
-| Decisão                                                                   | Motivo                                                                                                                                                           |
-| ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Chaves primárias em `uuid` v7                                             | Identificadores únicos entre serviços, gerados pela aplicação, e ordenáveis por tempo, o que mantém a localidade nos índices                                     |
-| Todos os horários em `timestamptz`, gravados em UTC                       | Evita ambiguidade entre fusos e horário de verão                                                                                                                 |
-| Status como `enum` do PostgreSQL                                          | Restringe os valores no banco e é mapeado diretamente pelo Prisma                                                                                                |
-| `created_at` e `updated_at` em toda tabela mutável                        | Auditoria mínima                                                                                                                                                 |
-| Sem exclusão física dos metadados de vídeos e notificações                | O histórico é parte da funcionalidade. Os arquivos, esses sim, são apagados no prazo definido                                                                    |
-| Marcas de eliminação (`*_purged_at`) em vez de simplesmente limpar campos | Permite comprovar quando cada arquivo foi apagado, sem guardar o conteúdo                                                                                        |
-| Publicação direta no broker depois do commit (dual-write)                 | O serviço grava o agregado e depois publica o evento. Sem tabela `outbox`. Se o processo cair entre o commit e o ack do Rabbit, o fato existe e o recado não sai |
-| Idempotência garantida por chaves de negócio, sem tabela de deduplicação  | As restrições que já existem (upsert por chave primária, unicidade e o próprio status do agregado) tornam a reentrega inofensiva                                 |
+| Decisão                                                                   | Motivo                                                                                                                                                          |
+| ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Chaves primárias em `uuid` v7                                             | Identificadores únicos entre serviços, gerados pela aplicação, e ordenáveis por tempo, o que mantém a localidade nos índices                                    |
+| Todos os horários em `timestamptz`, gravados em UTC                       | Evita ambiguidade entre fusos e horário de verão                                                                                                                |
+| Status como `enum` do PostgreSQL                                          | Restringe os valores no banco e é mapeado diretamente pelo Prisma                                                                                               |
+| `created_at` e `updated_at` em toda tabela mutável                        | Auditoria mínima                                                                                                                                                |
+| Sem exclusão física dos metadados de vídeos e notificações                | O histórico é parte da funcionalidade. Os arquivos, esses sim, são apagados no prazo definido                                                                   |
+| Marcas de eliminação (`*_purged_at`) em vez de simplesmente limpar campos | Permite comprovar quando cada arquivo foi apagado, sem guardar o conteúdo                                                                                       |
+| Publicação direta no broker, sem tabela `outbox`                          | O auth grava e depois publica. O video-service publica dentro da transação, antes do commit. Nos dois, se o processo cair no meio, fato e recado podem divergir |
+| Idempotência garantida por chaves de negócio, sem tabela de deduplicação  | As restrições que já existem (upsert por chave primária, unicidade e o próprio status do agregado) tornam a reentrega inofensiva                                |
 
-Não existe tabela `outbox`. A publicação é dual-write de propósito: o caso de uso persiste o agregado e em seguida chama `EventPublisher`. `/health/ready` exige AMQP. O consumidor continua idempotente. Se o publish falhar com o agregado já gravado, o HTTP ainda responde sucesso (no cadastro, um retry cairia em e-mail duplicado); o erro de publish vai para o log.
+Não existe tabela `outbox`. No auth-service a publicação é dual-write de propósito: o caso de uso persiste o agregado e em seguida chama `EventPublisher`. `/health/ready` exige AMQP. O consumidor continua idempotente. Se o publish falhar com o agregado já gravado, o HTTP ainda responde sucesso (no cadastro, um retry cairia em e-mail duplicado); o erro de publish vai para o log.
+
+No video-service a ordem muda: o `publish` de `video.uploaded` roda **dentro** da transação que grava `QUEUED`, depois do `UPDATE` e antes do commit, e só resolve com o confirm do broker. Se o broker falhar, o rollback desfaz a gravação e o cliente recebe 503 para confirmar de novo. A razão é a consequência: um usuário gravado sem `user.registered` ainda consegue usar o sistema, mas um vídeo `QUEUED` sem evento ficaria parado para sempre. O furo que sobra (o commit falhar depois do confirm) é o mesmo de qualquer dual-write, e o consumidor do video-service devolve à fila, com backoff, eventos do worker que chegam antes do commit.
 
 Não existe tabela de deduplicação de eventos. A entrega é "pelo menos uma vez", e cada consumidor é idempotente por uma chave que o próprio domínio já impõe:
 
@@ -182,7 +184,7 @@ CREATE INDEX idx_videos_a_expirar ON videos (expires_at)
   WHERE status = 'DONE';
 ```
 
-Quando o video-service existir, ele publica do mesmo jeito que o auth: persiste no repositório e chama `EventPublisher`. Sem tabela `outbox`.
+O schema está em `services/video-service/src/infrastructure/repositories/prisma/` (`schema.prisma` e a migration `20260927000000_init`, que acrescenta à mão as `CHECK` e os índices parciais). Toda gravação de uma transição é `UPDATE ... WHERE id = $1 AND version = $2`, com `version = version + 1`: se nenhuma linha muda, outro escritor venceu e o repositório lança `ConflictError`. Sem tabela `outbox` (ver a publicação de `video.uploaded` acima).
 
 ## notification-db
 
@@ -333,36 +335,36 @@ Os arquivos ficam no storage apenas enquanto são necessários (ver a seção de
 A rotina de expiração busca o que venceu usando o índice parcial `idx_videos_a_expirar`:
 
 ```sql
-SELECT id, owner_id, result_key
+SELECT *
   FROM videos
  WHERE status = 'DONE'
    AND expires_at <= now()
  ORDER BY expires_at
- LIMIT 100
-   FOR UPDATE SKIP LOCKED;
+ LIMIT 100;
 ```
 
-Depois de apagar cada objeto no storage, a transição é registrada:
+Depois de apagar os objetos no storage, a transição é registrada com o lock otimista:
 
 ```sql
 UPDATE videos
    SET status = 'EXPIRED',
        result_key = NULL,
        result_purged_at = now(),
+       source_purged_at = COALESCE(source_purged_at, now()),
        updated_at = now(),
        version = version + 1
  WHERE id = $1
-   AND status = 'DONE';
+   AND version = $2;
 ```
 
-O `SKIP LOCKED` permite que mais de uma réplica rode a rotina sem processar a mesma linha, e a condição de status na atualização garante que a expiração não sobrescreva uma exclusão feita pelo dono no meio do caminho.
+A leitura não trava linhas (`FOR UPDATE SKIP LOCKED` exigiria manter a transação aberta durante as chamadas ao storage). Se duas réplicas pegarem o mesmo vídeo, as duas apagam o mesmo objeto, o que é idempotente, e só uma gravação vence: a outra encontra `version` diferente e desiste. A mesma condição impede que a expiração sobrescreva uma exclusão feita pelo dono no meio do caminho.
 
 ## Dados fora do PostgreSQL
 
-| Onde      | O que                                   | Observação                                                                                         |
-| --------- | --------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| SeaweedFS | Vídeos originais e pacotes de frames    | Chaves determinísticas. O original é apagado ao fim do processamento e o pacote expira em 24 horas |
-| Redis     | Primeira página da listagem por usuário | Cache-aside com TTL curto, nunca fonte da verdade                                                  |
-| RabbitMQ  | Eventos em trânsito e mensagens na DLQ  | Filas duráveis com mensagens persistentes                                                          |
+| Onde      | O que                                   | Observação                                                                                               |
+| --------- | --------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| SeaweedFS | Vídeos originais e pacotes de frames    | Chaves determinísticas. O original é apagado ao fim do processamento e o pacote expira em 24 horas       |
+| Redis     | Primeira página da listagem por usuário | Cache-aside com TTL de 60 s, um hash por dono (`video-service:videos:{ownerId}`), nunca fonte da verdade |
+| RabbitMQ  | Eventos em trânsito e mensagens na DLQ  | Filas duráveis com mensagens persistentes                                                                |
 
 O `processor-worker` não tem banco: tudo de que ele precisa vem na mensagem e no storage.

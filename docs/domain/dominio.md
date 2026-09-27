@@ -121,8 +121,10 @@ stateDiagram-v2
   PROCESSING --> DONE: processamento concluído
   PROCESSING --> FAILED: processamento falhou
   DONE --> EXPIRED: prazo de 24h vencido
+  AWAITING_UPLOAD --> DELETED: exclusão a pedido do dono
   DONE --> DELETED: exclusão a pedido do dono
   FAILED --> DELETED: exclusão a pedido do dono
+  EXPIRED --> DELETED: exclusão a pedido do dono
   EXPIRED --> [*]
   DELETED --> [*]
   FAILED --> [*]
@@ -134,16 +136,18 @@ Regras:
 - **Tamanho máximo configurável** (por exemplo, 500 MB), verificado na solicitação e novamente na confirmação, com o tamanho real do objeto no storage.
 - **Confirmação** só é aceita quando o vídeo está em `AWAITING_UPLOAD` e o objeto existe no storage.
 - **Transições inválidas são rejeitadas pela entidade.** Por exemplo, um vídeo `DONE` nunca volta para `PROCESSING`.
-- **`DONE` e `FAILED` encerram o processamento.** Eventos de processamento que chegarem depois deles são ignorados, o que torna o agregado tolerante a mensagens duplicadas ou fora de ordem. As únicas transições posteriores são a expiração e a exclusão a pedido, que não vêm de eventos do worker.
+- **`DONE` e `FAILED` encerram o processamento.** Eventos de processamento que chegarem depois deles (ou de `EXPIRED` e `DELETED`) são ignorados, o que torna o agregado tolerante a mensagens duplicadas ou fora de ordem. As únicas transições posteriores são a expiração e a exclusão a pedido, que não vêm de eventos do worker.
 - **`QUEUED` pode ir direto para `DONE` ou `FAILED`**, porque o evento de início pode chegar atrasado ou depois do resultado.
+- **A chave do pacote é derivada, nunca aceita do evento.** `video.processed` só vale se `resultKey` for `outputs/{ownerId}/{videoId}.zip`; qualquer outra chave é ignorada, para um evento não dar ao dono uma URL de outro objeto.
 - **`DONE` exige `resultKey`, `frameCount` maior que zero e `expiresAt`, e `FAILED` exige `failureReason`.**
 - **`EXPIRED` e `DELETED` exigem `resultKey` nulo**, porque o arquivo já não existe.
 - **Somente o dono** vê, confirma e baixa o vídeo. Para outros usuários, o vídeo simplesmente não existe (resposta 404, e não 403).
 - **URLs pré-assinadas têm validade curta:** 15 minutos para upload e 5 minutos para download.
 - **O pacote fica disponível por 24 horas** contadas da conclusão. Depois disso o arquivo é apagado e o vídeo passa a `EXPIRED`.
-- **Download de um vídeo `EXPIRED` ou `DELETED`** responde 410 Gone, com a orientação de enviar o vídeo novamente.
+- **Download de um vídeo `EXPIRED` ou `DELETED`** responde 410 Gone, com a orientação de enviar o vídeo novamente. Um `DONE` cujo `expiresAt` já passou também responde 410, mesmo antes da rotina de expiração rodar.
 - **O vídeo original nunca é guardado depois do processamento.** Ele é apagado assim que o resultado final é conhecido, com sucesso ou com falha. Para tentar de novo, o usuário envia o arquivo outra vez.
-- **O dono pode excluir um vídeo a qualquer momento.** A exclusão apaga os arquivos que ainda existirem e leva o vídeo a `DELETED`, preservando apenas os metadados mínimos do histórico.
+- **O dono pode excluir um vídeo a qualquer momento, exceto enquanto ele está `QUEUED` ou `PROCESSING`.** A exclusão apaga os arquivos que ainda existirem e leva o vídeo a `DELETED`, preservando apenas os metadados mínimos do histórico. Durante o processamento ela é recusada (409): o worker leria um original já apagado e publicaria um `video.failed` que viraria um e-mail de falha para um vídeo que o dono excluiu. Excluir de novo um vídeo `DELETED` não muda nada.
+- **A confirmação publica `video.uploaded` antes do commit, na mesma transação.** Se o broker não confirmar, nada é gravado e o cliente tenta de novo; o vídeo nunca fica `QUEUED` sem que o worker tenha sido avisado.
   Eventos de domínio: `VideoQueued`, `VideoProcessingStarted`, `VideoCompleted`, `VideoFailed`, `VideoExpired`, `VideoDeleted`. Apenas `VideoQueued` gera evento de integração (`video.uploaded`), já que os demais são reações a eventos vindos do Processamento ou efeitos internos de retenção.
 
 ### Processamento
@@ -241,7 +245,7 @@ O prazo de 24 horas é configurável, e o mesmo valor alimenta o `expiresAt` do 
 ### Como a eliminação acontece
 
 - **Do original:** o próprio worker apaga o arquivo ao terminar, logo após publicar o resultado. Uma rotina de limpeza varre os originais que sobraram por falha no apagamento.
-- **Do pacote:** uma rotina periódica no video-service busca os vídeos `DONE` com `expiresAt` vencido, apaga o objeto, limpa a `resultKey` e muda o status para `EXPIRED`.
+- **Do pacote:** uma rotina periódica no video-service busca os vídeos `DONE` com `expiresAt` vencido, apaga o objeto, limpa a `resultKey` e muda o status para `EXPIRED`. A mesma rotina apaga o original de um vídeo `DONE` que o worker não tenha conseguido remover.
 - **A pedido do titular:** o dono exclui um vídeo e os arquivos que ainda existirem são apagados na hora, com o vídeo indo para `DELETED`.
 - **Na exclusão da conta:** o auth-service publica `user.deleted`, e cada contexto apaga o que é seu. O contexto de Gestão de Vídeos remove os objetos e os metadados dos vídeos daquele dono, e o de Notificação apaga o contato e o histórico.
 

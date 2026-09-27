@@ -12,7 +12,7 @@ flowchart TB
     ingress["<b>Ingress</b><br/><i>[Container: NGINX Ingress]</i><br/>Ponto único de entrada"]
     auth["<b>auth-service</b><br/><i>[Container: Node.js, Fastify]</i><br/>Cadastro, login e JWT"]
     video["<b>video-service</b><br/><i>[Container: Node.js, Fastify]</i><br/>Ciclo de vida dos vídeos,<br/>URLs pré-assinadas e listagem"]
-    worker["<b>processor-worker</b><br/><i>[Container: Node.js, Fastify, ffmpeg]</i><br/>Extrai os frames e gera o zip"]
+    worker["<b>processor-worker</b><br/><i>[Container: Node.js, ffmpeg]</i><br/>Extrai os frames e gera o zip"]
     notif["<b>notification-service</b><br/><i>[Container: Node.js]</i><br/>Envia notificações de falha"]
     broker[["<b>RabbitMQ</b><br/><i>[Container: message broker]</i><br/>Exchange zipframes.events"]]
     authdb[("<b>auth-db</b><br/><i>[PostgreSQL]</i><br/>Usuários")]
