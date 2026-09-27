@@ -13,7 +13,6 @@ export default defineConfig({
         'src/infrastructure/gateways/**',
         'src/infrastructure/http/**',
         'src/infrastructure/loadEnvConfig.ts',
-        'src/main/handlers/**',
       ],
       thresholds: {
         lines: 100,

@@ -10,22 +10,22 @@ import { createHttpServer } from '../../../../../src/infrastructure/http/fastify
 import type { HttpRouteDefinition } from '../../../../../src/infrastructure/http/httpRoute.js';
 import type { LoginController } from '../../../../../src/interface-adapters/LoginController.js';
 import type { RegisterUserController } from '../../../../../src/interface-adapters/RegisterUserController.js';
-import { identityRoutes } from '../../../../../src/main/handlers/identityRoutes.js';
+import { identityRoutes } from '../../../../../src/infrastructure/http/routes/identityRoutes.js';
 import { silentLogger } from '../../../../support/silent-logger.js';
 
 type IdentityHandler = (request: HttpRequest) => Promise<HttpReply>;
 
 const stubRegisterUser: RegisterUserController = {
   handle: async () => ({
-    ok: true as const,
-    value: { userId: 'user-1', name: 'Ada', email: 'ada@example.com' },
+    status: 201,
+    body: { userId: 'user-1', name: 'Ada', email: 'ada@example.com' },
   }),
 } as unknown as RegisterUserController;
 
 const stubLogin: LoginController = {
   handle: async () => ({
-    ok: true as const,
-    value: { accessToken: 'token', tokenType: 'Bearer' as const, expiresIn: 900 },
+    status: 200,
+    body: { accessToken: 'token', tokenType: 'Bearer', expiresIn: 900 },
   }),
 } as unknown as LoginController;
 

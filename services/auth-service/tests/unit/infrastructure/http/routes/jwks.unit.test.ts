@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { jwksHandler } from '../../../../src/main/handlers/jwks.js';
+import { jwksRoute } from '../../../../../src/infrastructure/http/routes/jwks.js';
 
-describe('jwksHandler', () => {
+describe('jwksRoute', () => {
   it('returns the configured keys', async () => {
     const keys = [{ kty: 'RSA', kid: 'k1', alg: 'RS256', use: 'sig', n: 'abc', e: 'AQAB' }];
-    const route = jwksHandler(keys);
+    const route = jwksRoute(keys);
 
     const response = await route.handle({ body: undefined, correlationId: 'corr-jwks' });
 

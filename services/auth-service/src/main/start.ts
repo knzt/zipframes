@@ -12,7 +12,7 @@ import { createRegisterUserController } from './factories/controllers/registerUs
 import { createAmqplib, createAmqpPing } from './factories/externals/amqplib.js';
 import { createPrisma, createPrismaPing } from './factories/externals/prisma.js';
 import { createTokenIssuer } from './factories/services/tokenIssuer.js';
-import { identityRoutes } from './handlers/identityRoutes.js';
+import { identityRoutes } from '../infrastructure/http/routes/identityRoutes.js';
 
 export const startAuthService = async (): Promise<{ stop: () => Promise<void> }> => {
   const config = loadConfig();

@@ -17,7 +17,7 @@ import { createRegisterUserController } from '../../src/main/factories/controlle
 import { createAmqplib, type Amqplib } from '../../src/main/factories/externals/amqplib.js';
 import { createPrisma, type Prisma } from '../../src/main/factories/externals/prisma.js';
 import { createTokenIssuer } from '../../src/main/factories/services/tokenIssuer.js';
-import { identityRoutes } from '../../src/main/handlers/identityRoutes.js';
+import { identityRoutes } from '../../src/infrastructure/http/routes/identityRoutes.js';
 import { silentLogger } from './silent-logger.js';
 
 const execFileAsync = promisify(execFile);
