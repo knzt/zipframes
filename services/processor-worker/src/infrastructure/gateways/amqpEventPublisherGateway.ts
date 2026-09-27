@@ -8,7 +8,7 @@ import type {
   EventPublisherInput,
 } from '../../application/interfaces/gateways/EventPublisher.js';
 
-export class AmqpEventPublisher implements EventPublisher {
+export class AmqpEventPublisherGateway implements EventPublisher {
   constructor(private readonly publisher: Publisher) {}
 
   async publish(input: EventPublisherInput): Promise<void> {

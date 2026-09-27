@@ -1,7 +1,7 @@
 import { createPublisher } from '@zipframes/communication';
 
-import { AmqpEventPublisher } from '../../../infrastructure/gateways/amqpEventPublisher.gateway.js';
+import { AmqpEventPublisherGateway } from '../../../infrastructure/gateways/amqpEventPublisherGateway.js';
 import type { Amqplib } from '../externals/amqplib.js';
 
-export const createEventPublisher = (amqp: Amqplib): AmqpEventPublisher =>
-  new AmqpEventPublisher(createPublisher(amqp));
+export const createEventPublisher = (amqp: Amqplib): AmqpEventPublisherGateway =>
+  new AmqpEventPublisherGateway(createPublisher(amqp));

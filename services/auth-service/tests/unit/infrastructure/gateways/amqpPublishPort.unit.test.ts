@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { ConfirmChannel } from 'amqplib';
 
-import { createAmqpPublishPort } from '../../../../src/infrastructure/gateways/amqpEventPublisher.gateway.js';
+import { createAmqpPublishPort } from '../../../../src/infrastructure/gateways/amqpEventPublisherGateway.js';
 
 const envelope = {
   eventId: '44444444-4444-4444-8444-444444444444',

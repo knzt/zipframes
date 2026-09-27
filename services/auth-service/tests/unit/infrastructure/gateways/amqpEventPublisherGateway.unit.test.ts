@@ -3,16 +3,16 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Publisher } from '@zipframes/communication';
 import { authService } from '@zipframes/schemas';
 
-import { AmqpEventPublisher } from '../../../../src/infrastructure/gateways/amqpEventPublisher.gateway.js';
+import { AmqpEventPublisherGateway } from '../../../../src/infrastructure/gateways/amqpEventPublisherGateway.js';
 
 const uuidV4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const isoInstant = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 
-describe('AmqpEventPublisher', () => {
+describe('AmqpEventPublisherGateway', () => {
   it('publishes the envelope on the events exchange', async () => {
     const publish = vi.fn(async () => undefined);
     const publisher: Publisher = { publish };
-    const eventPublisher = new AmqpEventPublisher(publisher);
+    const eventPublisher = new AmqpEventPublisherGateway(publisher);
 
     await eventPublisher.publish({
       eventType: 'user.registered',
