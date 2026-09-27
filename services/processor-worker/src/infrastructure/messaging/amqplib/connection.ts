@@ -125,9 +125,9 @@ export const createRabbitMqConnection = async (
         inFlight += 1;
         void (async () => {
           try {
-            let envelope: EventEnvelope<unknown>;
+            let envelope: unknown;
             try {
-              envelope = JSON.parse(message.content.toString('utf8')) as EventEnvelope<unknown>;
+              envelope = JSON.parse(message.content.toString('utf8'));
             } catch {
               channel.nack(message, false, false);
               return;

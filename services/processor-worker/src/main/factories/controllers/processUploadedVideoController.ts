@@ -1,13 +1,14 @@
-import type { RetryOptions } from '@zipframes/communication';
-
-import { ProcessUploadedVideoController } from '../../../interface-adapters/ProcessUploadedVideoController.js';
+import {
+  ProcessUploadedVideoController,
+  type ProcessUploadedVideoHandlerOptions,
+} from '../../../interface-adapters/ProcessUploadedVideoController.js';
 import {
   createProcessUploadedVideoUseCase,
   type ProcessUploadedVideoExternalDeps,
 } from '../use-cases/processUploadedVideoUseCase.js';
 
 export interface ProcessUploadedVideoControllerExternalDeps extends ProcessUploadedVideoExternalDeps {
-  readonly retry: RetryOptions;
+  readonly handlerOptions: ProcessUploadedVideoHandlerOptions;
 }
 
 export const createProcessUploadedVideoController = (
@@ -16,5 +17,5 @@ export const createProcessUploadedVideoController = (
   new ProcessUploadedVideoController(
     createProcessUploadedVideoUseCase(externalDeps),
     externalDeps.eventPublisher,
-    externalDeps.retry,
+    externalDeps.handlerOptions,
   );
