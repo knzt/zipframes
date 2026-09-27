@@ -35,13 +35,13 @@ tests/integration   # fluxo de video.uploaded contra RabbitMQ e SeaweedFS (sem m
 
 `pnpm infra:up` sobe RabbitMQ e o SeaweedFS. Não sobe este processo. Na máquina, com `ffmpeg` no `PATH`, `pnpm dev` lê `services/processor-worker/.env`:
 
-`pnpm --dir services/processor-worker` e, da raiz, `pnpm pnpm:worker` fazem a mesma coisa. `pnpm deps:worker pkgname@3.1` (e `-D`) adiciona dependência neste serviço.
+Da raiz, `pnpm deps:worker pkgname@3.1` (e `-D`) adiciona dependência neste serviço.
 
 ```bash
 cp services/processor-worker/.env.example services/processor-worker/.env
-pnpm pnpm:worker install
+pnpm --dir services/processor-worker install
 pnpm infra:up
-pnpm pnpm:worker dev
+pnpm --dir services/processor-worker dev
 ```
 
 O processo não escuta HTTP. O Compose e o Kubernetes usam probe exec (`kill -0 1`).
@@ -49,8 +49,8 @@ O processo não escuta HTTP. O Compose e o Kubernetes usam probe exec (`kill -0 
 Para a imagem, o contexto precisa de `dist/` e de `.runtime/node_modules` antes do build:
 
 ```bash
-pnpm pnpm:worker build
-pnpm pnpm:worker stage-runtime
+pnpm --dir services/processor-worker build
+pnpm --dir services/processor-worker stage-runtime
 pnpm infra:apps
 ```
 

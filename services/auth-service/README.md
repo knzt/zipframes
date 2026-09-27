@@ -39,16 +39,16 @@ O serviço tem o próprio lockfile. Os pacotes `@zipframes/*` vêm do GitHub Pac
 
 `pnpm dev` e `pnpm start` leem `services/auth-service/.env`. O caminho da chave nesse arquivo é relativo a este diretório. `db:deploy` aplica a migration existente. `db:migrate` é `prisma migrate dev`, para alterar o schema.
 
-`pnpm --dir services/auth-service` e, da raiz, `pnpm pnpm:auth` fazem a mesma coisa. `pnpm deps:auth pkgname@3.1` (e `-D`) adiciona dependência neste serviço.
+Da raiz, `pnpm deps:auth pkgname@3.1` (e `-D`) adiciona dependência neste serviço.
 
 ```bash
 export NODE_AUTH_TOKEN=<seu token>
 cp services/auth-service/.env.example services/auth-service/.env
-pnpm pnpm:auth install
+pnpm --dir services/auth-service install
 pnpm infra:up
-pnpm pnpm:auth db:generate
-pnpm pnpm:auth db:deploy
-pnpm pnpm:auth dev
+pnpm --dir services/auth-service db:generate
+pnpm --dir services/auth-service db:deploy
+pnpm --dir services/auth-service dev
 ```
 
 A imagem e o processo no Compose estão descritos em [`infra/docker-compose/README.md`](../../infra/docker-compose/README.md).
