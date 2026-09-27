@@ -9,8 +9,8 @@ Arquitetura: [docs/architecture/services/processor-worker.md](../../docs/archite
 ```
 src/domain/               # Value objects, policies, erros
 src/application/          # casos de uso e ports
-src/interface-adapters/   # controller da mensagem
-src/infrastructure/       # implementações e consumer AMQP (messaging/amqplib)
+src/interface-adapters/   # controller da mensagem (defineMessageHandler + caso de uso)
+src/infrastructure/       # implementações, conexão AMQP (messaging/amqplib) e observabilidade
 src/main/                 # start.ts e factories (sem handlers HTTP)
 ```
 

@@ -1,36 +1,62 @@
-import type { VideoUploadedEvent } from '@zipframes/schemas/video-service';
+import {
+  defineMessageHandler,
+  type ConsumeHandler,
+  type MessageHandlerOptions,
+} from '@zipframes/communication';
+import { isBaseError } from '@zipframes/core';
+import {
+  videoUploadedEventSchema,
+  type VideoUploadedEvent,
+} from '@zipframes/schemas/video-service';
 
+import type { EventPublisher } from '../application/interfaces/gateways/EventPublisher.js';
 import type {
   ProcessUploadedVideoUseCase,
+  ProcessUploadedVideoUseCaseInput,
   ProcessUploadedVideoUseCaseOutput,
 } from '../application/useCases/processUploadedVideo/ProcessUploadedVideoUseCase.js';
 
-export interface ProcessUploadedVideoControllerRequest {
-  readonly event: VideoUploadedEvent;
-  readonly attempt: number;
-}
+export type ProcessUploadedVideoHandlerOptions = MessageHandlerOptions<
+  VideoUploadedEvent,
+  ProcessUploadedVideoUseCaseOutput
+>;
 
-export type ProcessUploadedVideoControllerResponse = ProcessUploadedVideoUseCaseOutput;
+const toJob = (event: VideoUploadedEvent, attempt: number): ProcessUploadedVideoUseCaseInput => ({
+  ...event.payload,
+  attempt,
+  correlationId: event.correlationId,
+});
 
 /**
- * Turns an already decoded `video.uploaded` envelope into the use case call.
- * AMQP settlement stays in the consumer.
+ * Message boundary for `video.uploaded`: `defineMessageHandler` validates the
+ * envelope and settles the message; this controller maps the event onto the
+ * use case and publishes `video.failed` when attempts run out.
  */
 export class ProcessUploadedVideoController {
-  constructor(private readonly processUploadedVideoUseCase: ProcessUploadedVideoUseCase) {}
+  readonly handle: ConsumeHandler;
 
-  handle(
-    request: ProcessUploadedVideoControllerRequest,
-  ): Promise<ProcessUploadedVideoControllerResponse> {
-    const { event, attempt } = request;
-    return this.processUploadedVideoUseCase.execute({
-      videoId: event.payload.videoId,
-      ownerId: event.payload.ownerId,
-      sourceKey: event.payload.sourceKey,
-      originalFileName: event.payload.originalFileName,
-      sizeBytes: event.payload.sizeBytes,
-      attempt,
-      correlationId: event.correlationId,
+  constructor(
+    private readonly processUploadedVideoUseCase: ProcessUploadedVideoUseCase,
+    private readonly eventPublisher: EventPublisher,
+    options: ProcessUploadedVideoHandlerOptions,
+  ) {
+    this.handle = defineMessageHandler({
+      ...options,
+      schema: videoUploadedEventSchema,
+      handle: (event, { attempt }) =>
+        this.processUploadedVideoUseCase.execute(toJob(event, attempt)),
+      onExhausted: (event, error, { attempt }) =>
+        this.eventPublisher.publish({
+          eventType: 'video.failed',
+          correlationId: event.correlationId,
+          payload: {
+            videoId: event.payload.videoId,
+            ownerId: event.payload.ownerId,
+            errorCode: isBaseError(error) ? error.code : 'UNEXPECTED',
+            reason: error instanceof Error ? error.message : 'max attempts exhausted',
+            attempts: attempt,
+          },
+        }),
     });
   }
 }

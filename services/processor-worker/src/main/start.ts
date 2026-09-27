@@ -1,14 +1,14 @@
 import type { RetryOptions } from '@zipframes/communication';
-import { createLogger } from '@zipframes/logger';
+import { createLogger, runWithCorrelationId } from '@zipframes/logger';
 import { createMetrics } from '@zipframes/telemetry';
 
 import { loadConfig } from '../infrastructure/loadEnvConfig.js';
-import { createVideoUploadedConsumer } from '../infrastructure/messaging/amqplib/videoUploadedConsumer.js';
 import {
   createProcessorAmqpTopology,
   UPLOADED_QUEUE,
 } from '../infrastructure/messaging/amqplib/amqpTopology.js';
 import { createJobMetrics } from '../infrastructure/observability/jobMetrics.js';
+import { createVideoProcessingObserver } from '../infrastructure/observability/videoProcessingObserver.js';
 import { createProcessUploadedVideoController } from './factories/controllers/processUploadedVideoController.js';
 import { createAmqplib } from './factories/externals/amqplib.js';
 import { createS3 } from './factories/externals/s3.js';
@@ -54,6 +54,11 @@ export const startWorker = async (): Promise<{ stop: () => Promise<void> }> => {
       bucket: config.s3Bucket,
       workDir: config.workDir,
       processingTimeoutMs: config.processingTimeoutMs,
+      handlerOptions: {
+        retry,
+        runInContext: (event, run) => runWithCorrelationId(event.correlationId, run),
+        onOutcome: createVideoProcessingObserver({ logger, metrics: jobMetrics }),
+      },
       onDiscardOriginalFailed: (job, error) => {
         logger.error('failed to discard original object after processing', {
           videoId: job.videoId,
@@ -67,15 +72,7 @@ export const startWorker = async (): Promise<{ stop: () => Promise<void> }> => {
       },
     });
 
-    const consumer = createVideoUploadedConsumer({
-      controller: processUploadedVideoController,
-      eventPublisher,
-      retry,
-      logger,
-      metrics: jobMetrics,
-    });
-
-    await amqp.consume(UPLOADED_QUEUE, consumer, { retry });
+    await amqp.consume(UPLOADED_QUEUE, processUploadedVideoController.handle, { retry });
 
     logger.info('processor-worker started', {
       queue: UPLOADED_QUEUE,

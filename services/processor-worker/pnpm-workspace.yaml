@@ -9,3 +9,4 @@ allowBuilds:
 minimumReleaseAgeExclude:
   - '@zipframes/core@0.4.0'
   - '@zipframes/test-toolkit@0.2.1'
+  - '@zipframes/communication@0.2.0'
