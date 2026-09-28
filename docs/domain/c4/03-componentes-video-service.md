@@ -21,20 +21,20 @@ flowchart TB
 
     subgraph adin["Interface Adapters"]
       direction LR
-      ctrl["RequestUpload, ConfirmUpload,<br/>ListUserVideos, GetVideo,<br/>GetDownloadUrl, DeleteVideo<br/><i>Controllers</i>"]
+      ctrl["UploadVideo, ListUserVideos,<br/>GetVideo, GetDownloadUrl,<br/>DeleteVideo<br/><i>Controllers</i>"]
       consumer["ApplyProcessingEvent<br/><i>Controller</i>"]
     end
 
     subgraph app["Use Cases"]
       direction LR
-      uc["RequestUpload<br/>ConfirmUpload<br/>ListUserVideos<br/>GetVideo<br/>GetDownloadUrl<br/>DeleteVideo<br/>ApplyProcessingEvent<br/>ExpireFramesPackages"]
-      interfaces["<b>Interfaces</b><br/>VideoRepository<br/>EventPublisher<br/>ObjectStorage<br/>StorageUrlSigner<br/>VideoListCache"]
+      uc["UploadVideo<br/>ListUserVideos<br/>GetVideo<br/>GetDownloadUrl<br/>DeleteVideo<br/>ApplyProcessingEvent<br/>ExpireFramesPackages"]
+      interfaces["<b>Interfaces</b><br/>VideoRepository<br/>EventPublisher<br/>ObjectStorage<br/>DownloadUrlSigner<br/>VideoListCache"]
     end
 
     subgraph dom["Entities"]
       direction LR
       video["Video<br/>(raiz do agregado)"]
-      vos["VideoStatus, FileName,<br/>chaves de storage, VideoQueued"]
+      vos["VideoStatus, FileName, VideoFile,<br/>chaves de storage, VideoQueued"]
     end
 
     subgraph fwout["Frameworks & Drivers: saída"]
@@ -42,7 +42,7 @@ flowchart TB
       repo["PrismaVideoRepository"]
       events["AmqpEventPublisherGateway"]
       objstore["S3ObjectStorageGateway"]
-      signer["S3StorageUrlSignerGateway"]
+      signer["S3DownloadUrlSignerGateway"]
       listcache["RedisVideoListCacheGateway"]
     end
   end
@@ -84,27 +84,26 @@ flowchart TB
 
 O diagrama segue o caminho em tempo de execução: entra pelos frameworks (HTTP, fila ou relógio), passa pelos controllers, chega aos casos de uso e às entidades, e sai pelas interfaces que o caso de uso declara até as classes que as implementam. O RabbitMQ aparece duas vezes apenas para separar consumo e publicação. O agendador da expiração chama o caso de uso direto: não há controller, porque não há entrada externa a validar.
 
-Não existe `ProcessedEventStore` nem tabela de eventos processados: a máquina de estados do `Video` já torna o consumo idempotente (ver [modelagem de dados](../../data/modelagem-de-dados.md)). Também não há ports `Clock` e `IdGenerator`: a entidade gera o próprio id e o caso de uso lê `new Date()`, como no auth-service. Os testes controlam o tempo com os fake timers do Vitest.
+Não existe `ProcessedEventStore` nem tabela de eventos processados: a máquina de estados do `Video` já torna o consumo idempotente (ver [modelagem de dados](../../data/modelagem-de-dados.md)). Também não há ports `Clock` e `IdGenerator`: o domínio gera o id (`newVideoId`) e o caso de uso lê `new Date()`, como no auth-service. Os testes controlam o tempo com os fake timers do Vitest.
 
 ## Componentes
 
-| Camada               | Componente                                            | Responsabilidade                                                                                  |
-| -------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| Entities             | `Video`                                               | Mantém o estado do vídeo e aplica as regras de transição, de retenção e de download               |
-| Entities             | `FileName`, `VideoStatus`, chaves                     | Validam o nome e a extensão, enumeram os status e derivam `sourceKey` e `resultKey`               |
-| Use Cases            | `RequestUpload`                                       | Valida nome, tipo e tamanho, cria o vídeo e devolve a URL de upload                               |
-| Use Cases            | `ConfirmUpload`                                       | Confere o objeto no storage, grava `QUEUED` e publica `video.uploaded` na mesma transação         |
-| Use Cases            | `ListUserVideos` e `GetVideo`                         | Consultam os vídeos do dono; a listagem usa o cache na primeira página                            |
-| Use Cases            | `GetDownloadUrl`                                      | Verifica se o pacote está disponível e devolve a URL do zip                                       |
-| Use Cases            | `DeleteVideo`                                         | Apaga os arquivos e marca o vídeo `DELETED`                                                       |
-| Use Cases            | `ApplyProcessingEvent`                                | Aplica os eventos do worker de forma idempotente e invalida o cache                               |
-| Use Cases            | `ExpireFramesPackages`                                | Apaga os pacotes vencidos e marca os vídeos `EXPIRED`                                             |
-| Use Cases            | Interfaces                                            | Declaradas pelos casos de uso em `application/interfaces/`                                        |
-| Interface Adapters   | Controllers HTTP                                      | `defineAuthenticatedHandler`: validam o token (JWKS), a entrada e traduzem o `Result` em resposta |
-| Interface Adapters   | `ApplyProcessingEventController`                      | `defineMessageHandler`: valida o envelope contra os três eventos do worker e chama o caso de uso  |
-| Frameworks & Drivers | `PrismaVideoRepository`                               | Persistência com lock otimista por `version` (`UPDATE ... WHERE version = $1`)                    |
-| Frameworks & Drivers | `AmqpEventPublisherGateway`                           | Monta o envelope e publica no exchange `zipframes.events` com confirmação do broker               |
-| Frameworks & Drivers | `S3ObjectStorageGateway`, `S3StorageUrlSignerGateway` | Conferem e apagam objetos; assinam URLs com o endpoint público                                    |
-| Frameworks & Drivers | `RedisVideoListCacheGateway`                          | Cache-aside que degrada para miss quando o Redis cai                                              |
+| Camada               | Componente                                             | Responsabilidade                                                                                                                                |
+| -------------------- | ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Entities             | `Video`                                                | Mantém o estado do vídeo e aplica as regras de transição, de retenção e de download                                                             |
+| Entities             | `FileName`, `VideoFile`, `VideoStatus`, chaves         | Validam o nome e a extensão, enumeram os status e derivam `sourceKey` e `resultKey`                                                             |
+| Use Cases            | `UploadVideo`                                          | Valida nome e tipo, grava o arquivo em stream, valida o tamanho, grava `QUEUED` e publica `video.uploaded`; se o broker recusar, marca `FAILED` |
+| Use Cases            | `ListUserVideos` e `GetVideo`                          | Consultam os vídeos do dono; a listagem usa o cache na primeira página                                                                          |
+| Use Cases            | `GetDownloadUrl`                                       | Verifica se o pacote está disponível e devolve a URL do zip                                                                                     |
+| Use Cases            | `DeleteVideo`                                          | Apaga os arquivos e marca o vídeo `DELETED`                                                                                                     |
+| Use Cases            | `ApplyProcessingEvent`                                 | Aplica os eventos do worker de forma idempotente e invalida o cache                                                                             |
+| Use Cases            | `ExpireFramesPackages`                                 | Apaga os pacotes vencidos e marca os vídeos `EXPIRED`                                                                                           |
+| Use Cases            | Interfaces                                             | Declaradas pelos casos de uso em `application/interfaces/`                                                                                      |
+| Interface Adapters   | Controllers HTTP                                       | `defineAuthenticatedHandler`: validam o token (JWKS), a entrada e traduzem o `Result` em resposta                                               |
+| Interface Adapters   | `ApplyProcessingEventController`                       | `defineMessageHandler`: valida o envelope contra os três eventos do worker e chama o caso de uso                                                |
+| Frameworks & Drivers | `PrismaVideoRepository`                                | Um `save` que insere (versão 1) ou atualiza com lock otimista (`UPDATE ... WHERE version = $1`)                                                 |
+| Frameworks & Drivers | `AmqpEventPublisherGateway`                            | Monta o envelope e publica no exchange `zipframes.events` com confirmação do broker                                                             |
+| Frameworks & Drivers | `S3ObjectStorageGateway`, `S3DownloadUrlSignerGateway` | Upload multipart em stream e exclusão de objetos; assinatura da URL de download com o endpoint público                                          |
+| Frameworks & Drivers | `RedisVideoListCacheGateway`                           | Cache-aside que degrada para miss quando o Redis cai                                                                                            |
 
 O composition root (`main/`) não aparece no diagrama: ele lê a configuração, abre os clientes uma vez e os injeta pelas factories nos casos de uso e controllers.

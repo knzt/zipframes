@@ -1,8 +1,8 @@
 # video-service
 
-Ciclo de vida dos vídeos do ZipFrames: pedido de upload, confirmação, status, download e exclusão.
+Ciclo de vida dos vídeos do ZipFrames: envio, status, listagem, download, expiração e exclusão.
 
-O arquivo nunca passa por este serviço. O cliente recebe URLs pré-assinadas de curta duração e fala direto com o storage; aqui ficam só os metadados e a máquina de estados do vídeo. O dono de cada vídeo é o `sub` do token emitido pelo auth-service, validado localmente contra o JWKS dele. O processamento acontece no processor-worker: este serviço publica `video.uploaded` e consome `video.processing.started`, `video.processed` e `video.failed`.
+O vídeo chega em um único `POST /videos` (multipart) e vai em stream para o storage; o zip sai direto do storage por uma URL pré-assinada de curta duração. Aqui ficam os metadados e a máquina de estados do vídeo. O dono de cada vídeo é o `sub` do token emitido pelo auth-service, validado localmente contra o JWKS dele. O processamento acontece no processor-worker: este serviço publica `video.uploaded` e consome `video.processing.started`, `video.processed` e `video.failed`.
 
 O contrato HTTP é o documento gerado em `GET /docs` (ver [`docs/architecture/http.md`](../../docs/architecture/http.md)). Os eventos estão em [`docs/asyncapi/events.yaml`](../../docs/asyncapi/events.yaml). A arquitetura interna está em [`docs/architecture/services/video-service.md`](../../docs/architecture/services/video-service.md).
 
@@ -10,16 +10,16 @@ O contrato HTTP é o documento gerado em `GET /docs` (ver [`docs/architecture/ht
 
 ```
 src/
-├── domain/                 # Video (agregado e máquina de estados), FileName, VideoStatus, chaves
+├── domain/                 # Video (agregado e máquina de estados), FileName, VideoFile, VideoStatus, chaves
 ├── application/
-│   ├── useCases/           # RequestUpload, ConfirmUpload, ListUserVideos, GetVideo,
-│   │                       # GetDownloadUrl, DeleteVideo, ApplyProcessingEvent, ExpireFramesPackages
-│   └── interfaces/         # VideoRepository, EventPublisher, ObjectStorage, StorageUrlSigner, VideoListCache
+│   ├── useCases/           # UploadVideo, ListUserVideos, GetVideo, GetDownloadUrl,
+│   │                       # DeleteVideo, ApplyProcessingEvent, ExpireFramesPackages
+│   └── interfaces/         # VideoRepository, EventPublisher, ObjectStorage, DownloadUrlSigner, VideoListCache
 ├── interface-adapters/     # controllers HTTP e o controller dos eventos do worker
 ├── infrastructure/
 │   ├── http/               # catálogo de rotas; Fastify em http/fastify/
 │   ├── repositories/prisma/
-│   ├── gateways/           # AMQP, S3 (storage e assinatura de URL), Redis
+│   ├── gateways/           # AMQP, S3 (upload, exclusão e assinatura do download), Redis
 │   ├── messaging/amqplib/  # conexão, topologia e settle
 │   ├── observability/
 │   └── scheduling/         # varredura periódica de expiração
@@ -29,7 +29,8 @@ src/
 ```
 tests/
 ├── unit/                   # domínio, casos de uso, HTTP por inject, gateways
-├── integration/            # Postgres, RabbitMQ, SeaweedFS e Redis reais, via test-toolkit
+├── integration/            # o processo real (startVideoService) contra Postgres, RabbitMQ,
+│                           # SeaweedFS e Redis em Testcontainers; o adapter Prisma à parte
 └── support/                # fakes das interfaces e builders de vídeo
 ```
 
@@ -39,8 +40,7 @@ As regras de dependência entre camadas estão em [`docs/architecture/layers.md`
 
 | Método e path                    | O que faz                                                  |
 | -------------------------------- | ---------------------------------------------------------- |
-| `POST /videos`                   | Abre o vídeo e devolve a URL de upload (15 min)            |
-| `POST /videos/{videoId}/confirm` | Confere o arquivo no storage e coloca o vídeo na fila      |
+| `POST /videos`                   | Recebe o arquivo (multipart, campo `file`) e o põe na fila |
 | `GET /videos?limit&before`       | Vídeos do usuário, mais recentes primeiro                  |
 | `GET /videos/{videoId}`          | Status de um vídeo                                         |
 | `GET /videos/{videoId}/download` | URL do zip (5 min); 409 se não está pronto, 410 se expirou |
@@ -52,7 +52,9 @@ Todas exigem `Authorization: Bearer <token>` de `POST /login` no auth-service.
 
 O serviço tem o próprio lockfile. Os pacotes `@zipframes/*` vêm do GitHub Packages. O pnpm 12 não expande `${NODE_AUTH_TOKEN}` no `.npmrc` versionado; a linha `//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}` fica no `~/.npmrc`.
 
-`pnpm dev` e `pnpm start` leem `services/video-service/.env`. O auth-service precisa estar no ar para os tokens serem validados (o JWKS é buscado no primeiro uso), e `JWT_ISSUER`/`JWT_AUDIENCE` precisam ser os mesmos dele. `S3_PUBLIC_ENDPOINT` é o endereço do storage que o cliente alcança; na máquina, é o mesmo de `S3_ENDPOINT`.
+`pnpm dev` e `pnpm start` leem `services/video-service/.env`. O auth-service precisa estar no ar para os tokens serem validados (o JWKS é buscado no primeiro uso), e `JWT_ISSUER`/`JWT_AUDIENCE` precisam ser os mesmos dele. `S3_PUBLIC_ENDPOINT` é o endereço do storage que o cliente alcança para baixar o zip; na máquina, é o mesmo de `S3_ENDPOINT`.
+
+O schema do banco mudou com o upload em uma chamada (sem `AWAITING_UPLOAD` e sem as colunas de purga), e a migration inicial foi reescrita. Um `video_db` local criado antes disso precisa ser recriado: `pnpm infra:reset` e depois `db:deploy`.
 
 Da raiz, `pnpm deps:video pkgname@3.1` (e `-D`) adiciona dependência neste serviço.
 

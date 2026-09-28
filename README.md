@@ -1,13 +1,13 @@
 # ZipFrames
 
-Três processos neste repositório. O `auth-service` cadastra usuários e emite JWT RS256. O `video-service` recebe o pedido de upload, entrega uma URL pré-assinada para o arquivo ir direto ao storage, publica `video.uploaded`, acompanha o processamento, lista os vídeos do usuário e entrega o zip. O `processor-worker` consome `video.uploaded`, extrai um frame por segundo com `ffmpeg` e grava um zip no storage. Não há serviço de notificação nem cliente web aqui.
+Três processos neste repositório. O `auth-service` cadastra usuários e emite JWT RS256. O `video-service` recebe o vídeo por upload multipart, grava no storage, publica `video.uploaded`, acompanha o processamento, lista os vídeos do usuário e entrega o zip por uma URL de download de curta duração. O `processor-worker` consome `video.uploaded`, extrai um frame por segundo com `ffmpeg` e grava um zip no storage. Não há serviço de notificação nem cliente web aqui.
 
 ## Organização
 
 ```
 zipframes/
 ├── services/auth-service/       # identidade, Postgres e publicação de eventos
-├── services/video-service/      # ciclo de vida do vídeo, URLs pré-assinadas, Postgres e Redis
+├── services/video-service/      # ciclo de vida do vídeo, upload, download, Postgres e Redis
 ├── services/processor-worker/   # frames e zip, sem banco
 ├── infra/docker-compose/        # Postgres, RabbitMQ, SeaweedFS e o resto da máquina
 ├── infra/k8s/                   # manifests dos três processos; não inclui a infra
@@ -42,7 +42,8 @@ flowchart LR
   client -- "register / login" --> auth
   client -- "Bearer JWT" --> video
   video -. "JWKS" .-> auth
-  client -- "PUT / GET pré-assinado" --> storage
+  client -- "GET pré-assinado (zip)" --> storage
+  video -- "grava o vídeo, apaga no fim" --> storage
   video -- "video.uploaded" --> broker
   broker -- "video.uploaded" --> worker
   worker -- "baixa o vídeo, grava o zip" --> storage
@@ -51,7 +52,7 @@ flowchart LR
   auth -- "user.registered" --> broker
 ```
 
-O auth grava o usuário e publica `user.registered` no exchange `zipframes.events`. O video-service valida o token contra o JWKS do auth, grava o vídeo e, na confirmação do upload, publica `video.uploaded`. O worker escuta a fila `processor.video.uploaded`, processa e publica `video.processing.started`, `video.processed` ou `video.failed`, que o video-service consome pela fila `video-service.processing-status` para mover o status. O arquivo nunca passa pelo video-service: o cliente sobe e baixa direto do storage com URLs de curta duração.
+O auth grava o usuário e publica `user.registered` no exchange `zipframes.events`. O video-service valida o token contra o JWKS do auth, grava o arquivo no storage e o vídeo como `QUEUED` e publica `video.uploaded`. O worker escuta a fila `processor.video.uploaded`, processa e publica `video.processing.started`, `video.processed` ou `video.failed`, que o video-service consome pela fila `video-service.processing-status` para mover o status. O vídeo entra pelo video-service, em stream para o storage; o zip sai direto do storage, por uma URL assinada de curta duração.
 
 Nenhum processo chama outro na subida. O video-service só busca o JWKS no primeiro token que valida. A ordem entre os três não importa.
 
@@ -59,7 +60,7 @@ Nenhum processo chama outro na subida. O video-service só busca o JWKS no prime
 
 - Node.js 26, TypeScript 5, pnpm 12.6.0
 - Fastify, Zod, Prisma (auth e video)
-- RabbitMQ (`amqplib`), SeaweedFS pela API S3 (`@aws-sdk/client-s3` e `@aws-sdk/s3-request-presigner`) e Redis (`ioredis`, cache da listagem)
+- RabbitMQ (`amqplib`), SeaweedFS pela API S3 (`@aws-sdk/client-s3`, `@aws-sdk/lib-storage` e `@aws-sdk/s3-request-presigner`) e Redis (`ioredis`, cache da listagem)
 - JWT RS256 (`jose`) e senha com bcrypt
 - Vitest. A integração sobe Postgres, broker, storage e Redis com `@zipframes/test-toolkit` e precisa de Docker
 - `GET /metrics` em texto Prometheus (`prom-client`)
@@ -166,16 +167,10 @@ curl -fsS -X POST http://localhost:3000/register -H 'content-type: application/j
 TOKEN=$(curl -fsS -X POST http://localhost:3000/login -H 'content-type: application/json' \
   -d '{"email":"ada@example.com","password":"senha1234"}' | jq -r .accessToken)
 
-SIZE=$(stat -c %s aula.mp4)
-UPLOAD=$(curl -fsS -X POST http://localhost:3001/videos \
-  -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
-  -d "{\"originalFileName\":\"aula.mp4\",\"contentType\":\"video/mp4\",\"sizeBytes\":$SIZE}")
-VIDEO_ID=$(echo "$UPLOAD" | jq -r .videoId)
+# Uma chamada: o arquivo vai no campo `file` e o vídeo já volta QUEUED.
+VIDEO_ID=$(curl -fsS -X POST http://localhost:3001/videos \
+  -H "authorization: Bearer $TOKEN" -F 'file=@aula.mp4;type=video/mp4' | jq -r .videoId)
 
-# O arquivo vai direto ao storage, com o mesmo Content-Type e tamanho declarados.
-curl -fsS -X PUT "$(echo "$UPLOAD" | jq -r .uploadUrl)" -H 'content-type: video/mp4' --data-binary @aula.mp4
-
-curl -fsS -X POST "http://localhost:3001/videos/$VIDEO_ID/confirm" -H "authorization: Bearer $TOKEN"
 curl -fsS http://localhost:3001/videos -H "authorization: Bearer $TOKEN"          # QUEUED → PROCESSING → DONE
 
 curl -fsS "http://localhost:3001/videos/$VIDEO_ID/download" -H "authorization: Bearer $TOKEN" \

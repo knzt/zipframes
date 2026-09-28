@@ -58,7 +58,7 @@ pnpm --dir services/processor-worker stage-runtime
 pnpm infra:apps
 ```
 
-`pnpm infra:apps` é `docker compose ... --profile apps up -d --build`. Os containers do auth e do video aplicam as migrations na subida (`prisma migrate deploy`) e escutam nas portas 3000 e 3001. O worker consome AMQP e não publica porta HTTP. A chave montada no auth é `infra/docker-compose/auth/jwt-dev.pem`, com `JWT_KID=auth-dev-1`. O video busca o JWKS em `http://auth-service:3000` e assina as URLs do storage para `http://localhost:8333` (`S3_PUBLIC_ENDPOINT`), o endereço que o cliente na máquina alcança.
+`pnpm infra:apps` é `docker compose ... --profile apps up -d --build`. Os containers do auth e do video aplicam as migrations na subida (`prisma migrate deploy`) e escutam nas portas 3000 e 3001. O worker consome AMQP e não publica porta HTTP. A chave montada no auth é `infra/docker-compose/auth/jwt-dev.pem`, com `JWT_KID=auth-dev-1`. O video busca o JWKS em `http://auth-service:3000` e assina a URL de download do zip para `http://localhost:8333` (`S3_PUBLIC_ENDPOINT`), o endereço que o cliente na máquina alcança. O vídeo em si chega pelo `POST /videos` (multipart) e o serviço o grava no storage.
 
 ```bash
 curl -fsS http://localhost:3000/health/ready

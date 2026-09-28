@@ -11,7 +11,7 @@ flowchart TB
     web["<b>web-client</b><br/><i>[Container: SPA estática]</i><br/>Login, upload, status e download"]
     ingress["<b>Ingress</b><br/><i>[Container: NGINX Ingress]</i><br/>Ponto único de entrada"]
     auth["<b>auth-service</b><br/><i>[Container: Node.js, Fastify]</i><br/>Cadastro, login e JWT"]
-    video["<b>video-service</b><br/><i>[Container: Node.js, Fastify]</i><br/>Ciclo de vida dos vídeos,<br/>URLs pré-assinadas e listagem"]
+    video["<b>video-service</b><br/><i>[Container: Node.js, Fastify]</i><br/>Recebe os vídeos, status,<br/>listagem, download e retenção"]
     worker["<b>processor-worker</b><br/><i>[Container: Node.js, ffmpeg]</i><br/>Extrai os frames e gera o zip"]
     notif["<b>notification-service</b><br/><i>[Container: Node.js]</i><br/>Envia notificações de falha"]
     broker[["<b>RabbitMQ</b><br/><i>[Container: message broker]</i><br/>Exchange zipframes.events"]]
@@ -25,15 +25,15 @@ flowchart TB
   user -- "Usa<br/>[HTTPS]" --> ingress
   ingress -- "Entrega a interface" --> web
   ingress -- "/auth<br/>[HTTP/JSON]" --> auth
-  ingress -- "/videos<br/>[HTTP/JSON]" --> video
-  ingress -- "Upload e download com<br/>URL pré-assinada [S3]" --> storage
+  ingress -- "/videos<br/>[HTTP/JSON e multipart]" --> video
+  ingress -- "Download do zip com<br/>URL pré-assinada [S3]" --> storage
 
   video -- "Obtém as chaves públicas<br/>[HTTP, JWKS]" --> auth
   auth -- "Lê e grava<br/>[SQL]" --> authdb
   video -- "Lê e grava<br/>[SQL]" --> videodb
   notif -- "Lê e grava<br/>[SQL]" --> notifdb
   video -- "Cache-aside<br/>[RESP]" --> cache
-  video -- "Assina URLs e confere objetos<br/>[S3]" --> storage
+  video -- "Grava o vídeo, assina o download<br/>e apaga na retenção [S3]" --> storage
   worker -- "Baixa o vídeo e grava o zip<br/>[S3]" --> storage
 
   auth -- "Publica user.registered<br/>[AMQP]" --> broker
@@ -53,22 +53,22 @@ flowchart TB
   class smtp external
 ```
 
-A interface roda no navegador do usuário, então as chamadas à API e ao storage partem do navegador e passam pelo Ingress.
+A interface roda no navegador do usuário, então as chamadas à API e ao storage partem do navegador e passam pelo Ingress. O vídeo vai ao video-service em `POST /videos`; por isso a rota `/videos` do Ingress precisa aceitar corpos do tamanho máximo do upload (no NGINX Ingress, `nginx.ingress.kubernetes.io/proxy-body-size: 500m`), enquanto o storage só é exposto para o download.
 
 ## Containers
 
-| Container                          | Tecnologia                              | Responsabilidade                                               | Escala                            |
-| ---------------------------------- | --------------------------------------- | -------------------------------------------------------------- | --------------------------------- |
-| web-client                         | SPA estática                            | Interface do usuário                                           | Réplicas fixas                    |
-| Ingress                            | NGINX Ingress Controller                | Roteamento, TLS e exposição do storage para URLs pré-assinadas | Gerenciado pelo cluster           |
-| auth-service                       | Node.js, TypeScript, Fastify, Prisma    | Identidade e emissão de tokens                                 | HPA por CPU                       |
-| video-service                      | Node.js, TypeScript, Fastify, Prisma    | Gestão de vídeos                                               | HPA por CPU                       |
-| processor-worker                   | Node.js, TypeScript, ffmpeg             | Processamento                                                  | KEDA pelo tamanho da fila         |
-| notification-service               | Node.js, TypeScript, Nodemailer, Prisma | Notificações                                                   | Réplicas fixas                    |
-| RabbitMQ                           | RabbitMQ Cluster Operator               | Transporte dos eventos                                         | Cluster do operator               |
-| auth-db, video-db, notification-db | PostgreSQL com CloudNativePG            | Persistência de cada serviço                                   | Instância por serviço             |
-| Redis                              | Redis                                   | Cache da listagem                                              | Instância única                   |
-| SeaweedFS                          | SeaweedFS com gateway S3                | Armazenamento de arquivos                                      | Instância única no ambiente local |
+| Container                          | Tecnologia                              | Responsabilidade                                              | Escala                            |
+| ---------------------------------- | --------------------------------------- | ------------------------------------------------------------- | --------------------------------- |
+| web-client                         | SPA estática                            | Interface do usuário                                          | Réplicas fixas                    |
+| Ingress                            | NGINX Ingress Controller                | Roteamento, TLS e exposição do storage para o download do zip | Gerenciado pelo cluster           |
+| auth-service                       | Node.js, TypeScript, Fastify, Prisma    | Identidade e emissão de tokens                                | HPA por CPU                       |
+| video-service                      | Node.js, TypeScript, Fastify, Prisma    | Gestão de vídeos                                              | HPA por CPU                       |
+| processor-worker                   | Node.js, TypeScript, ffmpeg             | Processamento                                                 | KEDA pelo tamanho da fila         |
+| notification-service               | Node.js, TypeScript, Nodemailer, Prisma | Notificações                                                  | Réplicas fixas                    |
+| RabbitMQ                           | RabbitMQ Cluster Operator               | Transporte dos eventos                                        | Cluster do operator               |
+| auth-db, video-db, notification-db | PostgreSQL com CloudNativePG            | Persistência de cada serviço                                  | Instância por serviço             |
+| Redis                              | Redis                                   | Cache da listagem                                             | Instância única                   |
+| SeaweedFS                          | SeaweedFS com gateway S3                | Armazenamento de arquivos                                     | Instância única no ambiente local |
 
 ## Infraestrutura de suporte
 

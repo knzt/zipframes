@@ -14,8 +14,7 @@ Os termos abaixo são usados igualmente no código, nos eventos, na API e nesta 
 | Contato                | Cópia dos dados de contato de um usuário mantida pelo contexto de notificação        | `Contact`                     |
 | Vídeo                  | Arquivo enviado por um usuário e todo o seu ciclo de vida no sistema                 | `Video`                       |
 | Dono                   | Usuário que enviou o vídeo e o único que pode vê-lo                                  | `ownerId`                     |
-| Solicitação de upload  | Pedido de uma URL para enviar o arquivo ao storage                                   | `RequestUpload`               |
-| Confirmação de upload  | Aviso do cliente de que o arquivo foi enviado, que coloca o vídeo na fila            | `ConfirmUpload`               |
+| Envio do vídeo         | Upload do arquivo em uma chamada; o vídeo já entra na fila de processamento          | `UploadVideo`                 |
 | Processamento          | Extração dos frames e geração do pacote                                              | `Processing`                  |
 | Frame                  | Imagem PNG extraída do vídeo, uma por segundo                                        | `Frame`                       |
 | Pacote de frames       | Arquivo zip com todos os frames de um vídeo                                          | `FramesPackage` (`resultKey`) |
@@ -40,12 +39,12 @@ Os termos abaixo são usados igualmente no código, nos eventos, na API e nesta 
 
 Cada bounded context corresponde a um microsserviço, com modelo e banco de dados próprios.
 
-| Contexto         | Serviço                | Responsabilidade                                                            |
-| ---------------- | ---------------------- | --------------------------------------------------------------------------- |
-| Identidade       | `auth-service`         | Cadastro, autenticação e emissão de tokens                                  |
-| Gestão de Vídeos | `video-service`        | Ciclo de vida do vídeo, acesso ao storage por URLs pré-assinadas e listagem |
-| Processamento    | `processor-worker`     | Extração de frames e geração do pacote                                      |
-| Notificação      | `notification-service` | Contatos e envio de notificações                                            |
+| Contexto         | Serviço                | Responsabilidade                                                           |
+| ---------------- | ---------------------- | -------------------------------------------------------------------------- |
+| Identidade       | `auth-service`         | Cadastro, autenticação e emissão de tokens                                 |
+| Gestão de Vídeos | `video-service`        | Ciclo de vida do vídeo: recebimento, status, listagem, download e retenção |
+| Processamento    | `processor-worker`     | Extração de frames e geração do pacote                                     |
+| Notificação      | `notification-service` | Contatos e envio de notificações                                           |
 
 ### Mapa de contextos
 
@@ -99,7 +98,7 @@ Regras:
 | `ownerId`                | `OwnerId`                 | `sub` do token de quem enviou                                            |
 | `originalFileName`       | `FileName` (value object) | Nome informado, com extensão validada                                    |
 | `contentType`            | string                    | Tipo declarado pelo cliente                                              |
-| `sizeBytes`              | número                    | Tamanho declarado e depois conferido no storage                          |
+| `sizeBytes`              | número                    | Tamanho que o storage recebeu                                            |
 | `sourceKey`              | `StorageKey`              | `uploads/{ownerId}/{videoId}`                                            |
 | `resultKey`              | `StorageKey` opcional     | `outputs/{ownerId}/{videoId}.zip`, presente enquanto o pacote existe     |
 | `frameCount`             | número opcional           | Quantidade de frames gerados                                             |
@@ -113,15 +112,13 @@ Regras:
 
 ```mermaid
 stateDiagram-v2
-  [*] --> AWAITING_UPLOAD: upload solicitado
-  AWAITING_UPLOAD --> QUEUED: upload confirmado
+  [*] --> QUEUED: vídeo recebido
   QUEUED --> PROCESSING: processamento iniciado
   QUEUED --> DONE: processamento concluído
   QUEUED --> FAILED: processamento falhou
   PROCESSING --> DONE: processamento concluído
   PROCESSING --> FAILED: processamento falhou
   DONE --> EXPIRED: prazo de 24h vencido
-  AWAITING_UPLOAD --> DELETED: exclusão a pedido do dono
   DONE --> DELETED: exclusão a pedido do dono
   FAILED --> DELETED: exclusão a pedido do dono
   EXPIRED --> DELETED: exclusão a pedido do dono
@@ -133,21 +130,22 @@ stateDiagram-v2
 Regras:
 
 - **Extensões aceitas:** `mp4`, `avi`, `mov`, `mkv`, `wmv`, `flv` e `webm`, as mesmas do projeto base.
-- **Tamanho máximo configurável** (por exemplo, 500 MB), verificado na solicitação e novamente na confirmação, com o tamanho real do objeto no storage.
-- **Confirmação** só é aceita quando o vídeo está em `AWAITING_UPLOAD` e o objeto existe no storage.
+- **Nome e tipo são validados antes de qualquer byte ser recebido.** Um arquivo que não é vídeo é recusado sem ocupar o storage.
+- **Tamanho máximo configurável** (500 MB por padrão), medido nos bytes que chegam, não num valor declarado pelo cliente. Um arquivo vazio ou acima do limite é recusado e o que já tinha sido gravado é apagado.
+- **O vídeo nasce `QUEUED`**: só existe depois que o arquivo inteiro está no storage, então não há um estado de "aguardando envio".
 - **Transições inválidas são rejeitadas pela entidade.** Por exemplo, um vídeo `DONE` nunca volta para `PROCESSING`.
 - **`DONE` e `FAILED` encerram o processamento.** Eventos de processamento que chegarem depois deles (ou de `EXPIRED` e `DELETED`) são ignorados, o que torna o agregado tolerante a mensagens duplicadas ou fora de ordem. As únicas transições posteriores são a expiração e a exclusão a pedido, que não vêm de eventos do worker.
 - **`QUEUED` pode ir direto para `DONE` ou `FAILED`**, porque o evento de início pode chegar atrasado ou depois do resultado.
 - **A chave do pacote é derivada, nunca aceita do evento.** `video.processed` só vale se `resultKey` for `outputs/{ownerId}/{videoId}.zip`; qualquer outra chave é ignorada, para um evento não dar ao dono uma URL de outro objeto.
 - **`DONE` exige `resultKey`, `frameCount` maior que zero e `expiresAt`, e `FAILED` exige `failureReason`.**
 - **`EXPIRED` e `DELETED` exigem `resultKey` nulo**, porque o arquivo já não existe.
-- **Somente o dono** vê, confirma e baixa o vídeo. Para outros usuários, o vídeo simplesmente não existe (resposta 404, e não 403).
-- **URLs pré-assinadas têm validade curta:** 15 minutos para upload e 5 minutos para download.
+- **Somente o dono** vê, baixa e exclui o vídeo. Para outros usuários, o vídeo simplesmente não existe (resposta 404, e não 403).
+- **A URL de download tem validade curta:** 5 minutos, restrita ao pacote daquele vídeo.
 - **O pacote fica disponível por 24 horas** contadas da conclusão. Depois disso o arquivo é apagado e o vídeo passa a `EXPIRED`.
 - **Download de um vídeo `EXPIRED` ou `DELETED`** responde 410 Gone, com a orientação de enviar o vídeo novamente. Um `DONE` cujo `expiresAt` já passou também responde 410, mesmo antes da rotina de expiração rodar.
 - **O vídeo original nunca é guardado depois do processamento.** Ele é apagado assim que o resultado final é conhecido, com sucesso ou com falha. Para tentar de novo, o usuário envia o arquivo outra vez.
 - **O dono pode excluir um vídeo a qualquer momento, exceto enquanto ele está `QUEUED` ou `PROCESSING`.** A exclusão apaga os arquivos que ainda existirem e leva o vídeo a `DELETED`, preservando apenas os metadados mínimos do histórico. Durante o processamento ela é recusada (409): o worker leria um original já apagado e publicaria um `video.failed` que viraria um e-mail de falha para um vídeo que o dono excluiu. Excluir de novo um vídeo `DELETED` não muda nada.
-- **A confirmação publica `video.uploaded` antes do commit, na mesma transação.** Se o broker não confirmar, nada é gravado e o cliente tenta de novo; o vídeo nunca fica `QUEUED` sem que o worker tenha sido avisado.
+- **O vídeo é gravado antes de `video.uploaded` ser publicado.** Assim o worker nunca reporta sobre um vídeo que o contexto não conhece. Se o broker recusar o evento, o vídeo vai para `FAILED` com o motivo e o original é apagado: o dono vê a falha e envia de novo, em vez de ficar com um vídeo parado na fila.
   Eventos de domínio: `VideoQueued`, `VideoProcessingStarted`, `VideoCompleted`, `VideoFailed`, `VideoExpired`, `VideoDeleted`. Apenas `VideoQueued` gera evento de integração (`video.uploaded`), já que os demais são reações a eventos vindos do Processamento ou efeitos internos de retenção.
 
 ### Processamento
@@ -253,5 +251,5 @@ O prazo de 24 horas é configurável, e o mesmo valor alimenta o `expiresAt` do 
 
 - **Logs registram identificadores**, como `videoId`, `ownerId` e `correlationId`, nunca e-mail, nome do arquivo original ou conteúdo.
 - **Mensagens carregam chaves de storage**, nunca o arquivo.
-- **O acesso aos arquivos é sempre por URL pré-assinada de curta duração**, restrita a um único objeto, e nunca por um endereço público e estável.
+- **O download é sempre por URL pré-assinada de curta duração**, restrita a um único objeto, e nunca por um endereço público e estável. O envio passa pelo video-service, que valida o dono antes de gravar.
 - **Cada vídeo é visível apenas para o dono**, e para os demais ele não existe.

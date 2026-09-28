@@ -6,20 +6,19 @@ Os schemas são criados por migrations do Prisma. O SQL desta página é a refer
 
 ## Decisões comuns a todos os bancos
 
-| Decisão                                                                   | Motivo                                                                                                                                                                                                           |
-| ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Chaves primárias em `uuid` v7                                             | Identificadores únicos entre serviços, gerados pela aplicação, e ordenáveis por tempo, o que mantém a localidade nos índices                                                                                     |
-| Todos os horários em `timestamptz`, gravados em UTC                       | Evita ambiguidade entre fusos e horário de verão                                                                                                                                                                 |
-| Status como `enum` do PostgreSQL                                          | Restringe os valores no banco e é mapeado diretamente pelo Prisma                                                                                                                                                |
-| `created_at` e `updated_at` em toda tabela mutável                        | Auditoria mínima                                                                                                                                                                                                 |
-| Sem exclusão física dos metadados de vídeos e notificações                | O histórico é parte da funcionalidade. Os arquivos, esses sim, são apagados no prazo definido                                                                                                                    |
-| Marcas de eliminação (`*_purged_at`) em vez de simplesmente limpar campos | Permite comprovar quando cada arquivo foi apagado, sem guardar o conteúdo                                                                                                                                        |
-| Publicação direta no broker, sem tabela `outbox`                          | O auth grava e depois publica. O video-service publica e só então grava (ordem invertida: ver `docs/architecture/services/video-service.md`). Nos dois, se o processo cair no meio, fato e recado podem divergir |
-| Idempotência garantida por chaves de negócio, sem tabela de deduplicação  | As restrições que já existem (upsert por chave primária, unicidade e o próprio status do agregado) tornam a reentrega inofensiva                                                                                 |
+| Decisão                                                                  | Motivo                                                                                                                                                             |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Chaves primárias em `uuid` v7                                            | Identificadores únicos entre serviços, gerados pela aplicação, e ordenáveis por tempo, o que mantém a localidade nos índices                                       |
+| Todos os horários em `timestamptz`, gravados em UTC                      | Evita ambiguidade entre fusos e horário de verão                                                                                                                   |
+| Status como `enum` do PostgreSQL                                         | Restringe os valores no banco e é mapeado diretamente pelo Prisma                                                                                                  |
+| `created_at` e `updated_at` em toda tabela mutável                       | Auditoria mínima                                                                                                                                                   |
+| Sem exclusão física dos metadados de vídeos e notificações               | O histórico é parte da funcionalidade. Os arquivos, esses sim, são apagados no prazo definido                                                                      |
+| Publicação direta no broker, sem tabela `outbox`                         | Os dois serviços gravam e depois publicam. Se o processo cair no meio, fato e recado podem divergir; no video-service a recusa do broker é compensada (ver abaixo) |
+| Idempotência garantida por chaves de negócio, sem tabela de deduplicação | As restrições que já existem (upsert por chave primária, unicidade e o próprio status do agregado) tornam a reentrega inofensiva                                   |
 
 Não existe tabela `outbox`. No auth-service a publicação é dual-write de propósito: o caso de uso persiste o agregado e em seguida chama `EventPublisher`. `/health/ready` exige AMQP. O consumidor continua idempotente. Se o publish falhar com o agregado já gravado, o HTTP ainda responde sucesso (no cadastro, um retry cairia em e-mail duplicado); o erro de publish vai para o log.
 
-No video-service a ordem muda: o `publish` de `video.uploaded` roda **dentro** da transação que grava `QUEUED`, depois do `UPDATE` e antes do commit, e só resolve com o confirm do broker. Se o broker falhar, o rollback desfaz a gravação e o cliente recebe 503 para confirmar de novo. A razão é a consequência: um usuário gravado sem `user.registered` ainda consegue usar o sistema, mas um vídeo `QUEUED` sem evento ficaria parado para sempre. O furo que sobra (o commit falhar depois do confirm) é o mesmo de qualquer dual-write, e o consumidor do video-service devolve à fila, com backoff, eventos do worker que chegam antes do commit.
+No video-service a ordem é a mesma (grava `QUEUED`, depois publica `video.uploaded` com confirmação do broker), mas a falha do publish tem outra consequência: um usuário gravado sem `user.registered` ainda consegue usar o sistema, enquanto um vídeo `QUEUED` sem evento ficaria parado para sempre. Por isso o caso de uso compensa: marca o vídeo `FAILED` (`VIDEO_NOT_QUEUED`), apaga o original e responde 503. Gravar antes de publicar também garante que todo evento do worker encontra o vídeo no banco. O furo que sobra é o processo morrer entre as duas chamadas, o mesmo de qualquer dual-write sem outbox.
 
 Não existe tabela de deduplicação de eventos. A entrega é "pelo menos uma vez", e cada consumidor é idempotente por uma chave que o próprio domínio já impõe:
 
@@ -90,8 +89,6 @@ erDiagram
     varchar error_code
     text failure_reason
     timestamptz expires_at
-    timestamptz source_purged_at
-    timestamptz result_purged_at
     timestamptz created_at
     timestamptz updated_at
     integer version
@@ -100,25 +97,23 @@ erDiagram
 
 ### `videos`
 
-| Coluna               | Tipo           | Restrições                          | Observação                                                                 |
-| -------------------- | -------------- | ----------------------------------- | -------------------------------------------------------------------------- |
-| `id`                 | `uuid`         | PK                                  | Também compõe as chaves no storage                                         |
-| `owner_id`           | `uuid`         | not null                            | Vem do `sub` do token, sem FK entre bancos                                 |
-| `original_file_name` | `varchar(255)` | not null                            | Nome informado pelo usuário                                                |
-| `content_type`       | `varchar(100)` | not null                            |                                                                            |
-| `size_bytes`         | `bigint`       | not null, `> 0`                     | Confirmado com o tamanho real no storage                                   |
-| `source_key`         | `varchar(512)` | not null, unique                    | `uploads/{owner_id}/{id}`                                                  |
-| `result_key`         | `varchar(512)` |                                     | `outputs/{owner_id}/{id}.zip`, preenchido ao concluir                      |
-| `frame_count`        | `integer`      |                                     | Quantidade de frames extraídos                                             |
-| `status`             | `video_status` | not null, default `AWAITING_UPLOAD` | Enum do banco, agora com `EXPIRED` e `DELETED`                             |
-| `error_code`         | `varchar(50)`  |                                     | Código da falha, usado em métricas                                         |
-| `failure_reason`     | `text`         |                                     | Motivo legível, exibido ao usuário                                         |
-| `expires_at`         | `timestamptz`  |                                     | Momento em que o pacote deixa de ficar disponível, preenchido na conclusão |
-| `source_purged_at`   | `timestamptz`  |                                     | Quando o vídeo original foi apagado do storage                             |
-| `result_purged_at`   | `timestamptz`  |                                     | Quando o pacote foi apagado, por expiração ou a pedido                     |
-| `created_at`         | `timestamptz`  | not null, default `now()`           |                                                                            |
-| `updated_at`         | `timestamptz`  | not null, default `now()`           |                                                                            |
-| `version`            | `integer`      | not null, default 0                 | Controle de concorrência otimista                                          |
+| Coluna               | Tipo           | Restrições                | Observação                                                                 |
+| -------------------- | -------------- | ------------------------- | -------------------------------------------------------------------------- |
+| `id`                 | `uuid`         | PK                        | Também compõe as chaves no storage                                         |
+| `owner_id`           | `uuid`         | not null                  | Vem do `sub` do token, sem FK entre bancos                                 |
+| `original_file_name` | `varchar(255)` | not null                  | Nome informado pelo usuário                                                |
+| `content_type`       | `varchar(100)` | not null                  |                                                                            |
+| `size_bytes`         | `bigint`       | not null, `> 0`           | Bytes que o storage recebeu no upload                                      |
+| `source_key`         | `varchar(512)` | not null, unique          | `uploads/{owner_id}/{id}`                                                  |
+| `result_key`         | `varchar(512)` |                           | `outputs/{owner_id}/{id}.zip`, preenchido ao concluir                      |
+| `frame_count`        | `integer`      |                           | Quantidade de frames extraídos                                             |
+| `status`             | `video_status` | not null                  | Enum do banco; o vídeo nasce `QUEUED`                                      |
+| `error_code`         | `varchar(50)`  |                           | Código da falha, usado em métricas                                         |
+| `failure_reason`     | `text`         |                           | Motivo legível, exibido ao usuário                                         |
+| `expires_at`         | `timestamptz`  |                           | Momento em que o pacote deixa de ficar disponível, preenchido na conclusão |
+| `created_at`         | `timestamptz`  | not null, default `now()` |                                                                            |
+| `updated_at`         | `timestamptz`  | not null, default `now()` |                                                                            |
+| `version`            | `integer`      | not null                  | Lock otimista: o `INSERT` grava 1 e cada `UPDATE` soma 1                   |
 
 As invariantes do agregado também são garantidas no banco, para que nenhum caminho de escrita as contorne:
 
@@ -143,7 +138,6 @@ A última restrição garante no banco o que a regra de retenção exige: um ví
 
 ```sql
 CREATE TYPE video_status AS ENUM (
-  'AWAITING_UPLOAD',
   'QUEUED',
   'PROCESSING',
   'DONE',
@@ -161,15 +155,13 @@ CREATE TABLE videos (
   source_key         varchar(512) NOT NULL UNIQUE,
   result_key         varchar(512),
   frame_count        integer      CHECK (frame_count IS NULL OR frame_count > 0),
-  status             video_status NOT NULL DEFAULT 'AWAITING_UPLOAD',
+  status             video_status NOT NULL,
   error_code         varchar(50),
   failure_reason     text,
   expires_at         timestamptz,
-  source_purged_at   timestamptz,
-  result_purged_at   timestamptz,
   created_at         timestamptz  NOT NULL DEFAULT now(),
   updated_at         timestamptz  NOT NULL DEFAULT now(),
-  version            integer      NOT NULL DEFAULT 0,
+  version            integer      NOT NULL,
   CONSTRAINT ck_videos_done        CHECK (status <> 'DONE' OR (result_key IS NOT NULL AND frame_count > 0 AND expires_at IS NOT NULL)),
   CONSTRAINT ck_videos_failed      CHECK (status <> 'FAILED' OR failure_reason IS NOT NULL),
   CONSTRAINT ck_videos_sem_arquivo CHECK (status NOT IN ('EXPIRED', 'DELETED') OR result_key IS NULL)
@@ -184,7 +176,7 @@ CREATE INDEX idx_videos_a_expirar ON videos (expires_at)
   WHERE status = 'DONE';
 ```
 
-O schema está em `services/video-service/src/infrastructure/repositories/prisma/` (`schema.prisma` e a migration `20260927000000_init`, que acrescenta à mão as `CHECK` e os índices parciais). Toda gravação de uma transição é `UPDATE ... WHERE id = $1 AND version = $2`, com `version = version + 1`: se nenhuma linha muda, outro escritor venceu e o repositório lança `ConflictError`. Sem tabela `outbox` (ver a publicação de `video.uploaded` acima).
+O schema está em `services/video-service/src/infrastructure/repositories/prisma/` (`schema.prisma` e a migration `20260927000000_init`, que acrescenta à mão as `CHECK` e os índices parciais). O repositório tem um único `save`: um vídeo novo (`version` 0 no agregado) vira `INSERT` com `version = 1`; uma transição vira `UPDATE ... WHERE id = $1 AND version = $2`, com `version = version + 1`. Se nenhuma linha muda, outro escritor venceu na mesma linha e o repositório lança `ConflictError`. A trava é sobre escritas concorrentes no mesmo vídeo (eventos do worker, expiração contra exclusão), nunca entre usuários: cada upload é um vídeo novo. Sem tabela `outbox` (ver a publicação de `video.uploaded` acima).
 
 ## notification-db
 
@@ -323,14 +315,14 @@ CREATE INDEX idx_notifications_user ON notifications (user_id, created_at DESC);
 
 ## Retenção e eliminação
 
-Os arquivos ficam no storage apenas enquanto são necessários (ver a seção de retenção em `docs/domain/dominio.md`). O banco guarda somente metadados e as marcas de quando cada arquivo foi eliminado.
+Os arquivos ficam no storage apenas enquanto são necessários (ver a seção de retenção em `docs/domain/dominio.md`). O banco guarda somente metadados; o `status` diz se o pacote ainda existe.
 
-| Dado                      | Prazo                           | Efeito no banco                                                         |
-| ------------------------- | ------------------------------- | ----------------------------------------------------------------------- |
-| Vídeo original            | Apagado ao fim do processamento | `source_purged_at` preenchido                                           |
-| Pacote de frames          | 24 horas após a conclusão       | `result_key` nulo, `result_purged_at` preenchido, `status` em `EXPIRED` |
-| Exclusão a pedido do dono | Imediata                        | Arquivos apagados, `status` em `DELETED`                                |
-| Exclusão da conta         | Ao consumir `user.deleted`      | Vídeos e contato do usuário removidos                                   |
+| Dado                      | Prazo                           | Efeito no banco                                          |
+| ------------------------- | ------------------------------- | -------------------------------------------------------- |
+| Vídeo original            | Apagado ao fim do processamento | Nenhum: a chave é derivada e apagar de novo é inofensivo |
+| Pacote de frames          | 24 horas após a conclusão       | `result_key` nulo, `status` em `EXPIRED`                 |
+| Exclusão a pedido do dono | Imediata                        | Arquivos apagados, `status` em `DELETED`                 |
+| Exclusão da conta         | Ao consumir `user.deleted`      | Vídeos e contato do usuário removidos                    |
 
 A rotina de expiração busca o que venceu usando o índice parcial `idx_videos_a_expirar`:
 
@@ -349,8 +341,6 @@ Depois de apagar os objetos no storage, a transição é registrada com o lock o
 UPDATE videos
    SET status = 'EXPIRED',
        result_key = NULL,
-       result_purged_at = now(),
-       source_purged_at = COALESCE(source_purged_at, now()),
        updated_at = now(),
        version = version + 1
  WHERE id = $1
