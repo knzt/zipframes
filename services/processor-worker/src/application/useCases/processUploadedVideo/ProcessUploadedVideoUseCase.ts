@@ -192,6 +192,8 @@ export class ProcessUploadedVideoUseCase {
       correlationId: job.correlationId,
       payload: {
         videoId: job.videoId,
+        ownerId: job.ownerId,
+        originalFileName: job.originalFileName,
         resultKey: packaged.objectKey,
         frameCount: packaged.frameCount,
         durationMs,
@@ -209,6 +211,7 @@ export class ProcessUploadedVideoUseCase {
       payload: {
         videoId: job.videoId,
         ownerId: job.ownerId,
+        originalFileName: job.originalFileName,
         errorCode: failure.code,
         reason: failure.message,
         attempts: job.attempt,

@@ -7,6 +7,8 @@ allowBuilds:
   protobufjs: true
   ssh2: true
 minimumReleaseAgeExclude:
-  - '@zipframes/core@0.4.0'
+  - '@zipframes/core@0.4.0 || 0.5.0-pr50-20260928112543'
   - '@zipframes/test-toolkit@0.2.1'
   - '@zipframes/communication@0.2.0'
+  - '@zipframes/communication@0.3.0-pr50-20260928112543'
+  - '@zipframes/schemas@1.0.0-pr50-20260928112543'

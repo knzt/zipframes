@@ -110,6 +110,7 @@ describe('ProcessUploadedVideoController', () => {
       payload: {
         videoId: event.payload.videoId,
         ownerId: event.payload.ownerId,
+        originalFileName: event.payload.originalFileName,
         errorCode: 'FFMPEG_FAILED',
         reason: 'busy',
         attempts: 5,
