@@ -6,4 +6,5 @@ export interface ProcessingJob {
   readonly sizeBytes: number;
   readonly attempt: number;
   readonly correlationId: string;
+  readonly uploadedAt: string;
 }

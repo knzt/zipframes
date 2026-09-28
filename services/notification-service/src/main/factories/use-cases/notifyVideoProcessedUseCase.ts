@@ -1,14 +1,14 @@
 import { NotifyVideoProcessedUseCase } from '../../../application/useCases/notifyVideoProcessed/NotifyVideoProcessedUseCase.js';
 import { createNotificationRepository } from '../repositories/notificationRepository.js';
 import {
-  createDispatchNotificationUseCase,
-  type DispatchNotificationExternalDeps,
-} from './dispatchNotificationUseCase.js';
+  createSendNotificationEmailUseCase,
+  type SendNotificationEmailExternalDeps,
+} from './sendNotificationEmailUseCase.js';
 
 export const createNotifyVideoProcessedUseCase = (
-  externalDeps: DispatchNotificationExternalDeps,
+  externalDeps: SendNotificationEmailExternalDeps,
 ): NotifyVideoProcessedUseCase =>
   new NotifyVideoProcessedUseCase(
     createNotificationRepository(externalDeps.prisma),
-    createDispatchNotificationUseCase(externalDeps),
+    createSendNotificationEmailUseCase(externalDeps),
   );

@@ -1,12 +1,12 @@
 import type { ConsumeContext, ConsumeHandler } from '@zipframes/communication';
 
-import type { UserDeletedController } from './UserDeletedController.js';
-import type { UserRegisteredController } from './UserRegisteredController.js';
-import type { UserUpdatedController } from './UserUpdatedController.js';
-import type { VideoFailedController } from './VideoFailedController.js';
-import type { VideoProcessedController } from './VideoProcessedController.js';
+import type { UserDeletedController } from '../../../interface-adapters/UserDeletedController.js';
+import type { UserRegisteredController } from '../../../interface-adapters/UserRegisteredController.js';
+import type { UserUpdatedController } from '../../../interface-adapters/UserUpdatedController.js';
+import type { VideoFailedController } from '../../../interface-adapters/VideoFailedController.js';
+import type { VideoProcessedController } from '../../../interface-adapters/VideoProcessedController.js';
 
-export interface NotificationControllers {
+export interface NotificationEventControllers {
   readonly userRegistered: UserRegisteredController;
   readonly userUpdated: UserUpdatedController;
   readonly userDeleted: UserDeletedController;
@@ -26,10 +26,10 @@ const peekEventType = (envelope: unknown): string | undefined => {
  * One queue, five controllers. Peek `eventType` first so the matching
  * `defineMessageHandler` schema does not poison a sibling event.
  */
-export class NotificationMessageRouter {
+export class NotificationEventsConsumer {
   readonly handle: ConsumeHandler;
 
-  constructor(private readonly controllers: NotificationControllers) {
+  constructor(private readonly controllers: NotificationEventControllers) {
     this.handle = async (message, context: ConsumeContext): Promise<void> => {
       switch (peekEventType(message.envelope)) {
         case 'user.registered':

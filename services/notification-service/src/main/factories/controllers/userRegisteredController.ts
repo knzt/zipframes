@@ -2,10 +2,10 @@ import type { MessageHandlerOptions } from '@zipframes/communication';
 import type { EventEnvelope } from '@zipframes/schemas/shared';
 
 import { UserRegisteredController } from '../../../interface-adapters/UserRegisteredController.js';
+import type { SendNotificationEmailExternalDeps } from '../use-cases/sendNotificationEmailUseCase.js';
 import { createUpsertContactUseCase } from '../use-cases/upsertContactUseCase.js';
-import type { DispatchNotificationExternalDeps } from '../use-cases/dispatchNotificationUseCase.js';
 
-export interface NotificationControllerExternalDeps extends DispatchNotificationExternalDeps {
+export interface NotificationControllerExternalDeps extends SendNotificationEmailExternalDeps {
   readonly handlerOptions: MessageHandlerOptions<EventEnvelope<unknown>, unknown>;
 }
 

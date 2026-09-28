@@ -51,6 +51,7 @@ model Notification {
   failureReason    String?               @map("failure_reason") @db.Text
   resultKey        String?               @map("result_key") @db.VarChar(512)
   frameCount       Int?                  @map("frame_count")
+  uploadedAt       DateTime?             @map("uploaded_at") @db.Timestamptz
   createdAt        DateTime              @default(now()) @map("created_at") @db.Timestamptz
   sentAt           DateTime?             @map("sent_at") @db.Timestamptz
   attempts         NotificationAttempt[]

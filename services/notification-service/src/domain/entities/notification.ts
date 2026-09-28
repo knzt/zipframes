@@ -21,6 +21,7 @@ export interface CreateNotificationProps {
   readonly failureReason?: string;
   readonly resultKey?: string;
   readonly frameCount?: number;
+  readonly uploadedAt?: Date;
   readonly createdAt: Date;
 }
 
@@ -36,6 +37,7 @@ export interface PersistedNotification {
   readonly failureReason: string | null;
   readonly resultKey: string | null;
   readonly frameCount: number | null;
+  readonly uploadedAt: Date | null;
   readonly createdAt: Date;
   readonly sentAt: Date | null;
   readonly attempts: readonly PersistedNotificationAttempt[];
@@ -53,6 +55,7 @@ interface NotificationState {
   readonly failureReason: string | null;
   readonly resultKey: string | null;
   readonly frameCount: number | null;
+  readonly uploadedAt: Date | null;
   readonly createdAt: Date;
   readonly sentAt: Date | null;
   readonly attempts: readonly NotificationAttempt[];
@@ -85,6 +88,7 @@ export class Notification {
       failureReason: props.failureReason ?? null,
       resultKey: props.resultKey ?? null,
       frameCount: props.frameCount ?? null,
+      uploadedAt: props.uploadedAt ?? null,
       createdAt: props.createdAt,
       sentAt: null,
       attempts: [],
@@ -140,6 +144,10 @@ export class Notification {
 
   get frameCount(): number | null {
     return this.state.frameCount;
+  }
+
+  get uploadedAt(): Date | null {
+    return this.state.uploadedAt;
   }
 
   get createdAt(): Date {
@@ -210,6 +218,7 @@ export class Notification {
       failureReason: this.state.failureReason,
       resultKey: this.state.resultKey,
       frameCount: this.state.frameCount,
+      uploadedAt: this.state.uploadedAt,
       createdAt: this.state.createdAt,
       sentAt: this.state.sentAt,
       attempts: this.state.attempts.map((attempt) => attempt.toJSON()),

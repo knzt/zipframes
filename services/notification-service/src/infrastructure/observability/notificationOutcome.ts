@@ -4,7 +4,7 @@ import type { TechnicalMetrics } from '@zipframes/telemetry';
 
 import { NOTIFICATION_QUEUE } from '../messaging/amqplib/amqpTopology.js';
 
-export const createNotificationObserver =
+export const recordNotificationOutcome =
   (deps: { readonly logger: Logger; readonly metrics: TechnicalMetrics }) =>
   (
     outcome: MessageOutcome<unknown, unknown>,

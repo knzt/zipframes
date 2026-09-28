@@ -26,6 +26,7 @@ const job = {
   sizeBytes: 1024,
   attempt: 1,
   correlationId,
+  uploadedAt: '2026-09-22T12:00:00.000Z',
 };
 
 const eventsDouble = (): EventPublisher & { readonly publish: ReturnType<typeof vi.fn> } => {
@@ -258,6 +259,7 @@ describe('ProcessUploadedVideoUseCase', () => {
       errorCode: 'NO_FRAMES',
       originalFileName: 'demo.mp4',
       ownerId,
+      uploadedAt: '2026-09-22T12:00:00.000Z',
     });
   });
 

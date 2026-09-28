@@ -11,10 +11,11 @@ import {
   downloadFallbackUrl,
   failedMail,
   processedMail,
+  uploadRetryUrl,
   type Notification,
 } from '../../../domain/index.js';
 
-export class DispatchNotificationUseCase {
+export class SendNotificationEmailUseCase {
   constructor(
     private readonly notifications: NotificationRepository,
     private readonly contacts: ContactRepository,
@@ -51,12 +52,12 @@ export class DispatchNotificationUseCase {
         error: error instanceof Error ? error.message : 'smtp send failed',
         attemptedAt: new Date(),
       });
-      const next = failedAttempt.hasExhaustedAttempts(this.maxAttempts)
+      const notificationAfterFailedAttempt = failedAttempt.hasExhaustedAttempts(this.maxAttempts)
         ? failedAttempt.markFailed()
         : failedAttempt;
-      await this.notifications.save(next);
-      if (next.status === 'FAILED') {
-        return next;
+      await this.notifications.save(notificationAfterFailedAttempt);
+      if (notificationAfterFailedAttempt.status === 'FAILED') {
+        return notificationAfterFailedAttempt;
       }
       throw new UnavailableError('SMTP_SEND_FAILED', 'failed to send notification e-mail', {
         cause: error,
@@ -70,7 +71,8 @@ export class DispatchNotificationUseCase {
     if (notification.type === 'VIDEO_FAILED') {
       return failedMail({
         originalFileName: notification.originalFileName,
-        reason: notification.failureReason ?? 'falha no processamento',
+        retryUrl: uploadRetryUrl(this.appPublicUrl),
+        ...(notification.uploadedAt === null ? {} : { uploadedAt: notification.uploadedAt }),
       });
     }
 

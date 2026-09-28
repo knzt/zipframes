@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { Notification } from '../../../domain/entities/notification.js';
 import type { NotificationRepository } from '../../interfaces/repositories/NotificationRepository.js';
-import type { DispatchNotificationUseCase } from '../dispatchNotification/DispatchNotificationUseCase.js';
+import type { SendNotificationEmailUseCase } from '../sendNotificationEmail/SendNotificationEmailUseCase.js';
 
 export interface NotifyVideoProcessedInput {
   readonly videoId: string;
@@ -15,7 +15,7 @@ export interface NotifyVideoProcessedInput {
 export class NotifyVideoProcessedUseCase {
   constructor(
     private readonly notifications: NotificationRepository,
-    private readonly dispatch: DispatchNotificationUseCase,
+    private readonly sendNotificationEmail: SendNotificationEmailUseCase,
   ) {}
 
   async execute(input: NotifyVideoProcessedInput): Promise<Notification | null> {
@@ -31,7 +31,7 @@ export class NotifyVideoProcessedUseCase {
       if (existing.isTerminal()) {
         return existing;
       }
-      return this.dispatch.execute(existing);
+      return this.sendNotificationEmail.execute(existing);
     }
 
     const created = await this.notifications.save(
@@ -46,6 +46,6 @@ export class NotifyVideoProcessedUseCase {
         createdAt: new Date(),
       }),
     );
-    return this.dispatch.execute(created);
+    return this.sendNotificationEmail.execute(created);
   }
 }

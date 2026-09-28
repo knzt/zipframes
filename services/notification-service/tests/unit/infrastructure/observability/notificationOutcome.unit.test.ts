@@ -1,7 +1,7 @@
 import type { Logger } from '@zipframes/logger';
 import { describe, expect, it, vi } from 'vitest';
 
-import { createNotificationObserver } from '../../../../src/infrastructure/observability/notificationObserver.js';
+import { recordNotificationOutcome } from '../../../../src/infrastructure/observability/notificationOutcome.js';
 
 const metrics = (): {
   readonly messagesHandledTotal: { readonly inc: ReturnType<typeof vi.fn> };
@@ -11,22 +11,22 @@ const metrics = (): {
   messageDurationSeconds: { observe: vi.fn() },
 });
 
-describe('createNotificationObserver', () => {
+describe('recordNotificationOutcome', () => {
   it('records handled, retry, exhausted and poison outcomes', () => {
     const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
     const technicalMetrics = metrics();
-    const observe = createNotificationObserver({
+    const record = recordNotificationOutcome({
       logger: logger as unknown as Logger,
       metrics: technicalMetrics as never,
     });
 
-    observe({ kind: 'handled', event: {}, result: null }, { attempt: 1, durationMs: 10 });
-    observe({ kind: 'retry', event: {}, error: new Error('smtp') }, { attempt: 2, durationMs: 10 });
-    observe(
+    record({ kind: 'handled', event: {}, result: null }, { attempt: 1, durationMs: 10 });
+    record({ kind: 'retry', event: {}, error: new Error('smtp') }, { attempt: 2, durationMs: 10 });
+    record(
       { kind: 'exhausted', event: {}, error: new Error('smtp') },
       { attempt: 3, durationMs: 10 },
     );
-    observe(
+    record(
       { kind: 'poison', error: { code: 'INVALID', message: 'bad' } as never },
       { attempt: 1, durationMs: 5 },
     );

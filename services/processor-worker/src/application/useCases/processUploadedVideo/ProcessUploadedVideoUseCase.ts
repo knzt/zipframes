@@ -212,6 +212,7 @@ export class ProcessUploadedVideoUseCase {
         videoId: job.videoId,
         ownerId: job.ownerId,
         originalFileName: job.originalFileName,
+        uploadedAt: job.uploadedAt,
         errorCode: failure.code,
         reason: failure.message,
         attempts: job.attempt,

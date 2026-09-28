@@ -6,7 +6,7 @@ import { UserUpdatedController } from '../../../src/interface-adapters/UserUpdat
 import { UserDeletedController } from '../../../src/interface-adapters/UserDeletedController.js';
 import { VideoProcessedController } from '../../../src/interface-adapters/VideoProcessedController.js';
 import { VideoFailedController } from '../../../src/interface-adapters/VideoFailedController.js';
-import { NotificationMessageRouter } from '../../../src/interface-adapters/NotificationMessageRouter.js';
+import { NotificationEventsConsumer } from '../../../src/infrastructure/messaging/amqplib/notificationEventsConsumer.js';
 
 const retry = { maxAttempts: 3, baseDelayMs: 10, maxDelayMs: 100 };
 
@@ -147,6 +147,7 @@ describe('video controllers', () => {
             errorCode: 'NO_FRAMES',
             reason: 'no frames extracted',
             attempts: 1,
+            uploadedAt: '2026-09-22T12:00:00.000Z',
           },
         },
         headers: {},
@@ -159,18 +160,19 @@ describe('video controllers', () => {
       ownerId: userId,
       originalFileName: 'clip.mp4',
       reason: 'no frames extracted',
+      uploadedAt: new Date('2026-09-22T12:00:00.000Z'),
     });
   });
 });
 
-describe('NotificationMessageRouter', () => {
+describe('NotificationEventsConsumer', () => {
   it('routes by eventType and dead-letters an unknown type', async () => {
     const userRegistered = { handle: vi.fn(async () => undefined) };
     const userUpdated = { handle: vi.fn(async () => undefined) };
     const userDeleted = { handle: vi.fn(async () => undefined) };
     const videoProcessed = { handle: vi.fn(async () => undefined) };
     const videoFailed = { handle: vi.fn(async () => undefined) };
-    const router = new NotificationMessageRouter({
+    const consumer = new NotificationEventsConsumer({
       userRegistered,
       userUpdated,
       userDeleted,
@@ -179,7 +181,7 @@ describe('NotificationMessageRouter', () => {
     });
     const context = contextAt(1);
 
-    await router.handle(
+    await consumer.handle(
       {
         envelope: { ...envelope, eventType: 'video.processed', payload: {} },
         headers: {},
@@ -189,7 +191,7 @@ describe('NotificationMessageRouter', () => {
     );
     expect(videoProcessed.handle).toHaveBeenCalledOnce();
 
-    await router.handle(
+    await consumer.handle(
       {
         envelope: { ...envelope, eventType: 'not.a.real.event', payload: {} },
         headers: {},

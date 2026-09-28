@@ -71,6 +71,7 @@ describe('ProcessUploadedVideoController', () => {
       ...event.payload,
       attempt: 2,
       correlationId: event.correlationId,
+      uploadedAt: event.occurredAt,
     });
     expect(context.ack).toHaveBeenCalledOnce();
   });
@@ -110,7 +111,8 @@ describe('ProcessUploadedVideoController', () => {
       payload: {
         videoId: event.payload.videoId,
         ownerId: event.payload.ownerId,
-        originalFileName: event.payload.originalFileName,
+        originalFileName: 'clip.mp4',
+        uploadedAt: event.occurredAt,
         errorCode: 'FFMPEG_FAILED',
         reason: 'busy',
         attempts: 5,

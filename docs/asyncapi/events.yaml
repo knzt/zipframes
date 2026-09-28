@@ -407,12 +407,18 @@ components:
                 originalFileName:
                   type: string
                   description: Nome do arquivo original; o worker sempre envia.
+                uploadedAt:
+                  type: string
+                  format: date-time
+                  description: >
+                    Instantâneo de `video.uploaded.occurredAt` (quando o job entrou na fila).
+                    O worker sempre envia.
                 errorCode:
                   type: string
                   example: UNSUPPORTED_FORMAT
                 reason:
                   type: string
-                  description: Motivo legível, exibido ao usuário e usado no e-mail.
+                  description: Motivo técnico interno. Não entra no e-mail.
                 attempts:
                   type: integer
                   minimum: 1

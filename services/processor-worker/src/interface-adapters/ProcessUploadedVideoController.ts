@@ -25,6 +25,7 @@ const toJob = (event: VideoUploadedEvent, attempt: number): ProcessUploadedVideo
   ...event.payload,
   attempt,
   correlationId: event.correlationId,
+  uploadedAt: event.occurredAt,
 });
 
 /**
@@ -53,6 +54,7 @@ export class ProcessUploadedVideoController {
             videoId: event.payload.videoId,
             ownerId: event.payload.ownerId,
             originalFileName: event.payload.originalFileName,
+            uploadedAt: event.occurredAt,
             errorCode: isBaseError(error) ? error.code : 'UNEXPECTED',
             reason: error instanceof Error ? error.message : 'max attempts exhausted',
             attempts: attempt,

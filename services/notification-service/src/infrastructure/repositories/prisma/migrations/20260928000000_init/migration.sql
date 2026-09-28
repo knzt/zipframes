@@ -26,6 +26,7 @@ CREATE TABLE "notifications" (
   "failure_reason"     text,
   "result_key"         varchar(512),
   "frame_count"        integer,
+  "uploaded_at"        timestamptz,
   "created_at"         timestamptz           NOT NULL DEFAULT now(),
   "sent_at"            timestamptz,
   CONSTRAINT "uq_notifications_video_tipo" UNIQUE ("video_id", "type"),

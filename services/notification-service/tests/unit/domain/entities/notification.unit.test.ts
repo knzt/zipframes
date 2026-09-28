@@ -45,8 +45,10 @@ describe('Notification', () => {
       type: 'VIDEO_FAILED',
       originalFileName: 'demo.mp4',
       failureReason: 'no frames',
+      uploadedAt: new Date('2026-09-22T12:00:00.000Z'),
       createdAt: new Date('2026-09-28T12:00:00.000Z'),
     });
+    expect(notification.uploadedAt?.toISOString()).toBe('2026-09-22T12:00:00.000Z');
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       notification = notification.recordFailedAttempt({
         id: `55555555-5555-4555-8555-55555555555${String(attempt)}`,

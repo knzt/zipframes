@@ -1,7 +1,7 @@
 import { Contact } from '../../../domain/entities/contact.js';
 import type { ContactRepository } from '../../interfaces/repositories/ContactRepository.js';
 import type { NotificationRepository } from '../../interfaces/repositories/NotificationRepository.js';
-import type { DispatchNotificationUseCase } from '../dispatchNotification/DispatchNotificationUseCase.js';
+import type { SendNotificationEmailUseCase } from '../sendNotificationEmail/SendNotificationEmailUseCase.js';
 
 export interface UpsertContactInput {
   readonly userId: string;
@@ -14,12 +14,12 @@ export class UpsertContactUseCase {
   constructor(
     private readonly contacts: ContactRepository,
     private readonly notifications: NotificationRepository,
-    private readonly dispatch: DispatchNotificationUseCase,
+    private readonly sendNotificationEmail: SendNotificationEmailUseCase,
   ) {}
 
   async execute(input: UpsertContactInput): Promise<Contact> {
     const existing = await this.contacts.findByUserId(input.userId);
-    const next =
+    const updatedContact =
       existing === null
         ? Contact.create({
             userId: input.userId,
@@ -33,14 +33,14 @@ export class UpsertContactUseCase {
             updatedAt: input.occurredAt,
           });
 
-    if (existing !== null && next === existing) {
+    if (existing !== null && updatedContact === existing) {
       return existing;
     }
 
-    const saved = await this.contacts.upsert(next);
+    const saved = await this.contacts.upsert(updatedContact);
     const pending = await this.notifications.findPendingByUserId(saved.userId);
     for (const notification of pending) {
-      await this.dispatch.execute(notification);
+      await this.sendNotificationEmail.execute(notification);
     }
     return saved;
   }

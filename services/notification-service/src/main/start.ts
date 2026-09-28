@@ -8,12 +8,12 @@ import {
   NOTIFICATION_QUEUE,
   NOTIFICATION_RETRY_QUEUE,
 } from '../infrastructure/messaging/amqplib/amqpTopology.js';
-import { createNotificationObserver } from '../infrastructure/observability/notificationObserver.js';
-import { createNotificationMessageRouter } from './factories/controllers/notificationMessageRouter.js';
+import { recordNotificationOutcome } from '../infrastructure/observability/notificationOutcome.js';
 import { createAmqplib } from './factories/externals/amqplib.js';
 import { createNodemailer } from './factories/externals/nodemailer.js';
 import { createPrisma } from './factories/externals/prisma.js';
 import { createS3 } from './factories/externals/s3.js';
+import { createNotificationEventsConsumer } from './factories/messaging/notificationEventsConsumer.js';
 
 export const startNotificationService = async (): Promise<{ stop: () => Promise<void> }> => {
   const config = loadConfig();
@@ -51,7 +51,7 @@ export const startNotificationService = async (): Promise<{ stop: () => Promise<
     });
     const mail = createNodemailer(config.smtpUrl);
 
-    const router = createNotificationMessageRouter({
+    const consumer = createNotificationEventsConsumer({
       prisma,
       mail,
       smtpFrom: config.smtpFrom,
@@ -63,11 +63,11 @@ export const startNotificationService = async (): Promise<{ stop: () => Promise<
       handlerOptions: {
         retry,
         runInContext: (event, run) => runWithCorrelationId(event.correlationId, run),
-        onOutcome: createNotificationObserver({ logger, metrics: technicalMetrics }),
+        onOutcome: recordNotificationOutcome({ logger, metrics: technicalMetrics }),
       },
     });
 
-    await amqp.consume(NOTIFICATION_QUEUE, router.handle, {
+    await amqp.consume(NOTIFICATION_QUEUE, consumer.handle, {
       retry,
       waitQueue: NOTIFICATION_RETRY_QUEUE,
     });

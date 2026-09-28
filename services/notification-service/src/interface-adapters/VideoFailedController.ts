@@ -19,11 +19,13 @@ export class VideoFailedController {
       schema: videoFailedEventSchema,
       handle: (event) => {
         const originalFileName = event.payload.originalFileName;
+        const uploadedAt = event.payload.uploadedAt;
         return notifyVideoFailed.execute({
           videoId: event.payload.videoId,
           ownerId: event.payload.ownerId,
           reason: event.payload.reason,
           ...(originalFileName === undefined ? {} : { originalFileName }),
+          ...(uploadedAt === undefined ? {} : { uploadedAt: new Date(uploadedAt) }),
         });
       },
     });

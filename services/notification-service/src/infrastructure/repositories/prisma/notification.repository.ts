@@ -21,6 +21,7 @@ const toDomain = (row: {
   readonly failureReason: string | null;
   readonly resultKey: string | null;
   readonly frameCount: number | null;
+  readonly uploadedAt: Date | null;
   readonly createdAt: Date;
   readonly sentAt: Date | null;
   readonly attempts: readonly PersistedNotification['attempts'][number][];
@@ -61,6 +62,7 @@ export class PrismaNotificationRepository implements NotificationRepository {
             failureReason: data.failureReason,
             resultKey: data.resultKey,
             frameCount: data.frameCount,
+            uploadedAt: data.uploadedAt,
             createdAt: data.createdAt,
             sentAt: data.sentAt,
             attempts: {

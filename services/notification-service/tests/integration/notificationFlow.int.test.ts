@@ -80,6 +80,9 @@ describe('notification-service message flow', () => {
     const mail = await pollMailpit(service.mailpitApiUrl, 'clip.mp4');
     expect(mail.Subject).toContain('clip.mp4');
     expect(mail.Text).toContain(`http://localhost:3001/videos/${videoId}/download`);
+    expect(mail.Text).toContain('Se ele falhar, gere um novo em:');
+    expect(mail.Text).toContain('O arquivo expira em 24 horas.');
+    expect(mail.Text).not.toContain('JWT Bearer');
 
     const signedUrl = mail.Text.split('\n').find(
       (line) => line.startsWith('http') && line.includes('X-Amz'),
@@ -105,6 +108,7 @@ describe('notification-service message flow', () => {
       errorCode: 'NO_FRAMES',
       reason: 'no frames extracted',
       attempts: 1,
+      uploadedAt: '2026-09-22T12:00:00.000Z',
     });
 
     const deadline = Date.now() + 10_000;
@@ -118,6 +122,7 @@ describe('notification-service message flow', () => {
       });
     }
     expect(pending?.status).toBe('PENDING');
+    expect(pending?.uploadedAt?.toISOString()).toBe('2026-09-22T12:00:00.000Z');
 
     await publish(channel, 'user.registered', {
       userId: pendingUserId,
@@ -126,8 +131,11 @@ describe('notification-service message flow', () => {
     });
 
     const mail = await pollMailpit(service.mailpitApiUrl, 'bad.mp4');
-    expect(mail.Text).toContain('no frames extracted');
-    expect(mail.Text).not.toContain('/videos/');
+    expect(mail.Text).toContain('bad.mp4');
+    expect(mail.Text).toContain('enviado em 22/09/2026');
+    expect(mail.Text).toContain('http://localhost:3001/videos');
+    expect(mail.Text).not.toContain('no frames extracted');
+    expect(mail.Text).not.toContain('/download');
   });
 
   it('removes the contact and history on user.deleted', async () => {

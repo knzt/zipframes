@@ -1,7 +1,7 @@
 import { UnavailableError } from '@zipframes/core';
 import { describe, expect, it } from 'vitest';
 
-import { DispatchNotificationUseCase } from '../../../../../src/application/useCases/dispatchNotification/DispatchNotificationUseCase.js';
+import { SendNotificationEmailUseCase } from '../../../../../src/application/useCases/sendNotificationEmail/SendNotificationEmailUseCase.js';
 import { Notification } from '../../../../../src/domain/entities/notification.js';
 import { Contact } from '../../../../../src/domain/entities/contact.js';
 import {
@@ -35,6 +35,7 @@ const failed = (): Notification =>
     type: 'VIDEO_FAILED',
     originalFileName: 'clip.mp4',
     failureReason: 'no frames extracted',
+    uploadedAt: new Date('2026-09-22T12:00:00.000Z'),
     createdAt: new Date('2026-09-28T12:00:00.000Z'),
   });
 
@@ -57,12 +58,12 @@ const requireNotification = async (
   return found;
 };
 
-const dispatchOf = (
+const sendOf = (
   notifications: InMemoryNotificationRepository,
   contacts: InMemoryContactRepository,
   mail: RecordingMailGateway,
-): DispatchNotificationUseCase =>
-  new DispatchNotificationUseCase(
+): SendNotificationEmailUseCase =>
+  new SendNotificationEmailUseCase(
     notifications,
     contacts,
     mail,
@@ -72,14 +73,14 @@ const dispatchOf = (
     3,
   );
 
-describe('DispatchNotificationUseCase', () => {
+describe('SendNotificationEmailUseCase', () => {
   it('leaves the notification PENDING when the contact is missing', async () => {
     const notifications = new InMemoryNotificationRepository();
     const contacts = new InMemoryContactRepository();
     const mail = new RecordingMailGateway();
     const notification = await notifications.save(processed());
 
-    const result = await dispatchOf(notifications, contacts, mail).execute(notification);
+    const result = await sendOf(notifications, contacts, mail).execute(notification);
 
     expect(result.status).toBe('PENDING');
     expect(mail.sent).toHaveLength(0);
@@ -92,13 +93,18 @@ describe('DispatchNotificationUseCase', () => {
     const mail = new RecordingMailGateway();
     const notification = await notifications.save(processed());
 
-    const result = await dispatchOf(notifications, contacts, mail).execute(notification);
+    const result = await sendOf(notifications, contacts, mail).execute(notification);
 
     expect(result.status).toBe('SENT');
     expect(result.target).toBe('ada@example.com');
     expect(mail.sent[0]?.subject).toContain('clip.mp4');
     expect(mail.sent[0]?.text).toContain('https://storage.example/clip.zip?X-Amz-Signature=test');
-    expect(mail.sent[0]?.text).toContain(`http://localhost:3001/videos/${videoId}/download`);
+    expect(mail.sent[0]?.text).toContain(
+      'http://localhost:3001/videos/11111111-1111-4111-8111-111111111111/download',
+    );
+    expect(mail.sent[0]?.text).toContain('Se ele falhar, gere um novo em:');
+    expect(mail.sent[0]?.text).toContain('O arquivo expira em 24 horas.');
+    expect(mail.sent[0]?.text).not.toContain('JWT Bearer');
   });
 
   it('sends a failure mail without a content link', async () => {
@@ -108,11 +114,14 @@ describe('DispatchNotificationUseCase', () => {
     const mail = new RecordingMailGateway();
     const notification = await notifications.save(failed());
 
-    const result = await dispatchOf(notifications, contacts, mail).execute(notification);
+    const result = await sendOf(notifications, contacts, mail).execute(notification);
 
     expect(result.status).toBe('SENT');
-    expect(mail.sent[0]?.text).toContain('no frames extracted');
-    expect(mail.sent[0]?.text).not.toContain('http://localhost:3001/videos');
+    expect(mail.sent[0]?.text).toContain('clip.mp4');
+    expect(mail.sent[0]?.text).toContain('enviado em 22/09/2026');
+    expect(mail.sent[0]?.text).toContain('http://localhost:3001/videos');
+    expect(mail.sent[0]?.text).not.toContain('no frames extracted');
+    expect(mail.sent[0]?.text).not.toContain('/download');
   });
 
   it('records SMTP failures and throws until the third attempt, then marks FAILED', async () => {
@@ -122,18 +131,22 @@ describe('DispatchNotificationUseCase', () => {
     const mail = new RecordingMailGateway();
     mail.failTimes = 3;
     let notification = await notifications.save(processed());
-    const dispatch = dispatchOf(notifications, contacts, mail);
+    const sendNotificationEmail = sendOf(notifications, contacts, mail);
 
-    await expect(dispatch.execute(notification)).rejects.toBeInstanceOf(UnavailableError);
+    await expect(sendNotificationEmail.execute(notification)).rejects.toBeInstanceOf(
+      UnavailableError,
+    );
     notification = await requireNotification(notifications);
     expect(notification.failedAttemptCount).toBe(1);
     expect(notification.status).toBe('PENDING');
 
-    await expect(dispatch.execute(notification)).rejects.toBeInstanceOf(UnavailableError);
+    await expect(sendNotificationEmail.execute(notification)).rejects.toBeInstanceOf(
+      UnavailableError,
+    );
     notification = await requireNotification(notifications);
     expect(notification.failedAttemptCount).toBe(2);
 
-    const last = await dispatch.execute(notification);
+    const last = await sendNotificationEmail.execute(notification);
     expect(last.status).toBe('FAILED');
     expect(last.failedAttemptCount).toBe(3);
     expect(mail.sent).toHaveLength(0);
@@ -147,7 +160,7 @@ describe('DispatchNotificationUseCase', () => {
     const sent = processed().markSent('ada@example.com', new Date());
     await notifications.save(sent);
 
-    await dispatchOf(notifications, contacts, mail).execute(sent);
+    await sendOf(notifications, contacts, mail).execute(sent);
     expect(mail.sent).toHaveLength(0);
   });
 
@@ -167,7 +180,7 @@ describe('DispatchNotificationUseCase', () => {
     await notifications.save(notification);
 
     await expect(
-      dispatchOf(notifications, contacts, mail).execute(notification),
+      sendOf(notifications, contacts, mail).execute(notification),
     ).rejects.toBeInstanceOf(UnavailableError);
   });
 });

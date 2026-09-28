@@ -170,8 +170,8 @@ importers:
         specifier: ^3.787.0
         version: 3.1140.0
       '@zipframes/communication':
-        specifier: 0.3.0-pr50-20260928112543
-        version: 0.3.0-pr50-20260928112543
+        specifier: 0.3.0-pr50-20260928213734
+        version: 0.3.0-pr50-20260928213734
       '@zipframes/core':
         specifier: ^0.4.0
         version: 0.4.0
@@ -179,8 +179,8 @@ importers:
         specifier: ^0.1.0
         version: 0.1.0
       '@zipframes/schemas':
-        specifier: 1.0.0-pr50-20260928112543
-        version: 1.0.0-pr50-20260928112543
+        specifier: 1.1.0-pr50-20260928213734
+        version: 1.1.0-pr50-20260928213734
       '@zipframes/telemetry':
         specifier: ^0.1.0
         version: 0.1.1
@@ -902,8 +902,8 @@ packages:
   '@vitest/utils@3.2.7':
     resolution: {integrity: sha512-x6BDOd7dyo3PFLY3I9/HJ25X/6OurhGXk2/B9gOZNPF7XDVjeBK4k01lQE5uvDpbuheErh91qYuE1E2OEjK3Rw==}
 
-  '@zipframes/communication@0.3.0-pr50-20260928112543':
-    resolution: {integrity: sha512-l+Hnf3xSZ87/wE6BUQkRj6M1nK0xZ+NZmToTVixGiy+MHMx+LFE9ahjbP1YNy2E9iXelEtTrI+nxhZQCKCWhsg==, tarball: https://npm.pkg.github.com/download/@zipframes/communication/0.3.0-pr50-20260928112543/b2cbe8af0a48fbc04b71b1983194b27c53ddaf85}
+  '@zipframes/communication@0.3.0-pr50-20260928213734':
+    resolution: {integrity: sha512-NdI3L1eNVfIc9RaScm7y1xAaobpLeUUTDIAFARliYhIlvgX/TALi4E/ym5VnMJS2WrPSfGDuRP3EHKLc66MC5w==, tarball: https://npm.pkg.github.com/download/@zipframes/communication/0.3.0-pr50-20260928213734/c61365c2502ad87a74375e8d552aad2b76fcb6f3}
 
   '@zipframes/core@0.2.0':
     resolution: {integrity: sha512-2TtQlE1Mo4JfSpMs8CTn8K7gaLCYKcGYGg+dhXIlHfsXgjofggU2/ED61LcABgZHoiGtHs60427HOYHnjNy18Q==, tarball: https://npm.pkg.github.com/download/@zipframes/core/0.2.0/821726d1e23a2bbb2305d0d5341dfc4e22e9dea7}
@@ -911,14 +911,14 @@ packages:
   '@zipframes/core@0.4.0':
     resolution: {integrity: sha512-/+FWg34op9NIiszNrzom2oaFapcVO/E2ln2vHfe//tM8XjKw3Oa8LSt+AlUMWgA920kFM3t/wXXeK/a3cFfumA==, tarball: https://npm.pkg.github.com/download/@zipframes/core/0.4.0/e4c6b8c04b36becfab65818f6fa9bc82ce8283bf}
 
-  '@zipframes/core@0.5.0-pr50-20260928112543':
-    resolution: {integrity: sha512-HvBgTeOoUiO/iNQu4v8jUl82X7dVVH6Bpp+/6/igqHEXEH2McCPv0kmGH6S9Xj4ct+Fvh2Y90gcySOrk/Bplig==, tarball: https://npm.pkg.github.com/download/@zipframes/core/0.5.0-pr50-20260928112543/8d3f85bf69a345790fd7387fcedd6051c10898f0}
+  '@zipframes/core@0.5.0':
+    resolution: {integrity: sha512-dq0sk4upjJwOvX2cyEBbF/ZsT4Oqc+eWHvBsPgrc+UO9E8og23AxvVC98U97DulZFykgnRdl0RuJUACSB40Z1g==, tarball: https://npm.pkg.github.com/download/@zipframes/core/0.5.0/254e549efeb1abdcea2748ca898d02b4c7d79b76}
 
   '@zipframes/logger@0.1.0':
     resolution: {integrity: sha512-ulj3BwoFT2zxwy9RB3thW+058JR0Sg+Vd0eJHDe9VLeanR/uIg9hek1MY8jefNrkHIN7wAdlE/Matb1n22qtCQ==, tarball: https://npm.pkg.github.com/download/@zipframes/logger/0.1.0/a8da4034cf604b47a419f954ebde2ef05b816ebd}
 
-  '@zipframes/schemas@1.0.0-pr50-20260928112543':
-    resolution: {integrity: sha512-+NzFBbEbLU6hfc1TJ/4GtToLvvJJmJtxxE5DBEC7AdX4f3m2SY3XEA/nYm+RpuoJCPZ9FNAwBuA8yxkhvvOt8g==, tarball: https://npm.pkg.github.com/download/@zipframes/schemas/1.0.0-pr50-20260928112543/e419d369567bc78e6b9135ae9329fdd02d3e8c9a}
+  '@zipframes/schemas@1.1.0-pr50-20260928213734':
+    resolution: {integrity: sha512-jiH7OXtdN3UB8uNVSdqRUFpRzH45TlctiZQTv53KNZuHf8TFfxzKAJ+LFdOHZdFbz8ijBfgrRv/3gGfCMUR02g==, tarball: https://npm.pkg.github.com/download/@zipframes/schemas/1.1.0-pr50-20260928213734/9ce7b342e08a4e70476472c91b20e8dcc8f9b6f7}
 
   '@zipframes/telemetry@0.1.1':
     resolution: {integrity: sha512-AgmBLGu0OVX/0hHHohZOSlS3lWI9Uv0+QD6xo8WzEl4yduQpoCXq1UXTEZMDqoOLNKsSMn9Y1IFrbt7R+KDCxg==, tarball: https://npm.pkg.github.com/download/@zipframes/telemetry/0.1.1/6f5587b747770486af379f79dae7ec4c15d6f863}
@@ -2504,25 +2504,25 @@ snapshots:
       loupe: 3.2.1
       tinyrainbow: 2.0.0
 
-  '@zipframes/communication@0.3.0-pr50-20260928112543':
+  '@zipframes/communication@0.3.0-pr50-20260928213734':
     dependencies:
-      '@zipframes/core': 0.5.0-pr50-20260928112543
-      '@zipframes/schemas': 1.0.0-pr50-20260928112543
+      '@zipframes/core': 0.5.0
+      '@zipframes/schemas': 1.1.0-pr50-20260928213734
       zod: 4.6.5
 
   '@zipframes/core@0.2.0': {}
 
   '@zipframes/core@0.4.0': {}
 
-  '@zipframes/core@0.5.0-pr50-20260928112543': {}
+  '@zipframes/core@0.5.0': {}
 
   '@zipframes/logger@0.1.0':
     dependencies:
       pino: 9.14.0
 
-  '@zipframes/schemas@1.0.0-pr50-20260928112543':
+  '@zipframes/schemas@1.1.0-pr50-20260928213734':
     dependencies:
-      '@zipframes/core': 0.5.0-pr50-20260928112543
+      '@zipframes/core': 0.5.0
       zod: 4.6.5
 
   '@zipframes/telemetry@0.1.1':

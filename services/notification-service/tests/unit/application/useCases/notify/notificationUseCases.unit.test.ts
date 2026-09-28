@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { NotifyVideoProcessedUseCase } from '../../../../../src/application/useCases/notifyVideoProcessed/NotifyVideoProcessedUseCase.js';
 import { NotifyVideoFailedUseCase } from '../../../../../src/application/useCases/notifyVideoFailed/NotifyVideoFailedUseCase.js';
-import { DispatchNotificationUseCase } from '../../../../../src/application/useCases/dispatchNotification/DispatchNotificationUseCase.js';
+import { SendNotificationEmailUseCase } from '../../../../../src/application/useCases/sendNotificationEmail/SendNotificationEmailUseCase.js';
 import { UpsertContactUseCase } from '../../../../../src/application/useCases/upsertContact/UpsertContactUseCase.js';
 import { DeleteContactUseCase } from '../../../../../src/application/useCases/deleteContact/DeleteContactUseCase.js';
 import { Contact } from '../../../../../src/domain/entities/contact.js';
@@ -20,12 +20,12 @@ const stack = (): {
   contacts: InMemoryContactRepository;
   notifications: InMemoryNotificationRepository;
   mail: RecordingMailGateway;
-  dispatch: DispatchNotificationUseCase;
+  sendNotificationEmail: SendNotificationEmailUseCase;
 } => {
   const contacts = new InMemoryContactRepository();
   const notifications = new InMemoryNotificationRepository();
   const mail = new RecordingMailGateway();
-  const dispatch = new DispatchNotificationUseCase(
+  const sendNotificationEmail = new SendNotificationEmailUseCase(
     notifications,
     contacts,
     mail,
@@ -34,13 +34,16 @@ const stack = (): {
     86_400,
     3,
   );
-  return { contacts, notifications, mail, dispatch };
+  return { contacts, notifications, mail, sendNotificationEmail };
 };
 
 describe('NotifyVideoProcessedUseCase', () => {
   it('skips when ownerId is missing', async () => {
-    const { notifications, dispatch } = stack();
-    const result = await new NotifyVideoProcessedUseCase(notifications, dispatch).execute({
+    const { notifications, sendNotificationEmail } = stack();
+    const result = await new NotifyVideoProcessedUseCase(
+      notifications,
+      sendNotificationEmail,
+    ).execute({
       videoId,
       resultKey: 'outputs/x/y.zip',
       frameCount: 2,
@@ -50,7 +53,7 @@ describe('NotifyVideoProcessedUseCase', () => {
   });
 
   it('creates one VIDEO_PROCESSED row per video and ignores a second delivery', async () => {
-    const { contacts, notifications, mail, dispatch } = stack();
+    const { contacts, notifications, mail, sendNotificationEmail } = stack();
     await contacts.upsert(
       Contact.create({
         userId,
@@ -59,7 +62,7 @@ describe('NotifyVideoProcessedUseCase', () => {
         updatedAt: new Date(),
       }),
     );
-    const useCase = new NotifyVideoProcessedUseCase(notifications, dispatch);
+    const useCase = new NotifyVideoProcessedUseCase(notifications, sendNotificationEmail);
     const input = {
       videoId,
       ownerId: userId,
@@ -80,7 +83,7 @@ describe('NotifyVideoProcessedUseCase', () => {
 
 describe('NotifyVideoFailedUseCase', () => {
   it('keeps uniqueness per (videoId, VIDEO_FAILED)', async () => {
-    const { contacts, notifications, dispatch } = stack();
+    const { contacts, notifications, sendNotificationEmail } = stack();
     await contacts.upsert(
       Contact.create({
         userId,
@@ -89,37 +92,41 @@ describe('NotifyVideoFailedUseCase', () => {
         updatedAt: new Date(),
       }),
     );
-    const useCase = new NotifyVideoFailedUseCase(notifications, dispatch);
+    const useCase = new NotifyVideoFailedUseCase(notifications, sendNotificationEmail);
     await useCase.execute({
       videoId,
       ownerId: userId,
       reason: 'bad media',
       originalFileName: 'a.mp4',
+      uploadedAt: new Date('2026-09-22T12:00:00.000Z'),
     });
     await useCase.execute({
       videoId,
       ownerId: userId,
       reason: 'bad media',
       originalFileName: 'a.mp4',
+      uploadedAt: new Date('2026-09-22T12:00:00.000Z'),
     });
     expect(notifications.rows.filter((row) => row.type === 'VIDEO_FAILED')).toHaveLength(1);
+    expect(notifications.rows[0]?.uploadedAt?.toISOString()).toBe('2026-09-22T12:00:00.000Z');
   });
 });
 
 describe('UpsertContactUseCase', () => {
   it('drains PENDING notifications when the contact appears', async () => {
-    const { contacts, notifications, mail, dispatch } = stack();
-    const notify = new NotifyVideoFailedUseCase(notifications, dispatch);
+    const { contacts, notifications, mail, sendNotificationEmail } = stack();
+    const notify = new NotifyVideoFailedUseCase(notifications, sendNotificationEmail);
     await notify.execute({
       videoId,
       ownerId: userId,
       originalFileName: 'demo.mp4',
       reason: 'timeout',
+      uploadedAt: new Date('2026-09-22T12:00:00.000Z'),
     });
     expect(notifications.rows[0]?.status).toBe('PENDING');
     expect(mail.sent).toHaveLength(0);
 
-    await new UpsertContactUseCase(contacts, notifications, dispatch).execute({
+    await new UpsertContactUseCase(contacts, notifications, sendNotificationEmail).execute({
       userId,
       name: 'Ada',
       email: 'ada@example.com',
@@ -128,11 +135,13 @@ describe('UpsertContactUseCase', () => {
 
     expect(notifications.rows[0]?.status).toBe('SENT');
     expect(mail.sent).toHaveLength(1);
+    expect(mail.sent[0]?.text).toContain('enviado em 22/09/2026');
+    expect(mail.sent[0]?.text).not.toContain('timeout');
   });
 
   it('discards a stale identity event', async () => {
-    const { contacts, notifications, dispatch } = stack();
-    const upsert = new UpsertContactUseCase(contacts, notifications, dispatch);
+    const { contacts, notifications, sendNotificationEmail } = stack();
+    const upsert = new UpsertContactUseCase(contacts, notifications, sendNotificationEmail);
     await upsert.execute({
       userId,
       name: 'Ada',
@@ -151,7 +160,7 @@ describe('UpsertContactUseCase', () => {
 
 describe('DeleteContactUseCase', () => {
   it('removes the contact and the notification history', async () => {
-    const { contacts, notifications, dispatch } = stack();
+    const { contacts, notifications, sendNotificationEmail } = stack();
     await contacts.upsert(
       Contact.create({
         userId,
@@ -160,7 +169,7 @@ describe('DeleteContactUseCase', () => {
         updatedAt: new Date(),
       }),
     );
-    await new NotifyVideoFailedUseCase(notifications, dispatch).execute({
+    await new NotifyVideoFailedUseCase(notifications, sendNotificationEmail).execute({
       videoId,
       ownerId: userId,
       reason: 'gone',

@@ -2,15 +2,15 @@ import { UpsertContactUseCase } from '../../../application/useCases/upsertContac
 import { createContactRepository } from '../repositories/contactRepository.js';
 import { createNotificationRepository } from '../repositories/notificationRepository.js';
 import {
-  createDispatchNotificationUseCase,
-  type DispatchNotificationExternalDeps,
-} from './dispatchNotificationUseCase.js';
+  createSendNotificationEmailUseCase,
+  type SendNotificationEmailExternalDeps,
+} from './sendNotificationEmailUseCase.js';
 
 export const createUpsertContactUseCase = (
-  externalDeps: DispatchNotificationExternalDeps,
+  externalDeps: SendNotificationEmailExternalDeps,
 ): UpsertContactUseCase =>
   new UpsertContactUseCase(
     createContactRepository(externalDeps.prisma),
     createNotificationRepository(externalDeps.prisma),
-    createDispatchNotificationUseCase(externalDeps),
+    createSendNotificationEmailUseCase(externalDeps),
   );

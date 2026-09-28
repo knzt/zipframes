@@ -31,19 +31,19 @@ describe('Contact', () => {
       updatedAt: new Date('2026-09-28T12:00:00.000Z'),
     });
 
-    const next = contact.applyUpdate({
+    const updatedContact = contact.applyUpdate({
       name: 'Ada Lovelace',
       email: 'ada@new.example',
       updatedAt: new Date('2026-09-28T13:00:00.000Z'),
     });
 
-    expect(next.email).toBe('ada@new.example');
-    expect(next.name).toBe('Ada Lovelace');
-    expect(next.toJSON().userId).toBe(userId);
+    expect(updatedContact.email).toBe('ada@new.example');
+    expect(updatedContact.name).toBe('Ada Lovelace');
+    expect(updatedContact.toJSON().userId).toBe(userId);
 
-    const restored = Contact.fromPersistence(next.toJSON());
+    const restored = Contact.fromPersistence(updatedContact.toJSON());
     expect(restored.userId).toBe(userId);
     expect(restored.updatedAt.toISOString()).toBe('2026-09-28T13:00:00.000Z');
-    expect(restored.toJSON()).toEqual(next.toJSON());
+    expect(restored.toJSON()).toEqual(updatedContact.toJSON());
   });
 });
