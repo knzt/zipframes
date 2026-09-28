@@ -34,6 +34,10 @@ export const connectAmqp = async (url: string): Promise<AmqpConnection> => {
     channel,
     isConnected: () => open,
     close: async () => {
+      // After the broker dropped us there is nothing left to close.
+      if (!open) {
+        return;
+      }
       await channel.close();
       await connection.close();
     },

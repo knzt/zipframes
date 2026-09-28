@@ -1,8 +1,12 @@
-import { jwtVerify } from 'jose';
+import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { startIdentityApp } from '../support/identity-app.js';
-import type { IdentityApp } from '../support/identity-app.js';
+import {
+  AUDIENCE,
+  ISSUER,
+  startAuthServiceUnderTest,
+  type AuthServiceUnderTest,
+} from '../support/auth-service.js';
 
 const payload = {
   name: 'Ada Lovelace',
@@ -10,30 +14,32 @@ const payload = {
   password: 'senha1234',
 };
 
+const post = (service: AuthServiceUnderTest, pathname: string, body: unknown): Promise<Response> =>
+  fetch(`${service.url}${pathname}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
 describe('POST /login against Postgres', () => {
-  let app: IdentityApp;
+  let service: AuthServiceUnderTest;
 
   beforeAll(async () => {
-    app = await startIdentityApp();
+    service = await startAuthServiceUnderTest();
   }, 180_000);
 
   afterAll(async () => {
-    await app.stop();
+    await service.stop();
   });
 
-  it('returns a bearer token for the user created by register', async () => {
-    const created = await fetch(`${app.baseUrl}/register`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
+  it('returns a token that the published JWKS verifies, for the user created by register', async () => {
+    const created = await post(service, '/register', payload);
     expect(created.status).toBe(201);
     const registered = (await created.json()) as { userId: string };
 
-    const loggedIn = await fetch(`${app.baseUrl}/login`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email: payload.email, password: payload.password }),
+    const loggedIn = await post(service, '/login', {
+      email: payload.email,
+      password: payload.password,
     });
     expect(loggedIn.status).toBe(200);
     const session = (await loggedIn.json()) as {
@@ -44,63 +50,56 @@ describe('POST /login against Postgres', () => {
     expect(session.tokenType).toBe('Bearer');
     expect(session.expiresIn).toBeGreaterThan(0);
 
-    const verified = await jwtVerify(session.accessToken, app.publicJwk, {
-      issuer: 'https://auth.zipframes.test',
-      audience: 'zipframes',
+    // The same path the other services take: fetch the keys, then verify.
+    const jwks = createRemoteJWKSet(new URL(`${service.url}/.well-known/jwks.json`));
+    const verified = await jwtVerify(session.accessToken, jwks, {
+      issuer: ISSUER,
+      audience: AUDIENCE,
     });
     expect(verified.payload.sub).toBe(registered.userId);
+  });
 
-    const live = await fetch(`${app.baseUrl}/health/live`);
-    expect(live.status).toBe(200);
-    expect(await live.json()).toEqual({ status: 'ok' });
-
-    const ready = await fetch(`${app.baseUrl}/health/ready`);
-    expect(ready.status).toBe(200);
-    expect(await ready.json()).toEqual({ status: 'ready' });
-
-    const metrics = await fetch(`${app.baseUrl}/metrics`);
-    expect(metrics.status).toBe(200);
-    expect(metrics.headers.get('content-type')).toMatch(/text\/plain/);
-
-    const rejected = await fetch(`${app.baseUrl}/login`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email: payload.email, password: 'senha9999' }),
+  it('answers 401 for a wrong password', async () => {
+    const rejected = await post(service, '/login', {
+      email: payload.email,
+      password: 'senha9999',
     });
+
     expect(rejected.status).toBe(401);
+  });
+
+  it('exposes liveness, readiness and metrics', async () => {
+    const live = await fetch(`${service.url}/health/live`);
+    const ready = await fetch(`${service.url}/health/ready`);
+    const metrics = await fetch(`${service.url}/metrics`);
+
+    expect(await live.json()).toEqual({ status: 'ok' });
+    expect(await ready.json()).toEqual({ status: 'ready' });
+    expect(metrics.headers.get('content-type')).toMatch(/text\/plain/u);
   });
 });
 
-describe('POST /register when event publish fails', () => {
-  it('returns 201 and invokes onPublishFailed', async () => {
-    let publishedError: unknown;
-    let publishedDetails: { readonly userId: string; readonly correlationId: string } | undefined;
-    const app = await startIdentityApp({
-      onPublishFailed: (error, details) => {
-        publishedError = error;
-        publishedDetails = details;
-      },
-    });
+describe('POST /register when the broker is down', () => {
+  let service: AuthServiceUnderTest;
 
-    try {
-      await app.closeAmqp();
-      const created = await fetch(`${app.baseUrl}/register`, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'x-correlation-id': '44444444-4444-4444-8444-444444444444',
-        },
-        body: JSON.stringify(payload),
-      });
-      expect(created.status).toBe(201);
-      const body = (await created.json()) as { userId: string };
-      expect(publishedError).toBeInstanceOf(Error);
-      expect(publishedDetails).toEqual({
-        userId: body.userId,
-        correlationId: '44444444-4444-4444-8444-444444444444',
-      });
-    } finally {
-      await app.stop();
-    }
+  beforeAll(async () => {
+    service = await startAuthServiceUnderTest();
   }, 180_000);
+
+  afterAll(async () => {
+    await service.stop();
+  });
+
+  it('still registers the user and reports itself not ready', async () => {
+    await service.stopBroker();
+
+    const created = await post(service, '/register', payload);
+
+    expect(created.status).toBe(201);
+    const { userId } = (await created.json()) as { userId: string };
+    expect((await service.prisma.user.findUnique({ where: { id: userId } }))?.email).toBe(
+      payload.email,
+    );
+    expect((await fetch(`${service.url}/health/ready`)).status).toBe(503);
+  });
 });

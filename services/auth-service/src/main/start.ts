@@ -14,7 +14,13 @@ import { createPrisma, createPrismaPing } from './factories/externals/prisma.js'
 import { createTokenIssuer } from './factories/services/tokenIssuer.js';
 import { identityRoutes } from '../infrastructure/http/routes/identityRoutes.js';
 
-export const startAuthService = async (): Promise<{ stop: () => Promise<void> }> => {
+export interface RunningAuthService {
+  /** Where the HTTP server listens; with `PORT=0` it carries the port the system picked. */
+  readonly url: string;
+  readonly stop: () => Promise<void>;
+}
+
+export const startAuthService = async (): Promise<RunningAuthService> => {
   const config = loadConfig();
   const logger = createLogger({
     service: 'auth-service',
@@ -59,11 +65,11 @@ export const startAuthService = async (): Promise<{ stop: () => Promise<void> }>
     });
     closers.push(() => app.close());
 
-    await app.listen({ port: config.port, host: '0.0.0.0' });
-
-    logger.info('auth-service listening', { port: config.port });
+    const url = await app.listen({ port: config.port, host: '0.0.0.0' });
+    logger.info('auth-service listening', { url });
 
     return {
+      url,
       stop: async () => {
         await app.close();
         await amqp.close();

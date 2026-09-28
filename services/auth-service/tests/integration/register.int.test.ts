@@ -1,13 +1,9 @@
 import { authService } from '@zipframes/schemas';
-import { startRabbitMq } from '@zipframes/test-toolkit';
-import type { RabbitMqHandle } from '@zipframes/test-toolkit';
 import amqp, { type Channel, type GetMessage } from 'amqplib';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { EVENT_EXCHANGE } from '../../src/infrastructure/messaging/amqplib/amqpTopology.js';
-import { createAmqplib, type Amqplib } from '../../src/main/factories/externals/amqplib.js';
-import { startIdentityApp } from '../support/identity-app.js';
-import type { IdentityApp } from '../support/identity-app.js';
+import { startAuthServiceUnderTest, type AuthServiceUnderTest } from '../support/auth-service.js';
 
 const payload = {
   name: 'Ada Lovelace',
@@ -30,37 +26,29 @@ const pollQueue = async (channel: Channel, queue: string): Promise<GetMessage> =
 };
 
 describe('POST /register against Postgres and RabbitMQ', () => {
-  let app: IdentityApp;
-  let rabbit: RabbitMqHandle;
-  let publisherAmqp: Amqplib;
+  let service: AuthServiceUnderTest;
   let probe: Awaited<ReturnType<typeof amqp.connect>>;
   let channel: Channel;
   let outcomesQueue: string;
 
   beforeAll(async () => {
-    rabbit = await startRabbitMq();
-    publisherAmqp = await createAmqplib(rabbit.amqpUri);
-
-    probe = await amqp.connect(rabbit.amqpUri);
+    service = await startAuthServiceUnderTest();
+    probe = await amqp.connect(service.amqpUri);
     channel = await probe.createChannel();
     await channel.assertExchange(EVENT_EXCHANGE, 'topic', { durable: true });
     const outcomes = await channel.assertQueue('', { exclusive: true });
     outcomesQueue = outcomes.queue;
     await channel.bindQueue(outcomesQueue, EVENT_EXCHANGE, 'user.registered');
-
-    app = await startIdentityApp({ amqp: publisherAmqp });
   }, 180_000);
 
   afterAll(async () => {
-    await app.stop();
-    await publisherAmqp.close();
     await channel.close();
     await probe.close();
-    await rabbit.stop();
+    await service.stop();
   });
 
   it('persists the user and publishes user.registered on the broker', async () => {
-    const created = await fetch(`${app.baseUrl}/register`, {
+    const created = await fetch(`${service.url}/register`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
@@ -73,10 +61,10 @@ describe('POST /register against Postgres and RabbitMQ', () => {
     const body = (await created.json()) as { userId: string; email: string; name: string };
     expect(body).toMatchObject({ name: payload.name, email: payload.email });
 
-    const user = await app.prisma.user.findUnique({ where: { email: payload.email } });
+    const user = await service.prisma.user.findUnique({ where: { email: payload.email } });
     expect(user?.id).toBe(body.userId);
 
-    const tables = await app.prisma.$queryRaw<{ tablename: string }[]>`
+    const tables = await service.prisma.$queryRaw<{ tablename: string }[]>`
       SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'public'
     `;
     expect(tables.map((row) => row.tablename)).toContain('users');
@@ -100,12 +88,12 @@ describe('POST /register against Postgres and RabbitMQ', () => {
       },
     });
 
-    const duplicate = await fetch(`${app.baseUrl}/register`, {
+    const duplicate = await fetch(`${service.url}/register`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(payload),
     });
     expect(duplicate.status).toBe(409);
-    expect(await app.prisma.user.count()).toBe(1);
+    expect(await service.prisma.user.count()).toBe(1);
   });
 });
