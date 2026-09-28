@@ -26,7 +26,7 @@ Não existe tabela de deduplicação de eventos. A entrega é "pelo menos uma ve
 | -------------------------------------- | ------------------------------------------------------------------------------------------ |
 | Atualização de status no video-service | A máquina de estados do agregado: um evento já aplicado não produz transição válida        |
 | Projeção de contatos                   | `INSERT ... ON CONFLICT (user_id) DO UPDATE`, com `updated_at` descartando eventos antigos |
-| Notificação de falha                   | A restrição única `(video_id, type)`                                                       |
+| Notificação de resultado e de falha    | A restrição única `(video_id, type)`                                                       |
 
 A decisão é deliberada: uma tabela genérica de eventos processados seria uma segunda trava para portas que o domínio já fecha. Se algum consumidor futuro tiver um efeito sem chave natural, a tabela volta para aquele serviço.
 
@@ -196,6 +196,10 @@ erDiagram
     notification_channel channel
     notification_status status
     varchar target
+    varchar original_file_name
+    text failure_reason
+    varchar result_key
+    integer frame_count
     timestamptz created_at
     timestamptz sent_at
   }
@@ -226,17 +230,21 @@ A projeção é gravada com `INSERT ... ON CONFLICT (user_id) DO UPDATE`, o que 
 
 ### `notifications`
 
-| Coluna       | Tipo                   | Restrições                  | Observação                                                                   |
-| ------------ | ---------------------- | --------------------------- | ---------------------------------------------------------------------------- |
-| `id`         | `uuid`                 | PK                          |                                                                              |
-| `user_id`    | `uuid`                 | not null                    |                                                                              |
-| `video_id`   | `uuid`                 | not null                    |                                                                              |
-| `type`       | `notification_type`    | not null                    | `VIDEO_FAILED`                                                               |
-| `channel`    | `notification_channel` | not null, default `EMAIL`   | Abre espaço para outros canais                                               |
-| `status`     | `notification_status`  | not null, default `PENDING` | `PENDING`, `SENT` ou `FAILED`                                                |
-| `target`     | `varchar(255)`         |                             | Endereço usado no envio, copiado do contato no momento em que a mensagem sai |
-| `created_at` | `timestamptz`          | not null, default `now()`   |                                                                              |
-| `sent_at`    | `timestamptz`          |                             | Preenchido no envio                                                          |
+| Coluna               | Tipo                   | Restrições                  | Observação                                                                   |
+| -------------------- | ---------------------- | --------------------------- | ---------------------------------------------------------------------------- |
+| `id`                 | `uuid`                 | PK                          |                                                                              |
+| `user_id`            | `uuid`                 | not null                    |                                                                              |
+| `video_id`           | `uuid`                 | not null                    |                                                                              |
+| `type`               | `notification_type`    | not null                    | `VIDEO_PROCESSED` ou `VIDEO_FAILED`                                          |
+| `channel`            | `notification_channel` | not null, default `EMAIL`   | Abre espaço para outros canais                                               |
+| `status`             | `notification_status`  | not null, default `PENDING` | `PENDING`, `SENT` ou `FAILED`                                                |
+| `target`             | `varchar(255)`         |                             | Endereço usado no envio, copiado do contato no momento em que a mensagem sai |
+| `original_file_name` | `varchar(255)`         | not null                    | Nome do arquivo original                                                     |
+| `failure_reason`     | `text`                 |                             | Motivo em `VIDEO_FAILED` (CHECK obriga quando o tipo é falha)                |
+| `result_key`         | `varchar(512)`         |                             | Chave do zip em `VIDEO_PROCESSED`                                            |
+| `frame_count`        | `integer`              |                             | Quantidade de frames em `VIDEO_PROCESSED`                                    |
+| `created_at`         | `timestamptz`          | not null, default `now()`   |                                                                              |
+| `sent_at`            | `timestamptz`          |                             | Preenchido no envio                                                          |
 
 O `target` guarda um fato histórico: para onde a mensagem foi de verdade. `contacts.email` guarda o estado atual. Se o usuário trocar de e-mail depois, o histórico continua mostrando o endereço usado na época, e é por isso que os dois campos coexistem.
 
@@ -273,7 +281,7 @@ O limite fica na configuração do serviço, não em uma restrição do banco.
 ### DDL
 
 ```sql
-CREATE TYPE notification_type    AS ENUM ('VIDEO_FAILED');
+CREATE TYPE notification_type    AS ENUM ('VIDEO_PROCESSED', 'VIDEO_FAILED');
 CREATE TYPE notification_channel AS ENUM ('EMAIL');
 CREATE TYPE notification_status  AS ENUM ('PENDING', 'SENT', 'FAILED');
 
@@ -285,17 +293,22 @@ CREATE TABLE contacts (
 );
 
 CREATE TABLE notifications (
-  id         uuid                 PRIMARY KEY,
-  user_id    uuid                 NOT NULL,
-  video_id   uuid                 NOT NULL,
-  type       notification_type    NOT NULL,
-  channel    notification_channel NOT NULL DEFAULT 'EMAIL',
-  status     notification_status  NOT NULL DEFAULT 'PENDING',
-  target     varchar(255),
-  created_at timestamptz          NOT NULL DEFAULT now(),
-  sent_at    timestamptz,
+  id                 uuid                 PRIMARY KEY,
+  user_id            uuid                 NOT NULL,
+  video_id           uuid                 NOT NULL,
+  type               notification_type    NOT NULL,
+  channel            notification_channel NOT NULL DEFAULT 'EMAIL',
+  status             notification_status  NOT NULL DEFAULT 'PENDING',
+  target             varchar(255),
+  original_file_name varchar(255)         NOT NULL,
+  failure_reason     text,
+  result_key         varchar(512),
+  frame_count        integer,
+  created_at         timestamptz          NOT NULL DEFAULT now(),
+  sent_at            timestamptz,
   CONSTRAINT uq_notifications_video_tipo UNIQUE (video_id, type),
-  CONSTRAINT ck_notifications_sent CHECK (status <> 'SENT' OR (sent_at IS NOT NULL AND target IS NOT NULL))
+  CONSTRAINT ck_notifications_sent CHECK (status <> 'SENT' OR (sent_at IS NOT NULL AND target IS NOT NULL)),
+  CONSTRAINT ck_notifications_failed_reason CHECK (type <> 'VIDEO_FAILED' OR failure_reason IS NOT NULL)
 );
 
 -- Guarda apenas as tentativas que falharam.
@@ -312,6 +325,8 @@ CREATE TABLE notification_attempts (
 CREATE INDEX idx_notifications_pendentes ON notifications (created_at) WHERE status = 'PENDING';
 CREATE INDEX idx_notifications_user ON notifications (user_id, created_at DESC);
 ```
+
+O schema está em `services/notification-service/src/infrastructure/repositories/prisma/` (`schema.prisma` e a migration `20260928000000_init`, que acrescenta à mão o índice parcial e as `CHECK`).
 
 ## Retenção e eliminação
 

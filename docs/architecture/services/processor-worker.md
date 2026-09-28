@@ -139,4 +139,4 @@ Cobertura mínima no `src/` executável: 80%.
 - Banco de dados e migrations
 - HTTP de negócio / JWT / JWKS / health HTTP
 - Decisão de status do vídeo no agregado `Video` (video-service)
-- Envio de e-mail (notification-service consome `video.failed`)
+- Envio de e-mail (notification-service consome `video.processed` e `video.failed`)

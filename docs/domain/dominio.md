@@ -2,7 +2,7 @@
 
 ## Visão geral
 
-Um usuário cadastrado envia um vídeo e recebe, de forma assíncrona, um arquivo zip com um frame por segundo do vídeo. Ele acompanha o andamento de cada envio e é avisado por e-mail quando algo dá errado.
+Um usuário cadastrado envia um vídeo e recebe, de forma assíncrona, um arquivo zip com um frame por segundo do vídeo. Ele acompanha o andamento de cada envio e é avisado por e-mail quando o zip fica pronto ou quando o processamento falha.
 
 ## Linguagem ubíqua
 
@@ -22,7 +22,7 @@ Os termos abaixo são usados igualmente no código, nos eventos, na API e nesta 
 | Falha de processamento | Término do processamento sem gerar o pacote                                          | `video.failed`                |
 | Falha transitória      | Erro que pode desaparecer em nova tentativa, como storage indisponível               | `TransientProcessingError`    |
 | Falha permanente       | Erro que se repetiria em qualquer tentativa, como arquivo inválido                   | `PermanentProcessingError`    |
-| Notificação            | Mensagem enviada ao usuário sobre uma falha                                          | `Notification`                |
+| Notificação            | Mensagem enviada ao usuário sobre o resultado ou a falha                             | `Notification`                |
 | Expiração              | Fim do prazo em que o pacote fica disponível, seguido do apagamento do arquivo       | `VideoStatus.EXPIRED`         |
 | Eliminação             | Apagamento definitivo de um arquivo do storage, por expiração ou a pedido do titular | `purge`                       |
 
@@ -206,15 +206,15 @@ Todos os eventos são publicados no exchange `zipframes.events` com o mesmo enve
 }
 ```
 
-| Evento                     | Publicado por    | Consumido por                       | Payload                                                            |
-| -------------------------- | ---------------- | ----------------------------------- | ------------------------------------------------------------------ |
-| `user.registered`          | auth-service     | notification-service                | `userId`, `name`, `email`                                          |
-| `video.uploaded`           | video-service    | processor-worker                    | `videoId`, `ownerId`, `sourceKey`, `originalFileName`, `sizeBytes` |
-| `video.processing.started` | processor-worker | video-service                       | `videoId`, `attempt`                                               |
-| `video.processed`          | processor-worker | video-service                       | `videoId`, `resultKey`, `frameCount`, `durationMs`                 |
-| `video.failed`             | processor-worker | video-service, notification-service | `videoId`, `ownerId`, `errorCode`, `reason`, `attempts`            |
-| `user.updated`             | auth-service     | notification-service                | `userId`, `name`, `email`                                          |
-| `user.deleted`             | auth-service     | video-service, notification-service | `userId`                                                           |
+| Evento                     | Publicado por    | Consumido por                       | Payload                                                                           |
+| -------------------------- | ---------------- | ----------------------------------- | --------------------------------------------------------------------------------- |
+| `user.registered`          | auth-service     | notification-service                | `userId`, `name`, `email`                                                         |
+| `video.uploaded`           | video-service    | processor-worker                    | `videoId`, `ownerId`, `sourceKey`, `originalFileName`, `sizeBytes`                |
+| `video.processing.started` | processor-worker | video-service                       | `videoId`, `attempt`                                                              |
+| `video.processed`          | processor-worker | video-service, notification-service | `videoId`, `resultKey`, `frameCount`, `durationMs`, `ownerId`, `originalFileName` |
+| `video.failed`             | processor-worker | video-service, notification-service | `videoId`, `ownerId`, `errorCode`, `reason`, `attempts`, `originalFileName`       |
+| `user.updated`             | auth-service     | notification-service                | `userId`, `name`, `email`                                                         |
+| `user.deleted`             | auth-service     | video-service, notification-service | `userId`                                                                          |
 
 Regras dos contratos:
 
@@ -235,7 +235,7 @@ Um vídeo pode conter rosto, voz e outros dados pessoais de quem aparece nele, e
 | Pacote de frames (zip)               | Object storage    | 24 horas após a conclusão            | É o resultado entregue. A janela cobre quem não baixa na hora, sem virar um arquivo permanente        |
 | Frames soltos e arquivos temporários | Disco do worker   | Durante a tentativa                  | Removidos ao fim do trabalho, com sucesso ou falha                                                    |
 | Metadados do vídeo                   | `video-db`        | Enquanto a conta existir             | Sustentam a listagem e o histórico sem guardar conteúdo pessoal                                       |
-| Contato                              | `notification-db` | Enquanto a conta existir             | Necessário para notificar falhas                                                                      |
+| Contato                              | `notification-db` | Enquanto a conta existir             | Necessário para notificar resultado e falha                                                           |
 | Histórico de notificações            | `notification-db` | Enquanto a conta existir             | Comprova o aviso enviado ao usuário                                                                   |
 
 O prazo de 24 horas é configurável, e o mesmo valor alimenta o `expiresAt` do agregado e a rotina de expiração.
