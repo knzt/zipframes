@@ -64,7 +64,7 @@ channels:
   videoUploaded:
     address: video.uploaded
     description: |
-      Publicado quando o upload é confirmado e o vídeo entra na fila.
+      Publicado quando o arquivo já está no storage e o vídeo foi gravado como QUEUED.
       Único evento de integração gerado a partir de `VideoQueued`.
     servers: [{ $ref: '#/servers/rabbitmq' }]
     messages:
@@ -132,7 +132,7 @@ operations:
   publishVideoUploaded:
     action: send
     channel: { $ref: '#/channels/videoUploaded' }
-    summary: video-service publica ao confirmar o upload
+    summary: video-service publica ao receber o vídeo
   subscribeVideoUploaded:
     action: receive
     channel: { $ref: '#/channels/videoUploaded' }
@@ -191,7 +191,7 @@ components:
 
     videoUploaded:
       name: video.uploaded
-      title: Upload confirmado
+      title: Vídeo recebido
       payload:
         $ref: '#/components/schemas/VideoUploadedEnvelope'
 

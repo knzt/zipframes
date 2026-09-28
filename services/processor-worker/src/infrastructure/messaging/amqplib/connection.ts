@@ -85,10 +85,11 @@ export const createRabbitMqConnection = async (
       }
       for (const queue of topology.queues) {
         const args: Record<string, string> = {};
-        if (queue.deadLetterExchange) {
+        // `''` is a real target (the default exchange), so test for presence.
+        if (queue.deadLetterExchange !== undefined) {
           args['x-dead-letter-exchange'] = queue.deadLetterExchange;
         }
-        if (queue.deadLetterRoutingKey) {
+        if (queue.deadLetterRoutingKey !== undefined) {
           args['x-dead-letter-routing-key'] = queue.deadLetterRoutingKey;
         }
         await channel.assertQueue(queue.name, {

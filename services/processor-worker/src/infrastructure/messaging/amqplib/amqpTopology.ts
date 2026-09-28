@@ -3,10 +3,13 @@
  *
  * This is the list of exchanges, queues, and bindings this process
  * asserts at boot so consume/publish do not race an undeclared broker
- * object. The wait queue uses TTL + DLX to return expired retries to
- * `video.uploaded`. The main queue dead-letters to the shared DLQ.
- * Assertion itself lives on the connection (`assertTopology`); this
- * file only declares what to assert. It is not a layer.
+ * object. The retry queue uses TTL + DLX to return an expired retry
+ * straight to the main queue through the default exchange: sending it
+ * back through `zipframes.events` would hand every retry to any other
+ * subscriber of `video.uploaded` too. The main queue dead-letters to the
+ * shared DLQ. Assertion itself lives on the connection
+ * (`assertTopology`); this file only declares what to assert. It is not
+ * a layer.
  */
 import type { Topology } from '@zipframes/communication';
 import { EVENT_EXCHANGE } from '@zipframes/schemas/shared';
@@ -14,9 +17,16 @@ import { EVENT_EXCHANGE } from '@zipframes/schemas/shared';
 export { EVENT_EXCHANGE };
 
 export const UPLOADED_QUEUE = 'processor.video.uploaded';
-export const UPLOADED_RETRY_QUEUE = 'processor.video.uploaded.wait';
+/**
+ * Replaces `processor.video.uploaded.wait`, which dead-lettered into the
+ * events exchange. A new name, because a broker refuses to redeclare an
+ * existing queue with different arguments.
+ */
+export const UPLOADED_RETRY_QUEUE = 'processor.video.uploaded.retry';
 export const DLX_EXCHANGE = 'zipframes.events.dlx';
 export const DLQ_QUEUE = 'zipframes.events.dlq';
+/** The broker's nameless direct exchange, which routes by queue name. */
+export const DEFAULT_EXCHANGE = '';
 
 export const createProcessorAmqpTopology = (): Topology => ({
   exchanges: [
@@ -37,9 +47,8 @@ export const createProcessorAmqpTopology = (): Topology => ({
     {
       name: UPLOADED_RETRY_QUEUE,
       durable: true,
-      // Expired messages are republished to the events exchange as video.uploaded.
-      deadLetterExchange: EVENT_EXCHANGE,
-      deadLetterRoutingKey: 'video.uploaded',
+      deadLetterExchange: DEFAULT_EXCHANGE,
+      deadLetterRoutingKey: UPLOADED_QUEUE,
     },
   ],
   bindings: [

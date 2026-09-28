@@ -21,7 +21,9 @@ No `auth-service`, `index.ts` trata sinal e chama `startAuthService()`. `start.t
 
 No `processor-worker` não há HTTP. O controller em `interface-adapters/` é a borda da mensagem, como no auth é a borda HTTP: assim como o `LoginController` usa `defineHandler` de `@zipframes/http`, o `ProcessUploadedVideoController` usa `defineMessageHandler` de `@zipframes/communication`. O pacote valida o envelope contra `videoUploadedEventSchema`, faz ack, retry ou dead-letter e manda o poison para a DLQ; o controller só mapeia o evento para o caso de uso e, em `onExhausted`, publica `video.failed`. `start.ts` injeta o que é de transporte em `handlerOptions`: `retry`, `runInContext` (`runWithCorrelationId`) e `onOutcome`, o observador de log e métricas em `infrastructure/observability/videoProcessingObserver.ts`. Depois abre AMQP e S3, chama `createEventPublisherGateway(amqp)` uma vez, passa esse gateway a `createProcessUploadedVideoController({ s3, eventPublisher, bucket, workDir, processingTimeoutMs, handlerOptions, onDiscardOriginalFailed })` e dá `amqp.consume(queue, controller.handle)`. A factory do controller chama a do caso de uso, que instancia storage, ffmpeg, zip e diretório de trabalho — o publisher já veio montado. O caso de uso chama `ObjectStorage`, `FrameExtractor`, `EventPublisher`, `ArchiveBuilder` e `WorkDirectory`. O cliente S3 nasce em `main/factories/externals/s3.ts` (`new S3Client`, `export type S3 = ReturnType<typeof createS3>`); o port é `new S3ObjectStorageGateway(s3, bucket)` em `gateways/objectStorageGateway.ts`, tipado com `S3`, não com `S3Client`. Probes de Compose e Kubernetes são exec (`kill -0 1`), não HTTP na 8081.
 
-O `index.ts` dos dois serviços trata sinal com um guard `stopping` para o shutdown não fechar o canal duas vezes. `runService()` em `@zipframes/core` é candidato a extrair esse laço quando aparecer o terceiro serviço.
+No `video-service` há as duas bordas. Seis controllers HTTP usam `defineAuthenticatedHandler` de `@zipframes/http`, que valida o token contra o JWKS do auth-service (`@zipframes/authenticator`) antes da entrada; o `ownerId` que chega ao caso de uso é o `sub` do token. `ApplyProcessingEventController` usa `defineMessageHandler` com a união dos três eventos do worker. `start.ts` abre Prisma, AMQP, Redis e dois clientes S3 (o interno e o que assina URLs com o endpoint público), monta um objeto `externals` com esses clientes, o `EventPublisher`, o `VideoListCache` e o `Authenticator`, e passa esse mesmo objeto a cada factory de controller; cada factory declara só o que usa. A varredura de expiração é um caso de uso chamado por `startIntervalJob` (`infrastructure/scheduling/`), sem controller. O caso de uso chama `VideoRepository`, `EventPublisher`, `ObjectStorage`, `DownloadUrlSigner` e `VideoListCache`.
+
+O `index.ts` dos três serviços trata sinal com um guard `stopping` para o shutdown não fechar o canal duas vezes. Com o terceiro serviço, o laço está repetido três vezes: `runService()` em `@zipframes/core` é o próximo candidato a extração. O mesmo vale para `connection.ts` do amqplib, parecido no worker e no video-service.
 
 Injeção é pura: cada factory exporta uma função que faz `new` e devolve o objeto. Sem `let` no módulo. `start.ts` abre as conexões uma vez e passa esses clientes às factories de controller, para não abrir Prisma/AMQP/S3 duas vezes. A factory do controller chama a factory do caso de uso; essa chama as factories de repositório, gateway e serviço. Teste chama de novo com fakes.
 
@@ -102,6 +104,7 @@ Tudo o que pertence ao Fastify fica em `src/infrastructure/http/fastify/` (`serv
 
 - **auth-service** usa `Result<T, E>` (`@zipframes/core`) nas interfaces e nos casos de uso; o controller lê `error.statusCode` para problem+json (400, 409, 401). Login com body inválido continua 401 sem `detail`, mesmo quando o parse seria `ValidationError` 400. Falha inesperada que escapa vira `InternalServerError` → 500 sem `detail`. `User.create` devolve `Result<User, ValidationError>`; o construtor fica privado ao módulo.
 - **processor-worker** lança erros do `@zipframes/core` com `retryable` (`UnavailableError`, `TimeoutError`, `InternalServerError`, …). Qualquer erro lançado pelo caso de uso falha a tentativa; `defineMessageHandler` usa `decideRetry` para escolher entre nova tentativa e dead-letter. `isRetryableError` classifica a falha só para log.
+- **video-service** usa os dois, um por caso de uso: os cinco casos de uso HTTP devolvem `Result` (404, 409, 410, 400 vêm do `statusCode` do erro); `ApplyProcessingEvent` e `ExpireFramesPackages` lançam, como no worker. Um erro de infraestrutura lançado dentro de um caso de uso HTTP (broker fora no upload → `UnavailableError`, conflito de versão → `ConflictError`) vira a resposta com o `statusCode` dele.
 
 Conflito de e-mail no cadastro: `findByEmail` + `ConflictError` no caso de uso; o repositório só insere (`create`) e relança erros do Prisma — corrida ou unique inesperado vira 500, não `ConflictError` na infra. Health/readiness e métricas do auth não expõem `error.message` — log interno e `reason` estável na resposta HTTP.
 
@@ -109,11 +112,11 @@ Não misturar os dois estilos dentro do mesmo caso de uso.
 
 ### Health e readiness
 
-O contrato HTTP de saúde vale para processos que escutam HTTP. Hoje isso é o `auth-service`. Rotas, corpo da resposta, probes e a documentação gerada estão em [http.md](./http.md).
+O contrato HTTP de saúde vale para processos que escutam HTTP. Hoje são o `auth-service` e o `video-service`. Rotas, corpo da resposta, probes e a documentação gerada estão em [http.md](./http.md).
 
 O `processor-worker` não escuta HTTP. Liveness e readiness no Compose e no Kubernetes são probes exec.
 
-Checagens do auth usam `Pingable` + `createReadinessCheck` de `@zipframes/core` (ISP: `ping` não entra nas interfaces de negócio).
+Checagens do auth e do video-service usam `Pingable` + `createReadinessCheck` de `@zipframes/core` (ISP: `ping` não entra nas interfaces de negócio).
 
 ## O que cada pasta pode importar
 
@@ -143,6 +146,7 @@ No Windows, se `sh` não estiver disponível:
 ```bash
 pnpm exec depcruise --config .dependency-cruiser.mjs services/processor-worker/src
 pnpm exec depcruise --config .dependency-cruiser.mjs services/auth-service/src
+pnpm exec depcruise --config .dependency-cruiser.mjs services/video-service/src
 ```
 
 ## O que fazer quando uma violação é encontrada

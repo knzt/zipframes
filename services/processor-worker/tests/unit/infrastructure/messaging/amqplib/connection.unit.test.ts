@@ -165,7 +165,7 @@ describe('createRabbitMqConnection', () => {
     expect(fake.channel.ack).toHaveBeenCalledOnce();
     expect(fake.channel.nack).not.toHaveBeenCalled();
     const sent = fake.channel.sendToQueue.mock.calls[0];
-    expect(sent?.[0]).toBe('processor.video.uploaded.wait');
+    expect(sent?.[0]).toBe('processor.video.uploaded.retry');
     expect(sent?.[2]).toMatchObject({
       expiration: expect.any(String),
       headers: expect.objectContaining({ 'x-attempt': 3 }),
@@ -276,6 +276,16 @@ describe('createRabbitMqConnection', () => {
       expect.objectContaining({
         arguments: {
           'x-dead-letter-exchange': 'zipframes.events.dlx',
+          'x-dead-letter-routing-key': 'processor.video.uploaded',
+        },
+      }),
+    );
+    // The default exchange is the empty string; it must not be dropped as falsy.
+    expect(fake.channel.assertQueue).toHaveBeenCalledWith(
+      'processor.video.uploaded.retry',
+      expect.objectContaining({
+        arguments: {
+          'x-dead-letter-exchange': '',
           'x-dead-letter-routing-key': 'processor.video.uploaded',
         },
       }),

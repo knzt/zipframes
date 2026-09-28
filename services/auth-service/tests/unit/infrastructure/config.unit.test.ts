@@ -53,6 +53,12 @@ describe('loadConfig', () => {
     expect(config.corsOrigin).toBe('*');
   });
 
+  it('accepts port 0, so the system picks a free one', () => {
+    process.env.PORT = '0';
+
+    expect(loadConfig().port).toBe(0);
+  });
+
   it('honours overrides for the optional variables', () => {
     process.env.PORT = '4000';
     process.env.CORS_ORIGIN = 'https://app.zipframes.test';
@@ -113,8 +119,8 @@ describe('loadConfig', () => {
     expect(() => loadConfig()).toThrow('JWT_AUDIENCE');
   });
 
-  it('rejects a non-positive port', () => {
-    process.env.PORT = '0';
+  it('rejects a negative port', () => {
+    process.env.PORT = '-1';
 
     expect(() => loadConfig()).toThrow('PORT');
   });

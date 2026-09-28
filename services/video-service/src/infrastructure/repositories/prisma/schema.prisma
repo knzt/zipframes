@@ -1,0 +1,44 @@
+// Matches docs/data/modelagem-de-dados.md: this file and the migration SQL
+// are the script of record for the video-db schema. The CHECK constraints
+// and the partial indexes live only in the migration, since Prisma's schema
+// DSL cannot express them.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("VIDEO_DATABASE_URL")
+}
+
+enum VideoStatus {
+  QUEUED
+  PROCESSING
+  DONE
+  FAILED
+  EXPIRED
+  DELETED
+
+  @@map("video_status")
+}
+
+model Video {
+  id               String      @id @db.Uuid
+  ownerId          String      @map("owner_id") @db.Uuid
+  originalFileName String      @map("original_file_name") @db.VarChar(255)
+  contentType      String      @map("content_type") @db.VarChar(100)
+  sizeBytes        BigInt      @map("size_bytes")
+  sourceKey        String      @unique(map: "uq_videos_source_key") @map("source_key") @db.VarChar(512)
+  resultKey        String?     @map("result_key") @db.VarChar(512)
+  frameCount       Int?        @map("frame_count")
+  status           VideoStatus
+  errorCode        String?     @map("error_code") @db.VarChar(50)
+  failureReason    String?     @map("failure_reason")
+  expiresAt        DateTime?   @map("expires_at") @db.Timestamptz
+  createdAt        DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime    @default(now()) @map("updated_at") @db.Timestamptz
+  version          Int
+
+  @@index([ownerId, createdAt(sort: Desc)], map: "idx_videos_owner")
+  @@map("videos")
+}

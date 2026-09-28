@@ -6,15 +6,9 @@ import { z } from 'zod';
 const emptyToUndefined = (value: string | undefined): string | undefined =>
   value === undefined || value.length === 0 ? undefined : value;
 
-const positiveIntFromEnv = z.preprocess((value: unknown) => {
-  if (typeof value !== 'string') {
-    return value;
-  }
-  return emptyToUndefined(value);
-}, z.coerce.number().int().positive());
-
 const configSchema = z.object({
-  port: positiveIntFromEnv,
+  /** 0 lets the system pick a free port, which the tests use. */
+  port: z.coerce.number().int().nonnegative(),
   corsOrigin: z.string().min(1),
   databaseUrl: z.string().min(1),
   amqpUrl: z.string().min(1),

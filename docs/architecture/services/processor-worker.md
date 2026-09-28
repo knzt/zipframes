@@ -85,31 +85,33 @@ O exchange de eventos é `EVENT_EXCHANGE` de `@zipframes/schemas/shared`; `amqpT
 flowchart LR
   events[zipframes.events]
   main[processor.video.uploaded]
-  wait[processor.video.uploaded.wait]
+  retry[processor.video.uploaded.retry]
   dlx[zipframes.events.dlx]
   dlq[zipframes.events.dlq]
 
   events -->|video.uploaded| main
   main -->|nack requeue=false| dlx --> dlq
-  main -->|retry: publish + ack| wait
-  wait -->|TTL expiration DLX| events
+  main -->|retry: publish + ack| retry
+  retry -->|TTL expira<br/>exchange default| main
 ```
 
-| Destino settle | Comportamento                                                                              |
-| -------------- | ------------------------------------------------------------------------------------------ |
-| `ack`          | Confirma a mensagem                                                                        |
-| `retry`        | Publica na fila **wait** com `expiration` (backoff) + header `x-attempt` + ack da original |
-| `dlq`          | `nack(requeue=false)` → DLX → `zipframes.events.dlq`                                       |
+A fila de retry devolve a mensagem **direto para `processor.video.uploaded`** pelo exchange default (`''`), e não pelo `zipframes.events`. Republicar no exchange compartilhado entregaria cada retry, como um upload novo, a qualquer outro assinante de `video.uploaded`. O nome antigo, `processor.video.uploaded.wait`, fazia isso; a fila nova tem outro nome porque o broker recusa redeclarar uma fila existente com argumentos diferentes. Num broker que já tinha a fila antiga, ela fica vazia e pode ser apagada.
+
+| Destino settle | Comportamento                                                                               |
+| -------------- | ------------------------------------------------------------------------------------------- |
+| `ack`          | Confirma a mensagem                                                                         |
+| `retry`        | Publica na fila **retry** com `expiration` (backoff) + header `x-attempt` + ack da original |
+| `dlq`          | `nack(requeue=false)` → DLX → `zipframes.events.dlq`                                        |
 
 ## Contratos de falha
 
-| Caso                        | Evento            | Settle                       |
-| --------------------------- | ----------------- | ---------------------------- |
-| Sucesso (`frames_packaged`) | `video.processed` | ack                          |
-| Mídia rejeitada             | `video.failed`    | ack                          |
-| Transitória, attempts < max | —                 | retry (wait queue + backoff) |
-| Transitória, attempt = max  | `video.failed`    | dlq                          |
-| Envelope poison             | —                 | dlq                          |
+| Caso                        | Evento            | Settle                          |
+| --------------------------- | ----------------- | ------------------------------- |
+| Sucesso (`frames_packaged`) | `video.processed` | ack                             |
+| Mídia rejeitada             | `video.failed`    | ack                             |
+| Transitória, attempts < max | —                 | retry (fila de retry + backoff) |
+| Transitória, attempt = max  | `video.failed`    | dlq                             |
+| Envelope poison             | —                 | dlq                             |
 
 ## Observabilidade e operação
 
