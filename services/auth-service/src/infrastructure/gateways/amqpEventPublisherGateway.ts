@@ -1,6 +1,8 @@
+import { randomUUID } from 'node:crypto';
+
 import type { PublishOptions, PublishPort, Publisher } from '@zipframes/communication';
-import { createNotifier, type Notifier } from '@zipframes/communication';
 import type { EventEnvelope } from '@zipframes/schemas';
+import { EVENT_EXCHANGE } from '@zipframes/schemas/shared';
 import type { ConfirmChannel } from 'amqplib';
 
 import type {
@@ -42,15 +44,19 @@ export const createAmqpPublishPort = (channel: ConfirmChannel): PublishPort => (
 });
 
 export class AmqpEventPublisherGateway implements EventPublisher {
-  constructor(
-    publisher: Publisher,
-    private readonly notifier: Notifier = createNotifier(publisher),
-  ) {}
+  constructor(private readonly publisher: Publisher) {}
 
   async publish(publication: EventPublisherInput): Promise<void> {
-    await this.notifier.userRegistered({
-      correlationId: publication.correlationId,
-      payload: publication.payload,
-    });
+    await this.publisher.publish(
+      {
+        eventId: randomUUID(),
+        eventType: publication.eventType,
+        version: 1,
+        occurredAt: new Date().toISOString(),
+        correlationId: publication.correlationId,
+        payload: publication.payload,
+      },
+      { exchange: EVENT_EXCHANGE, routingKey: publication.eventType },
+    );
   }
 }
