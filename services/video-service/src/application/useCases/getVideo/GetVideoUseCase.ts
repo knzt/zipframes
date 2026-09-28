@@ -13,9 +13,9 @@ export class GetVideoUseCase {
   constructor(private readonly videoRepository: VideoRepository) {}
 
   async execute(
-    query: GetVideoUseCaseInput,
+    lookup: GetVideoUseCaseInput,
   ): Promise<Result<GetVideoUseCaseOutput, GetVideoUseCaseError>> {
-    const video = await this.videoRepository.findByIdForOwner(query.videoId, query.ownerId);
+    const video = await this.videoRepository.findByIdForOwner(lookup.videoId, lookup.ownerId);
     if (video === null) {
       return err(new VideoNotFoundError());
     }

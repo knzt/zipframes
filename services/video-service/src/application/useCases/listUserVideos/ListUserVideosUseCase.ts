@@ -21,22 +21,22 @@ export class ListUserVideosUseCase {
   ) {}
 
   async execute(
-    query: ListUserVideosUseCaseInput,
+    page: ListUserVideosUseCaseInput,
   ): Promise<Result<ListUserVideosUseCaseOutput, ListUserVideosUseCaseError>> {
-    const firstPage = query.before === undefined;
+    const firstPage = page.before === undefined;
     if (firstPage) {
-      const cached = await this.videoListCache.get(query.ownerId, query.limit);
+      const cached = await this.videoListCache.get(page.ownerId, page.limit);
       if (cached !== null) {
         return ok({ items: cached });
       }
     }
 
-    const videos = await this.videoRepository.listByOwner(query.ownerId, {
-      limit: query.limit,
-      ...(query.before !== undefined ? { before: query.before } : {}),
+    const videos = await this.videoRepository.listByOwner(page.ownerId, {
+      limit: page.limit,
+      ...(page.before !== undefined ? { before: page.before } : {}),
     });
     if (firstPage) {
-      await this.videoListCache.set(query.ownerId, query.limit, videos);
+      await this.videoListCache.set(page.ownerId, page.limit, videos);
     }
     return ok({ items: videos });
   }

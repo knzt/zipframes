@@ -1,65 +1,62 @@
 import {
   DeleteObjectCommand,
   HeadBucketCommand,
-  HeadObjectCommand,
+  PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
+import { Readable } from 'node:stream';
+
 import { describe, expect, it, vi } from 'vitest';
 
 import { S3ObjectStorageGateway } from '../../../../../src/infrastructure/gateways/storage/s3ObjectStorage.gateway.js';
 import {
   contentDispositionFor,
-  S3StorageUrlSignerGateway,
-} from '../../../../../src/infrastructure/gateways/storage/s3StorageUrlSigner.gateway.js';
+  S3DownloadUrlSignerGateway,
+} from '../../../../../src/infrastructure/gateways/storage/s3DownloadUrlSigner.gateway.js';
 
 const notFound = Object.assign(new Error('not found'), {
   name: 'NotFound',
   $metadata: { httpStatusCode: 404 },
 });
-const noSuchKey = Object.assign(new Error('no such key'), { name: 'NoSuchKey' });
-const status404 = Object.assign(new Error('odd'), {
-  name: 'Unknown',
-  $metadata: { httpStatusCode: 404 },
-});
-
 const gatewayWith = (
   answer: (command: unknown) => Promise<unknown>,
 ): { gateway: S3ObjectStorageGateway; send: ReturnType<typeof vi.fn> } => {
+  // A real client, so `Upload` finds its config; only the network call is replaced.
+  const s3 = new S3Client({
+    region: 'us-east-1',
+    credentials: { accessKeyId: 'key', secretAccessKey: 'secret' },
+  });
   const send = vi.fn(answer);
-  const s3 = { send } as unknown as S3Client;
+  s3.send = send;
   return { gateway: new S3ObjectStorageGateway(s3, 'videos'), send };
 };
 
 describe('S3ObjectStorageGateway', () => {
-  it('reports the stored size', async () => {
-    const { gateway, send } = gatewayWith(() => Promise.resolve({ ContentLength: 2048 }));
+  it('streams the content to the key and counts the bytes that passed', async () => {
+    const { gateway, send } = gatewayWith(() => Promise.resolve({}));
 
-    expect(await gateway.head('uploads/a/b')).toEqual({ sizeBytes: 2048 });
-    expect(send.mock.calls[0]?.[0]).toBeInstanceOf(HeadObjectCommand);
+    const stored = await gateway.upload(
+      'uploads/a/b',
+      Readable.from([Buffer.alloc(3), Buffer.alloc(5)]),
+      'video/mp4',
+    );
+
+    expect(stored).toEqual({ sizeBytes: 8 });
+    const command = send.mock.calls[0]?.[0] as PutObjectCommand;
+    expect(command).toBeInstanceOf(PutObjectCommand);
+    expect(command.input).toMatchObject({
+      Bucket: 'videos',
+      Key: 'uploads/a/b',
+      ContentType: 'video/mp4',
+    });
   });
 
-  it('reads a missing length as zero bytes', async () => {
-    const { gateway } = gatewayWith(() => Promise.resolve({}));
-
-    expect(await gateway.head('uploads/a/b')).toEqual({ sizeBytes: 0 });
-  });
-
-  it.each([notFound, noSuchKey, status404])(
-    'answers null for a missing object (%s)',
-    async (error) => {
-      const { gateway } = gatewayWith(() => Promise.reject(error));
-
-      expect(await gateway.head('uploads/a/b')).toBeNull();
-    },
-  );
-
-  it('turns any other failure into a retryable UnavailableError', async () => {
+  it('turns a storage failure into a retryable UnavailableError', async () => {
     const { gateway } = gatewayWith(() => Promise.reject(new Error('socket hang up')));
 
-    await expect(gateway.head('k')).rejects.toMatchObject({
-      code: 'STORAGE_HEAD_FAILED',
-      retryable: true,
-    });
+    await expect(
+      gateway.upload('k', Readable.from([Buffer.alloc(1)]), 'video/mp4'),
+    ).rejects.toMatchObject({ code: 'STORAGE_UPLOAD_FAILED', retryable: true });
     await expect(gateway.deleteObject('k')).rejects.toMatchObject({
       code: 'STORAGE_DELETE_FAILED',
     });
@@ -86,43 +83,31 @@ describe('S3ObjectStorageGateway', () => {
     // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the SDK boundary can reject with anything
     const { gateway } = gatewayWith(() => Promise.reject(nonError));
 
-    await expect(gateway.head('k')).rejects.toMatchObject({ code: 'STORAGE_HEAD_FAILED' });
+    await expect(gateway.deleteObject('k')).rejects.toMatchObject({
+      code: 'STORAGE_DELETE_FAILED',
+    });
   });
 });
 
-describe('S3StorageUrlSignerGateway', () => {
+describe('S3DownloadUrlSignerGateway', () => {
   const publicS3 = new S3Client({
     endpoint: 'http://storage.zipframes.local:8333',
     region: 'us-east-1',
     forcePathStyle: true,
     credentials: { accessKeyId: 'key', secretAccessKey: 'secret' },
   });
-  const signer = new S3StorageUrlSignerGateway(publicS3, 'videos');
+  const signer = new S3DownloadUrlSignerGateway(publicS3, 'videos');
 
-  it('signs a PUT on the public endpoint that binds type and length', async () => {
-    const signed = await signer.signUpload({
-      key: 'uploads/o/v',
-      contentType: 'video/mp4',
-      sizeBytes: 2048,
-      expiresInSeconds: 900,
-    });
-    const url = new URL(signed.url);
-
-    expect(signed.expiresInSeconds).toBe(900);
-    expect(url.origin).toBe('http://storage.zipframes.local:8333');
-    expect(url.pathname).toBe('/videos/uploads/o/v');
-    expect(url.searchParams.get('X-Amz-Expires')).toBe('900');
-    expect(url.searchParams.get('X-Amz-SignedHeaders')).toBe('content-length;content-type;host');
-  });
-
-  it('signs a GET that saves the package under a readable name', async () => {
-    const signed = await signer.signDownload({
+  it('signs a GET on the public endpoint that saves the package under a readable name', async () => {
+    const signed = await signer.sign({
       key: 'outputs/o/v.zip',
       downloadFileName: 'aula-frames.zip',
       expiresInSeconds: 300,
     });
     const url = new URL(signed.url);
 
+    expect(url.origin).toBe('http://storage.zipframes.local:8333');
+    expect(url.pathname).toBe('/videos/outputs/o/v.zip');
     expect(url.searchParams.get('X-Amz-Expires')).toBe('300');
     expect(url.searchParams.get('response-content-disposition')).toBe(
       contentDispositionFor('aula-frames.zip'),

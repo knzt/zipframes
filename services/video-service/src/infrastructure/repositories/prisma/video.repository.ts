@@ -1,43 +1,30 @@
-import type { Prisma, PrismaClient, Video as VideoRow } from '@prisma/client';
+import { Prisma, type PrismaClient, type Video as VideoRow } from '@prisma/client';
 import { ConflictError } from '@zipframes/core';
 
 import {
-  CONCURRENT_VIDEO_UPDATE,
+  VIDEO_CHANGED_CONCURRENTLY,
   type ListByOwnerQuery,
   type VideoRepository,
 } from '../../../application/interfaces/repositories/VideoRepository.js';
 import { Video } from '../../../domain/entities/video.js';
 
+const UNIQUE_VIOLATION = 'P2002';
+
 const toDomain = (row: VideoRow): Video =>
   Video.fromPersistence({ ...row, sizeBytes: Number(row.sizeBytes) });
 
-/** Everything a transition may change. Identity, owner and keys never move. */
-const mutableColumnsOf = (video: Video): Prisma.VideoUpdateManyMutationInput => {
+const toRow = (video: Video, version: number): Prisma.VideoCreateInput => {
   const state = video.toJSON();
-  return {
-    sizeBytes: BigInt(state.sizeBytes),
-    resultKey: state.resultKey,
-    frameCount: state.frameCount,
-    status: state.status,
-    errorCode: state.errorCode,
-    failureReason: state.failureReason,
-    expiresAt: state.expiresAt,
-    sourcePurgedAt: state.sourcePurgedAt,
-    resultPurgedAt: state.resultPurgedAt,
-    updatedAt: state.updatedAt,
-    version: { increment: 1 },
-  };
+  return { ...state, sizeBytes: BigInt(state.sizeBytes), version };
 };
+
+const changedConcurrently = (cause?: unknown): ConflictError =>
+  new ConflictError(VIDEO_CHANGED_CONCURRENTLY, 'the video changed meanwhile, try again', {
+    cause,
+  });
 
 export class PrismaVideoRepository implements VideoRepository {
   constructor(private readonly prisma: PrismaClient) {}
-
-  async create(video: Video): Promise<void> {
-    const state = video.toJSON();
-    await this.prisma.video.create({
-      data: { ...state, sizeBytes: BigInt(state.sizeBytes) },
-    });
-  }
 
   async findById(videoId: string): Promise<Video | null> {
     const row = await this.prisma.video.findUnique({ where: { id: videoId } });
@@ -71,13 +58,37 @@ export class PrismaVideoRepository implements VideoRepository {
     return rows.map(toDomain);
   }
 
-  async save(video: Video): Promise<void> {
+  /**
+   * Version 0 means the video was never stored: it is inserted as version 1.
+   * Any other version is written only if the row still has it, and bumped.
+   */
+  async save(video: Video): Promise<Video> {
+    return video.version === 0 ? this.insert(video) : this.update(video);
+  }
+
+  private async insert(video: Video): Promise<Video> {
+    try {
+      return toDomain(await this.prisma.video.create({ data: toRow(video, 1) }));
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === UNIQUE_VIOLATION
+      ) {
+        throw changedConcurrently(error);
+      }
+      throw error;
+    }
+  }
+
+  private async update(video: Video): Promise<Video> {
+    const { id, ...columns } = toRow(video, video.version + 1);
     const { count } = await this.prisma.video.updateMany({
-      where: { id: video.id, version: video.version },
-      data: mutableColumnsOf(video),
+      where: { id, version: video.version },
+      data: columns,
     });
     if (count === 0) {
-      throw new ConflictError(CONCURRENT_VIDEO_UPDATE, 'the video changed meanwhile, try again');
+      throw changedConcurrently();
     }
+    return Video.fromPersistence({ ...video.toJSON(), version: video.version + 1 });
   }
 }

@@ -1,7 +1,12 @@
 import type { Video } from '../../../domain/entities/video.js';
 
-/** Code of the `ConflictError` that `save` throws when the row changed since it was read. */
-export const CONCURRENT_VIDEO_UPDATE = 'VIDEO_CONCURRENT_UPDATE';
+/**
+ * Code of the `ConflictError` that `save` throws when the same video was
+ * written by someone else between this read and this write — for instance
+ * two worker events for one video handled at once, or an expiry racing a
+ * deletion. It never comes from two owners: every upload is its own video.
+ */
+export const VIDEO_CHANGED_CONCURRENTLY = 'VIDEO_CHANGED_CONCURRENTLY';
 
 export interface ListByOwnerQuery {
   readonly limit: number;
@@ -10,8 +15,7 @@ export interface ListByOwnerQuery {
 }
 
 export interface VideoRepository {
-  readonly create: (video: Video) => Promise<void>;
-  /** Unscoped: for paths that already trust the id, such as an event carrying no owner. */
+  /** Unscoped: for paths that already trust the id, such as a worker event. */
   readonly findById: (videoId: string) => Promise<Video | null>;
   /**
    * The video with this id, but only if `ownerId` owns it. `null` both when
@@ -24,9 +28,10 @@ export interface VideoRepository {
   /** `DONE` videos whose retention ended at or before `now`, oldest first. */
   readonly findExpired: (now: Date, limit: number) => Promise<readonly Video[]>;
   /**
-   * Writes a transition of a video read earlier. Throws a `ConflictError`
-   * with code {@link CONCURRENT_VIDEO_UPDATE} when someone else wrote it in
-   * between (optimistic lock on `version`).
+   * Stores a new video or a transition of one read earlier, and returns it
+   * as stored. Throws a `ConflictError` with code
+   * {@link VIDEO_CHANGED_CONCURRENTLY} when the stored copy changed since it
+   * was read.
    */
-  readonly save: (video: Video) => Promise<void>;
+  readonly save: (video: Video) => Promise<Video>;
 }

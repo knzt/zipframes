@@ -8,26 +8,17 @@ export type CacheOperation = 'get' | 'set' | 'invalidate';
 /** One hash per owner, one field per page size: invalidating is a single DEL. */
 export const listCacheKeyOf = (ownerId: string): string => `video-service:videos:${ownerId}`;
 
-type CachedVideo = Omit<
-  PersistedVideo,
-  'expiresAt' | 'sourcePurgedAt' | 'resultPurgedAt' | 'createdAt' | 'updatedAt'
-> & {
+type CachedVideo = Omit<PersistedVideo, 'expiresAt' | 'createdAt' | 'updatedAt'> & {
   readonly expiresAt: string | null;
-  readonly sourcePurgedAt: string | null;
-  readonly resultPurgedAt: string | null;
   readonly createdAt: string;
   readonly updatedAt: string;
 };
-
-const dateOrNull = (value: string | null): Date | null => (value === null ? null : new Date(value));
 
 /** JSON turned the dates into strings; the aggregate expects `Date`. */
 const fromCached = (cached: CachedVideo): Video =>
   Video.fromPersistence({
     ...cached,
-    expiresAt: dateOrNull(cached.expiresAt),
-    sourcePurgedAt: dateOrNull(cached.sourcePurgedAt),
-    resultPurgedAt: dateOrNull(cached.resultPurgedAt),
+    expiresAt: cached.expiresAt === null ? null : new Date(cached.expiresAt),
     createdAt: new Date(cached.createdAt),
     updatedAt: new Date(cached.updatedAt),
   });

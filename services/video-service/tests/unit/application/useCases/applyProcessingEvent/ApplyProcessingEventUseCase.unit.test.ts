@@ -59,13 +59,4 @@ describe('ApplyProcessingEventUseCase', () => {
   it('acknowledges an event for an id it never had', async () => {
     expect(await applyProcessingEvent.execute(completed)).toEqual({ kind: 'unknown_video' });
   });
-
-  it('throws a retryable error when the video is not queued yet, so the message comes back', async () => {
-    videos.seed(aVideo('AWAITING_UPLOAD'));
-
-    await expect(applyProcessingEvent.execute(completed)).rejects.toMatchObject({
-      code: 'VIDEO_NOT_QUEUED_YET',
-      retryable: true,
-    });
-  });
 });

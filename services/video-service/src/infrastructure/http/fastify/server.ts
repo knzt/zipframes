@@ -1,4 +1,5 @@
 import cors from '@fastify/cors';
+import multipart from '@fastify/multipart';
 import Fastify from 'fastify';
 import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
@@ -19,6 +20,8 @@ export interface HttpServerOptions {
   readonly corsOrigin: string;
   readonly logger: Logger;
   readonly version: string;
+  /** Largest file a multipart route accepts. */
+  readonly maxUploadBytes: number;
   readonly metrics?: TechnicalMetrics;
 }
 
@@ -65,11 +68,17 @@ export const createHttpServer = async (options: HttpServerOptions): Promise<Fast
   });
 
   await app.register(cors, { origin: options.corsOrigin });
+  // One byte over the limit is enough to tell an oversized file apart; the
+  // stream is cut there instead of failing, and the domain rejects the size.
+  await app.register(multipart, {
+    limits: { files: 1, fileSize: options.maxUploadBytes + 1 },
+    throwFileSizeLimit: false,
+  });
   await registerOpenApi(app, {
     title: 'ZipFrames video-service',
     version: options.version,
     description:
-      'Upload, status e download dos vídeos de cada usuário. A especificação é gerada das schemas das rotas.',
+      'Envio, status, download e exclusão dos vídeos de cada usuário. A especificação é gerada das schemas das rotas.',
   });
 
   app.decorateRequest('correlationId', '');

@@ -7,8 +7,8 @@ import {
 } from '../../../../../src/infrastructure/gateways/cache/redisVideoListCache.gateway.js';
 import { aVideo, OWNER_ID } from '../../../../support/videos.js';
 
-// DONE carries every date column, so the round trip covers all of them.
-const item = aVideo('DONE', { sourcePurgedAt: new Date('2026-09-27T11:00:00.000Z') });
+// DONE carries every date column (expiry included), so the round trip covers all of them.
+const item = aVideo('DONE');
 
 interface FakeRedis {
   readonly redis: Redis;

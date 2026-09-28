@@ -56,7 +56,7 @@ describe('ExpireFramesPackagesUseCase', () => {
   it('keeps sweeping after one video fails, and reports it', async () => {
     const failing = new Error('conflict');
     class FlakyRepository extends InMemoryVideoRepository {
-      override save(video: Video): Promise<void> {
+      override save(video: Video): Promise<Video> {
         return video.id === ID_A ? Promise.reject(failing) : super.save(video);
       }
     }

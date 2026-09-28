@@ -41,8 +41,8 @@ describe('DeleteVideoUseCase', () => {
     expect(cache.invalidated).toEqual([OWNER_ID]);
   });
 
-  it('removes an upload that was never confirmed', async () => {
-    videos.seed(aVideo('AWAITING_UPLOAD'));
+  it('removes the original of a failed video, which never got a package', async () => {
+    videos.seed(aVideo('FAILED'));
 
     await deleteVideo.execute(input);
 

@@ -1,7 +1,7 @@
 import { GetDownloadUrlUseCase } from '../../../application/useCases/getDownloadUrl/GetDownloadUrlUseCase.js';
 import type { Prisma } from '../externals/prisma.js';
 import type { S3 } from '../externals/s3.js';
-import { createStorageUrlSignerGateway } from '../gateways/storageUrlSignerGateway.js';
+import { createDownloadUrlSignerGateway } from '../gateways/downloadUrlSignerGateway.js';
 import { createVideoRepository } from '../repositories/videoRepository.js';
 
 /** Clients and settings opened once in `start.ts` and reused for this use case. */
@@ -17,6 +17,6 @@ export const createGetDownloadUrlUseCase = (
 ): GetDownloadUrlUseCase =>
   new GetDownloadUrlUseCase(
     createVideoRepository(externalDeps.prisma),
-    createStorageUrlSignerGateway(externalDeps),
+    createDownloadUrlSignerGateway(externalDeps),
     externalDeps.downloadUrlTtlSeconds,
   );

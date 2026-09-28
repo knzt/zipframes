@@ -45,14 +45,14 @@ export class ExpireFramesPackagesUseCase {
   }
 
   private async expireOne(video: Video, now: Date): Promise<boolean> {
-    const next = video.expire(now);
-    if (!next.ok) {
+    const expiredVideo = video.expire(now);
+    if (!expiredVideo.ok) {
       return false;
     }
     for (const key of video.objectKeysToPurge()) {
       await this.objectStorage.deleteObject(key);
     }
-    await this.videoRepository.save(next.value);
+    await this.videoRepository.save(expiredVideo.value);
     await this.videoListCache.invalidate(video.ownerId);
     return true;
   }

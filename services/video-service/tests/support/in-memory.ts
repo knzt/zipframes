@@ -1,3 +1,5 @@
+import type { Readable } from 'node:stream';
+
 import { ConflictError } from '@zipframes/core';
 
 import type {
@@ -9,14 +11,13 @@ import type {
   StoredObject,
 } from '../../src/application/interfaces/gateways/ObjectStorage.js';
 import type {
+  DownloadUrlSigner,
   SignDownloadInput,
-  SignedUrl,
-  SignUploadInput,
-  StorageUrlSigner,
-} from '../../src/application/interfaces/gateways/StorageUrlSigner.js';
+  SignedDownloadUrl,
+} from '../../src/application/interfaces/gateways/DownloadUrlSigner.js';
 import type { VideoListCache } from '../../src/application/interfaces/gateways/VideoListCache.js';
 import {
-  CONCURRENT_VIDEO_UPDATE,
+  VIDEO_CHANGED_CONCURRENTLY,
   type ListByOwnerQuery,
   type VideoRepository,
 } from '../../src/application/interfaces/repositories/VideoRepository.js';
@@ -36,11 +37,6 @@ export class InMemoryVideoRepository implements VideoRepository {
       this.rows.set(video.id, video);
     }
     return this;
-  }
-
-  create(video: Video): Promise<void> {
-    this.rows.set(video.id, video);
-    return Promise.resolve();
   }
 
   findById(videoId: string): Promise<Video | null> {
@@ -76,23 +72,26 @@ export class InMemoryVideoRepository implements VideoRepository {
     );
   }
 
-  save(video: Video): Promise<void> {
+  /** Same contract as the Prisma adapter: version 0 inserts, any other must match. */
+  save(video: Video): Promise<Video> {
     const current = this.rows.get(video.id);
-    if (current?.version !== video.version) {
-      throw new ConflictError(CONCURRENT_VIDEO_UPDATE, 'the video changed meanwhile, try again');
+    const expectedVersion = current?.version ?? 0;
+    if (video.version !== expectedVersion) {
+      return Promise.reject(
+        new ConflictError(VIDEO_CHANGED_CONCURRENTLY, 'the video changed meanwhile, try again'),
+      );
     }
-    this.rows.set(
-      video.id,
-      Video.fromPersistence({ ...video.toJSON(), version: video.version + 1 }),
-    );
+    const stored = Video.fromPersistence({ ...video.toJSON(), version: video.version + 1 });
+    this.rows.set(video.id, stored);
     this.saves += 1;
-    return Promise.resolve();
+    return Promise.resolve(stored);
   }
 }
 
 export class InMemoryObjectStorage implements ObjectStorage {
   readonly objects = new Map<string, StoredObject>();
   readonly deleted: string[] = [];
+  failUploadWith: Error | null = null;
   failDeleteWith: Error | null = null;
 
   put(key: string, sizeBytes: number): this {
@@ -100,8 +99,19 @@ export class InMemoryObjectStorage implements ObjectStorage {
     return this;
   }
 
-  head(key: string): Promise<StoredObject | null> {
-    return Promise.resolve(this.objects.get(key) ?? null);
+  /** Drains the stream the way S3 would and records what arrived. */
+  async upload(key: string, content: Readable): Promise<StoredObject> {
+    if (this.failUploadWith !== null) {
+      content.resume();
+      throw this.failUploadWith;
+    }
+    let sizeBytes = 0;
+    for await (const chunk of content) {
+      sizeBytes += (chunk as Buffer).length;
+    }
+    const stored = { sizeBytes };
+    this.objects.set(key, stored);
+    return stored;
   }
 
   deleteObject(key: string): Promise<void> {
@@ -114,23 +124,14 @@ export class InMemoryObjectStorage implements ObjectStorage {
   }
 }
 
-export class FakeStorageUrlSigner implements StorageUrlSigner {
-  readonly uploads: SignUploadInput[] = [];
-  readonly downloads: SignDownloadInput[] = [];
+export class FakeDownloadUrlSigner implements DownloadUrlSigner {
+  readonly signed: SignDownloadInput[] = [];
 
-  signUpload(input: SignUploadInput): Promise<SignedUrl> {
-    this.uploads.push(input);
+  sign(download: SignDownloadInput): Promise<SignedDownloadUrl> {
+    this.signed.push(download);
     return Promise.resolve({
-      url: `https://storage.test/${input.key}?op=put`,
-      expiresInSeconds: input.expiresInSeconds,
-    });
-  }
-
-  signDownload(input: SignDownloadInput): Promise<SignedUrl> {
-    this.downloads.push(input);
-    return Promise.resolve({
-      url: `https://storage.test/${input.key}?op=get`,
-      expiresInSeconds: input.expiresInSeconds,
+      url: `https://storage.test/${download.key}`,
+      expiresInSeconds: download.expiresInSeconds,
     });
   }
 }

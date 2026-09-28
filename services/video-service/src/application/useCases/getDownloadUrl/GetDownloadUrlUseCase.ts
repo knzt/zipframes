@@ -1,16 +1,16 @@
 import { ApplicationError, ConflictError, err, ok } from '@zipframes/core';
 import type { Result } from '@zipframes/core';
 
-import type { StorageUrlSigner } from '../../interfaces/gateways/StorageUrlSigner.js';
-import type { VideoRepository } from '../../interfaces/repositories/VideoRepository.js';
 import { VideoNotFoundError } from '../../errors/VideoNotFoundError.js';
+import type { DownloadUrlSigner } from '../../interfaces/gateways/DownloadUrlSigner.js';
+import type { VideoRepository } from '../../interfaces/repositories/VideoRepository.js';
 import type {
   GetDownloadUrlUseCaseError,
   GetDownloadUrlUseCaseInput,
   GetDownloadUrlUseCaseOutput,
 } from './getDownloadUrl.dto.js';
 
-const GONE_STATUS = 410;
+const GONE = 410;
 
 /** `clip.final.mp4` is saved as `clip.final-frames.zip`. */
 const downloadFileNameOf = (originalFileName: string): string =>
@@ -19,14 +19,14 @@ const downloadFileNameOf = (originalFileName: string): string =>
 export class GetDownloadUrlUseCase {
   constructor(
     private readonly videoRepository: VideoRepository,
-    private readonly storageUrlSigner: StorageUrlSigner,
+    private readonly downloadUrlSigner: DownloadUrlSigner,
     private readonly downloadUrlTtlSeconds: number,
   ) {}
 
   async execute(
-    query: GetDownloadUrlUseCaseInput,
+    lookup: GetDownloadUrlUseCaseInput,
   ): Promise<Result<GetDownloadUrlUseCaseOutput, GetDownloadUrlUseCaseError>> {
-    const video = await this.videoRepository.findByIdForOwner(query.videoId, query.ownerId);
+    const video = await this.videoRepository.findByIdForOwner(lookup.videoId, lookup.ownerId);
     if (video === null) {
       return err(new VideoNotFoundError());
     }
@@ -41,19 +41,19 @@ export class GetDownloadUrlUseCase {
             'VIDEO_GONE',
             'the frames package is no longer available; upload the video again',
             {},
-            GONE_STATUS,
+            GONE,
           ),
         );
       case 'available': {
-        const download = await this.storageUrlSigner.signDownload({
+        const signed = await this.downloadUrlSigner.sign({
           key: availability.resultKey,
           downloadFileName: downloadFileNameOf(video.originalFileName),
           expiresInSeconds: this.downloadUrlTtlSeconds,
         });
         return ok({
           videoId: video.id,
-          downloadUrl: download.url,
-          expiresInSeconds: download.expiresInSeconds,
+          downloadUrl: signed.url,
+          expiresInSeconds: signed.expiresInSeconds,
         });
       }
     }

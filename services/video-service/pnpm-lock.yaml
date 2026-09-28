@@ -169,12 +169,18 @@ importers:
       '@aws-sdk/client-s3':
         specifier: ^3.787.0
         version: 3.1141.0
+      '@aws-sdk/lib-storage':
+        specifier: ^3.1141.0
+        version: 3.1141.0(@aws-sdk/client-s3@3.1141.0)
       '@aws-sdk/s3-request-presigner':
         specifier: ^3.787.0
         version: 3.1141.0
       '@fastify/cors':
         specifier: ^10.0.2
         version: 10.1.0
+      '@fastify/multipart':
+        specifier: ^9.4.0
+        version: 9.4.0
       '@fastify/swagger':
         specifier: ^9.8.1
         version: 9.9.0(supports-color@7.2.0)
@@ -200,8 +206,8 @@ importers:
         specifier: ^0.1.0
         version: 0.1.0
       '@zipframes/schemas':
-        specifier: 0.2.0-pr45-20260927180514
-        version: 0.2.0-pr45-20260927180514
+        specifier: 1.0.0-pr48-20260927232137
+        version: 1.0.0-pr48-20260927232137
       '@zipframes/telemetry':
         specifier: ^0.1.0
         version: 0.1.3
@@ -295,6 +301,12 @@ packages:
   '@aws-sdk/credential-provider-web-identity@3.972.78':
     resolution: {integrity: sha512-/y9WvNtlcPBGLR0qc1a+9J/xtYZfVczvLUOuXaVWylzttH7ewsxwHtjmiJSolNrVSDorIxHGHMU61CbonRkmwA==}
     engines: {node: '>=20.0.0'}
+
+  '@aws-sdk/lib-storage@3.1141.0':
+    resolution: {integrity: sha512-Qkn5bI3ESne9iJX1hX3CVkuyikgNP/3MbO5nql4sd1wcV0S79yJdCBANNJBTgW0bnd/Z2sujsy0JVbuaoMsAhQ==}
+    engines: {node: '>=20.0.0'}
+    peerDependencies:
+      '@aws-sdk/client-s3': ^3.1141.0
 
   '@aws-sdk/middleware-sdk-s3@3.972.77':
     resolution: {integrity: sha512-E7W2UOeUoc+lg3uIfR/dM7ZwusHwhBQrKMnlkRv4EXRR+C0YtV1pg25xC7GdZIhXH+NAMgZPCbE7o5to2cjFiw==}
@@ -518,8 +530,14 @@ packages:
     resolution: {integrity: sha512-vBZP4NlzfOlerQTnba4aqZoMhE/a9HY7HRqoOPaETQcSQuWEIyZMHGfVu6w9wGtGK5fED5qRs2DteVCjOH60sA==}
     engines: {node: '>=14'}
 
+  '@fastify/busboy@3.2.2':
+    resolution: {integrity: sha512-yXSS27qPExaXeuLvMRMXOLtpipzfQYNjG3FkunDWKGfMYjKuhFXko9CVzqxm8jcF+lmtS9Fd89QNdh9XDjnbNg==}
+
   '@fastify/cors@10.1.0':
     resolution: {integrity: sha512-MZyBCBJtII60CU9Xme/iE4aEy8G7QpzGR8zkdXZkDFt7ElEMachbE61tfhAG/bvSaULlqlf0huMT12T7iqEmdQ==}
+
+  '@fastify/deepmerge@3.2.1':
+    resolution: {integrity: sha512-N5Oqvltoa2r9z1tbx4xjky0oRR60v+T47Ic4J1ukoVQcptLOrIdRnCSdTGmOmajZuHVKlTnfcmrjyqsGEW1ztA==}
 
   '@fastify/error@4.2.0':
     resolution: {integrity: sha512-RSo3sVDXfHskiBZKBPRgnQTtIqpi/7zhJOEmAxCiBcM7d0uwdGdxLlsCaLzGs8v8NnxIRlfG0N51p5yFaOentQ==}
@@ -532,6 +550,9 @@ packages:
 
   '@fastify/merge-json-schemas@0.2.1':
     resolution: {integrity: sha512-OA3KGBCy6KtIvLf8DINC5880o5iBlDX4SxzLQS8HorJAbqluzLRn80UXU0bxZn7UOFhFgpRJDasfwn9nG4FG4A==}
+
+  '@fastify/multipart@9.4.0':
+    resolution: {integrity: sha512-Z404bzZeLSXTBmp/trCBuoVFX28pM7rhv849Q5TsbTFZHuk1lc4QjQITTPK92DKVpXmNtJXeHSSc7GYvqFpxAQ==}
 
   '@fastify/proxy-addr@5.1.1':
     resolution: {integrity: sha512-zv07Y9GEuDsJPegZoDFd4SDWaZOW8N2pa0GSrYmKpId/tjt1Hgo3BjZBVjdVpfVrHaA+Qv5jawtS2O50J5xM9g==}
@@ -1011,8 +1032,8 @@ packages:
   '@zipframes/schemas@0.1.3':
     resolution: {integrity: sha512-LTegdiMUq2xMd9TqklyY6ZXiaOlmgxPNyh7+Du0dj0bS//gt4ufbp1ckZ+C18lOM6ZN2OHjNJX2fjPvTtkyWcA==, tarball: https://npm.pkg.github.com/download/@zipframes/schemas/0.1.3/e07ed5069e54938e86f2d554050ee8d917d253d2}
 
-  '@zipframes/schemas@0.2.0-pr45-20260927180514':
-    resolution: {integrity: sha512-C9gjzZFcisIUw91bcWeqrpCs8BZgsluiQKpHeqpyXZBLoO4mlW7MZFRaydVt9ak0tzotqVUsOVnb8SqwkAW/zQ==, tarball: https://npm.pkg.github.com/download/@zipframes/schemas/0.2.0-pr45-20260927180514/7e5cdaa53ac68e69b155dad8b3d65497f9913454}
+  '@zipframes/schemas@1.0.0-pr48-20260927232137':
+    resolution: {integrity: sha512-gnhp68qZnV/DwLcXsxvan3wpef4X+8uJwtlGJtcF1ALobe0bEQmQxlTf7g8SFkYgnzGE9aAwzgKt07BEoRa+UQ==, tarball: https://npm.pkg.github.com/download/@zipframes/schemas/1.0.0-pr48-20260927232137/244e18ad5fec8359b8021a557f84ba4748efee57}
 
   '@zipframes/telemetry@0.1.3':
     resolution: {integrity: sha512-KMPwKHJdPadleLAazDI3vCxyukktBQ8xCBxtTrQ9kbpRDZmqatnRVqcUpa9hOntKmZ+AWHlHnmRPEC9jee14nQ==, tarball: https://npm.pkg.github.com/download/@zipframes/telemetry/0.1.3/ee4493ef1ba5a505a67c4e02b9df6dd351bb60dd}
@@ -1169,6 +1190,9 @@ packages:
 
   buffer-more-ints@1.0.0:
     resolution: {integrity: sha512-EMetuGFz5SLsT0QTnXzINh4Ksr+oo4i+UGTXEshiGCQWnsgSs7ZhJ8fzlwQ+OzEMs0MpDAMr1hxnblp5a4vcHg==}
+
+  buffer@5.6.0:
+    resolution: {integrity: sha512-/gDYp/UtU0eA1ys8bOs9J6a+E/KWIY+DZ+Q2WESNUA0jFRsJOc0SNUO6xJ5SGA1xueg3NL65W6s+NY5l9cunuw==}
 
   buffer@5.7.1:
     resolution: {integrity: sha512-EHcyIPBQ4BSGlvjB16k5KgAJ27CIsHY/2JBmCRReo48y9rQ3MaUzWX3KVlBa4U7MyX02HdVj0K7C3WaB3ju7FQ==}
@@ -1911,6 +1935,9 @@ packages:
   std-env@3.10.0:
     resolution: {integrity: sha512-5GS12FdOZNliM5mAOxFRg7Ir0pWz8MdpYm6AY6VPkGpbA7ZzmbzNcBJQ0GPvvyWgcY7QAhCgf9Uy89I03faLkg==}
 
+  stream-browserify@3.0.0:
+    resolution: {integrity: sha512-H73RAHsVBapbim0tU2JwwOiXUj+fikfiaoYAKHF3VJfA0pe2BCzkhAHBlLG6REzE+2WNZcxOXjK7lkso+9euLA==}
+
   streamx@2.28.1:
     resolution: {integrity: sha512-zEzXb0s5Cds7tqMH6rhZ05lcJydCWiQPEwiNngVqzsxCc962vLY4Uw+mW7od8kDH258k2Uz/JrOkdIAAhSh9VA==}
 
@@ -2296,6 +2323,16 @@ snapshots:
       '@smithy/types': 4.19.0
       tslib: 2.8.1
 
+  '@aws-sdk/lib-storage@3.1141.0(@aws-sdk/client-s3@3.1141.0)':
+    dependencies:
+      '@aws-sdk/client-s3': 3.1141.0
+      '@smithy/core': 3.35.0
+      '@smithy/types': 4.19.0
+      buffer: 5.6.0
+      events: 3.3.0
+      stream-browserify: 3.0.0
+      tslib: 2.8.1
+
   '@aws-sdk/middleware-sdk-s3@3.972.77':
     dependencies:
       '@aws-sdk/core': 3.978.1
@@ -2458,10 +2495,14 @@ snapshots:
 
   '@fastify/busboy@2.1.1': {}
 
+  '@fastify/busboy@3.2.2': {}
+
   '@fastify/cors@10.1.0':
     dependencies:
       fastify-plugin: 5.1.0
       mnemonist: 0.40.0
+
+  '@fastify/deepmerge@3.2.1': {}
 
   '@fastify/error@4.2.0': {}
 
@@ -2474,6 +2515,14 @@ snapshots:
   '@fastify/merge-json-schemas@0.2.1':
     dependencies:
       dequal: 2.0.3
+
+  '@fastify/multipart@9.4.0':
+    dependencies:
+      '@fastify/busboy': 3.2.2
+      '@fastify/deepmerge': 3.2.1
+      '@fastify/error': 4.2.0
+      fastify-plugin: 5.1.0
+      secure-json-parse: 4.1.0
 
   '@fastify/proxy-addr@5.1.1':
     dependencies:
@@ -2991,7 +3040,7 @@ snapshots:
       '@zipframes/core': 0.4.0
       zod: 4.6.5
 
-  '@zipframes/schemas@0.2.0-pr45-20260927180514':
+  '@zipframes/schemas@1.0.0-pr48-20260927232137':
     dependencies:
       '@zipframes/core': 0.4.0
       zod: 4.6.5
@@ -3160,6 +3209,11 @@ snapshots:
   buffer-crc32@1.0.0: {}
 
   buffer-more-ints@1.0.0: {}
+
+  buffer@5.6.0:
+    dependencies:
+      base64-js: 1.5.1
+      ieee754: 1.2.1
 
   buffer@5.7.1:
     dependencies:
@@ -3950,6 +4004,11 @@ snapshots:
   statuses@2.0.2: {}
 
   std-env@3.10.0: {}
+
+  stream-browserify@3.0.0:
+    dependencies:
+      inherits: 2.0.4
+      readable-stream: 3.6.2
 
   streamx@2.28.1:
     dependencies:

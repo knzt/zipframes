@@ -24,9 +24,8 @@ describe('loadConfig', () => {
       s3Region: 'us-east-1',
       s3ForcePathStyle: true,
       maxUploadBytes: 524_288_000,
-      uploadUrlTtlSeconds: 900,
       downloadUrlTtlSeconds: 300,
-      resultRetentionHours: 24,
+      resultRetentionSeconds: 86_400,
       listCacheTtlSeconds: 60,
       expirationSweepIntervalMs: 60_000,
       expirationBatchSize: 100,
@@ -39,18 +38,18 @@ describe('loadConfig', () => {
   it('reads overrides and treats empty values as unset', () => {
     const config = loadConfig({
       ...required,
-      PORT: '4000',
+      PORT: '0',
       S3_PUBLIC_ENDPOINT: 'http://storage.zipframes.local',
       S3_FORCE_PATH_STYLE: 'false',
-      RESULT_RETENTION_HOURS: '48',
+      RESULT_RETENTION_SECONDS: '1',
       LOG_LEVEL: '',
     });
 
     expect(config).toMatchObject({
-      port: 4000,
+      port: 0,
       s3PublicEndpoint: 'http://storage.zipframes.local',
       s3ForcePathStyle: false,
-      resultRetentionHours: 48,
+      resultRetentionSeconds: 1,
       logLevel: 'info',
     });
   });

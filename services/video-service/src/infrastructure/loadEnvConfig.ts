@@ -12,7 +12,8 @@ const boolFromString = z
   .transform((value) => value === true || value === 'true' || value === '1');
 
 const configSchema = z.object({
-  port: positiveInt,
+  /** 0 lets the system pick a free port, which the tests use. */
+  port: nonNegativeInt,
   corsOrigin: z.string().min(1),
   databaseUrl: z.string().min(1),
   amqpUrl: z.string().min(1),
@@ -28,9 +29,8 @@ const configSchema = z.object({
   jwtIssuer: z.string().min(1),
   jwtAudience: z.string().min(1),
   maxUploadBytes: positiveInt,
-  uploadUrlTtlSeconds: positiveInt,
   downloadUrlTtlSeconds: positiveInt,
-  resultRetentionHours: positiveInt,
+  resultRetentionSeconds: positiveInt,
   listCacheTtlSeconds: positiveInt,
   expirationSweepIntervalMs: positiveInt,
   expirationBatchSize: positiveInt,
@@ -61,9 +61,8 @@ const ENV_BY_FIELD: Record<keyof Config, string> = {
   jwtIssuer: 'JWT_ISSUER',
   jwtAudience: 'JWT_AUDIENCE',
   maxUploadBytes: 'MAX_UPLOAD_BYTES',
-  uploadUrlTtlSeconds: 'UPLOAD_URL_TTL_SECONDS',
   downloadUrlTtlSeconds: 'DOWNLOAD_URL_TTL_SECONDS',
-  resultRetentionHours: 'RESULT_RETENTION_HOURS',
+  resultRetentionSeconds: 'RESULT_RETENTION_SECONDS',
   listCacheTtlSeconds: 'LIST_CACHE_TTL_SECONDS',
   expirationSweepIntervalMs: 'EXPIRATION_SWEEP_INTERVAL_MS',
   expirationBatchSize: 'EXPIRATION_BATCH_SIZE',
@@ -82,8 +81,8 @@ export const formatZodError = (error: z.ZodError): Error => {
 };
 
 /**
- * Reads the process configuration. Business windows (upload and download URL
- * lifetimes, 24h retention, 500 MB limit) default to the values in
+ * Reads the process configuration. Business windows (download URL lifetime,
+ * 24h retention, 500 MB limit) default to the values in
  * docs/domain/dominio.md and can be tuned per environment.
  */
 export const loadConfig = (env: NodeJS.ProcessEnv = process.env): Config => {
@@ -109,9 +108,8 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): Config => {
       jwtIssuer: read('JWT_ISSUER'),
       jwtAudience: read('JWT_AUDIENCE'),
       maxUploadBytes: read('MAX_UPLOAD_BYTES', String(500 * 1024 * 1024)),
-      uploadUrlTtlSeconds: read('UPLOAD_URL_TTL_SECONDS', '900'),
       downloadUrlTtlSeconds: read('DOWNLOAD_URL_TTL_SECONDS', '300'),
-      resultRetentionHours: read('RESULT_RETENTION_HOURS', '24'),
+      resultRetentionSeconds: read('RESULT_RETENTION_SECONDS', String(24 * 60 * 60)),
       listCacheTtlSeconds: read('LIST_CACHE_TTL_SECONDS', '60'),
       expirationSweepIntervalMs: read('EXPIRATION_SWEEP_INTERVAL_MS', '60000'),
       expirationBatchSize: read('EXPIRATION_BATCH_SIZE', '100'),

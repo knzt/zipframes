@@ -1,10 +1,9 @@
-import { UnavailableError } from '@zipframes/core';
-
 import type { IgnoredProcessingReason, ProcessingEvent } from '../../../domain/entities/video.js';
 import type { VideoStatus } from '../../../domain/valueObjects/videoStatus.js';
 import type { VideoListCache } from '../../interfaces/gateways/VideoListCache.js';
 import type { VideoRepository } from '../../interfaces/repositories/VideoRepository.js';
 
+/** What the worker reported about one video. */
 export interface ApplyProcessingEventUseCaseInput {
   readonly videoId: string;
   readonly event: ProcessingEvent;
@@ -17,10 +16,7 @@ export interface ApplyProcessingEventUseCaseInput {
  */
 export type ApplyProcessingEventUseCaseOutput =
   | { readonly kind: 'applied'; readonly status: VideoStatus }
-  | {
-      readonly kind: 'ignored';
-      readonly reason: Exclude<IgnoredProcessingReason, 'not_queued'>;
-    }
+  | { readonly kind: 'ignored'; readonly reason: IgnoredProcessingReason }
   | { readonly kind: 'unknown_video' };
 
 /**
@@ -36,31 +32,25 @@ export class ApplyProcessingEventUseCase {
   ) {}
 
   async execute(
-    input: ApplyProcessingEventUseCaseInput,
+    report: ApplyProcessingEventUseCaseInput,
   ): Promise<ApplyProcessingEventUseCaseOutput> {
-    const video = await this.videoRepository.findById(input.videoId);
+    const video = await this.videoRepository.findById(report.videoId);
     if (video === null) {
-      // The row exists from the upload request on, well before anything is
-      // queued, so retrying cannot make an unknown id appear.
+      // The video is stored before `video.uploaded` is published, so an
+      // unknown id cannot appear later: retrying would not help.
       return { kind: 'unknown_video' };
     }
 
-    const result = video.applyProcessingEvent(input.event, {
+    const transition = video.applyProcessingEvent(report.event, {
       retentionMs: this.retentionMs,
       now: new Date(),
     });
-    if (result.kind === 'ignored') {
-      if (result.reason === 'not_queued') {
-        // `video.uploaded` leaves just before the `QUEUED` commit, so a fast
-        // worker can answer first. Retrying with backoff gives the commit
-        // time to land; if it never does, the message ends in the DLQ.
-        throw new UnavailableError('VIDEO_NOT_QUEUED_YET', 'the video is not queued yet');
-      }
-      return { kind: 'ignored', reason: result.reason };
+    if (transition.kind === 'ignored') {
+      return { kind: 'ignored', reason: transition.reason };
     }
 
-    await this.videoRepository.save(result.video);
+    await this.videoRepository.save(transition.video);
     await this.videoListCache.invalidate(video.ownerId);
-    return { kind: 'applied', status: result.video.status };
+    return { kind: 'applied', status: transition.video.status };
   }
 }

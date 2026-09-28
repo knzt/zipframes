@@ -12,7 +12,6 @@ datasource db {
 }
 
 enum VideoStatus {
-  AWAITING_UPLOAD
   QUEUED
   PROCESSING
   DONE
@@ -32,15 +31,13 @@ model Video {
   sourceKey        String      @unique(map: "uq_videos_source_key") @map("source_key") @db.VarChar(512)
   resultKey        String?     @map("result_key") @db.VarChar(512)
   frameCount       Int?        @map("frame_count")
-  status           VideoStatus @default(AWAITING_UPLOAD)
+  status           VideoStatus
   errorCode        String?     @map("error_code") @db.VarChar(50)
   failureReason    String?     @map("failure_reason")
   expiresAt        DateTime?   @map("expires_at") @db.Timestamptz
-  sourcePurgedAt   DateTime?   @map("source_purged_at") @db.Timestamptz
-  resultPurgedAt   DateTime?   @map("result_purged_at") @db.Timestamptz
   createdAt        DateTime    @default(now()) @map("created_at") @db.Timestamptz
   updatedAt        DateTime    @default(now()) @map("updated_at") @db.Timestamptz
-  version          Int         @default(0)
+  version          Int
 
   @@index([ownerId, createdAt(sort: Desc)], map: "idx_videos_owner")
   @@map("videos")

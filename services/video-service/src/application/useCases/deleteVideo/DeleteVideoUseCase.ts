@@ -1,10 +1,10 @@
 import { ConflictError, err, ok } from '@zipframes/core';
 import type { Result } from '@zipframes/core';
 
+import { VideoNotFoundError } from '../../errors/VideoNotFoundError.js';
 import type { ObjectStorage } from '../../interfaces/gateways/ObjectStorage.js';
 import type { VideoListCache } from '../../interfaces/gateways/VideoListCache.js';
 import type { VideoRepository } from '../../interfaces/repositories/VideoRepository.js';
-import { VideoNotFoundError } from '../../errors/VideoNotFoundError.js';
 import type {
   DeleteVideoUseCaseError,
   DeleteVideoUseCaseInput,
@@ -24,9 +24,9 @@ export class DeleteVideoUseCase {
   ) {}
 
   async execute(
-    request: DeleteVideoUseCaseInput,
+    deletion: DeleteVideoUseCaseInput,
   ): Promise<Result<DeleteVideoUseCaseOutput, DeleteVideoUseCaseError>> {
-    const video = await this.videoRepository.findByIdForOwner(request.videoId, request.ownerId);
+    const video = await this.videoRepository.findByIdForOwner(deletion.videoId, deletion.ownerId);
     if (video === null) {
       return err(new VideoNotFoundError());
     }

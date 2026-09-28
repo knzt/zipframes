@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { Video, type ProcessingEvent } from '../../../../src/domain/entities/video.js';
 import {
-  InvalidVideoTransitionError,
-  UploadNotFoundError,
-} from '../../../../src/domain/errors/videoErrors.js';
+  brandVideoId,
+  Video,
+  type ProcessingEvent,
+} from '../../../../src/domain/entities/video.js';
+import { asFileName } from '../../../../src/domain/valueObjects/fileName.js';
+import { InvalidVideoTransitionError } from '../../../../src/domain/errors/videoErrors.js';
 import { framesPackageKeyFor } from '../../../../src/domain/policies/storageKeys.js';
 import type { VideoStatus } from '../../../../src/domain/valueObjects/videoStatus.js';
 import {
@@ -20,10 +22,10 @@ import {
 const NOW = new Date('2026-09-27T12:00:00.000Z');
 const LATER = new Date('2026-09-27T12:05:00.000Z');
 
-const request = {
+const received = {
+  id: brandVideoId(VIDEO_ID),
   ownerId: OWNER_ID,
-  originalFileName: 'aula.mp4',
-  contentType: 'video/mp4',
+  file: { name: asFileName('aula.mp4'), contentType: 'video/mp4' },
   sizeBytes: 2048,
   maxSizeBytes: MAX_UPLOAD_BYTES,
   now: NOW,
@@ -52,13 +54,11 @@ const applied = (status: VideoStatus, event: ProcessingEvent): Video => {
   return outcome.video;
 };
 
-describe('Video.requestUpload', () => {
-  it('opens a video waiting for its file, with keys derived from owner and id', () => {
-    const result = Video.requestUpload({ ...request, id: VIDEO_ID });
+describe('Video.receive', () => {
+  it('queues a stored file, with the source key derived from owner and id', () => {
+    const result = Video.receive(received);
 
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.value.toJSON()).toEqual({
+    expect(result.ok && result.value.toJSON()).toEqual({
       id: VIDEO_ID,
       ownerId: OWNER_ID,
       originalFileName: 'aula.mp4',
@@ -67,103 +67,50 @@ describe('Video.requestUpload', () => {
       sourceKey: `uploads/${OWNER_ID}/${VIDEO_ID}`,
       resultKey: null,
       frameCount: null,
-      status: 'AWAITING_UPLOAD',
+      status: 'QUEUED',
       errorCode: null,
       failureReason: null,
       expiresAt: null,
-      sourcePurgedAt: null,
-      resultPurgedAt: null,
       createdAt: NOW,
       updatedAt: NOW,
       version: 0,
     });
   });
 
-  it('generates a UUID when no id is given', () => {
-    const result = Video.requestUpload(request);
-
-    expect(result.ok && result.value.id).toMatch(/^[0-9a-f-]{36}$/u);
-  });
-
-  it('rejects a file extension the context does not accept', () => {
-    expect(Video.requestUpload({ ...request, originalFileName: 'foto.png' })).toMatchObject({
-      ok: false,
-      error: { code: 'UNSUPPORTED_EXTENSION' },
-    });
-  });
-
-  it.each(['', 'video', 'video/mp4; codecs=avc1', `video/${'x'.repeat(100)}`])(
-    'rejects the content type %j',
-    (contentType) => {
-      expect(Video.requestUpload({ ...request, contentType })).toMatchObject({
-        ok: false,
-        error: { code: 'INVALID_CONTENT_TYPE' },
-      });
-    },
-  );
-
   it.each([0, -1, 1.5, Number.NaN])('rejects the size %d', (sizeBytes) => {
-    expect(Video.requestUpload({ ...request, sizeBytes })).toMatchObject({
+    expect(Video.receive({ ...received, sizeBytes })).toMatchObject({
       ok: false,
       error: { code: 'INVALID_FILE_SIZE' },
     });
   });
 
-  it('rejects a declared size above the limit and accepts one exactly at it', () => {
-    expect(Video.requestUpload({ ...request, sizeBytes: MAX_UPLOAD_BYTES + 1 })).toMatchObject({
+  it('rejects a file above the limit and accepts one exactly at it', () => {
+    expect(Video.receive({ ...received, sizeBytes: MAX_UPLOAD_BYTES + 1 })).toMatchObject({
       ok: false,
       error: { code: 'FILE_TOO_LARGE' },
     });
-    expect(Video.requestUpload({ ...request, sizeBytes: MAX_UPLOAD_BYTES }).ok).toBe(true);
+    expect(Video.receive({ ...received, sizeBytes: MAX_UPLOAD_BYTES }).ok).toBe(true);
   });
 });
 
-describe('Video.confirmUpload', () => {
-  const confirm = (
-    video: Video,
-    storedObject: { sizeBytes: number } | null,
-  ): ReturnType<Video['confirmUpload']> =>
-    video.confirmUpload({ storedObject, maxSizeBytes: MAX_UPLOAD_BYTES, now: LATER });
+describe('Video.fail', () => {
+  const failure = { errorCode: 'VIDEO_NOT_QUEUED', reason: 'the broker refused it', now: LATER };
 
-  it('queues the video and records the size the storage holds', () => {
-    const result = confirm(aVideo('AWAITING_UPLOAD'), { sizeBytes: 4096 });
+  it.each<VideoStatus>(['QUEUED', 'PROCESSING'])('moves %s to FAILED with the reason', (status) => {
+    const result = aVideo(status).fail(failure);
 
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.value.status).toBe('QUEUED');
-    expect(result.value.sizeBytes).toBe(4096);
-    expect(result.value.updatedAt).toEqual(LATER);
-    expect(result.value.version).toBe(0);
+    expect(result.ok && result.value.toJSON()).toMatchObject({
+      status: 'FAILED',
+      errorCode: 'VIDEO_NOT_QUEUED',
+      failureReason: 'the broker refused it',
+      updatedAt: LATER,
+    });
   });
 
-  it('refuses a video that is no longer waiting for its upload', () => {
-    const result = confirm(aVideo('QUEUED'), { sizeBytes: 4096 });
-
-    expect(result).toMatchObject({ ok: false });
-    expect(!result.ok && result.error).toBeInstanceOf(InvalidVideoTransitionError);
-  });
-
-  it('checks the status before the storage, so a queued video is never "not uploaded"', () => {
-    const result = confirm(aVideo('DONE'), null);
+  it.each<VideoStatus>(['DONE', 'FAILED', 'EXPIRED', 'DELETED'])('refuses %s', (status) => {
+    const result = aVideo(status).fail(failure);
 
     expect(!result.ok && result.error).toBeInstanceOf(InvalidVideoTransitionError);
-  });
-
-  it('refuses when nothing reached the storage', () => {
-    const result = confirm(aVideo('AWAITING_UPLOAD'), null);
-
-    expect(!result.ok && result.error).toBeInstanceOf(UploadNotFoundError);
-  });
-
-  it('refuses an empty or oversized stored file', () => {
-    expect(confirm(aVideo(), { sizeBytes: 0 })).toMatchObject({
-      ok: false,
-      error: { code: 'INVALID_FILE_SIZE' },
-    });
-    expect(confirm(aVideo(), { sizeBytes: MAX_UPLOAD_BYTES + 1 })).toMatchObject({
-      ok: false,
-      error: { code: 'FILE_TOO_LARGE' },
-    });
   });
 });
 
@@ -224,15 +171,6 @@ describe('Video.applyProcessingEvent', () => {
     ).toEqual({ kind: 'ignored', reason: 'already_processing' });
   });
 
-  it('reports an event for a video that was never queued', () => {
-    expect(
-      aVideo('AWAITING_UPLOAD').applyProcessingEvent(completed, {
-        retentionMs: RETENTION_MS,
-        now: LATER,
-      }),
-    ).toEqual({ kind: 'ignored', reason: 'not_queued' });
-  });
-
   it('never accepts a package key that belongs to another video', () => {
     const outcome = aVideo('PROCESSING').applyProcessingEvent(
       { ...completed, resultKey: framesPackageKeyFor(OTHER_OWNER_ID, VIDEO_ID) },
@@ -261,35 +199,22 @@ describe('Video.downloadAvailability', () => {
     expect(aVideo(status).downloadAvailability(NOW)).toEqual({ kind: 'gone' });
   });
 
-  it.each<VideoStatus>(['AWAITING_UPLOAD', 'QUEUED', 'PROCESSING', 'FAILED'])(
-    'is not ready for %s',
-    (status) => {
-      expect(aVideo(status).downloadAvailability(NOW)).toEqual({ kind: 'not_ready' });
-    },
-  );
+  it.each<VideoStatus>(['QUEUED', 'PROCESSING', 'FAILED'])('is not ready for %s', (status) => {
+    expect(aVideo(status).downloadAvailability(NOW)).toEqual({ kind: 'not_ready' });
+  });
 });
 
 describe('Video.expire', () => {
   const expiresAt = new Date(CREATED_AT.getTime() + RETENTION_MS);
 
-  it('ends the window: EXPIRED, no package key, both purges recorded', () => {
+  it('ends the window: EXPIRED and no package key', () => {
     const result = aVideo('DONE').expire(expiresAt);
 
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.value.toJSON()).toMatchObject({
+    expect(result.ok && result.value.toJSON()).toMatchObject({
       status: 'EXPIRED',
       resultKey: null,
-      resultPurgedAt: expiresAt,
-      sourcePurgedAt: expiresAt,
+      updatedAt: expiresAt,
     });
-  });
-
-  it('keeps an earlier source purge date', () => {
-    const purgedAt = new Date('2026-09-27T10:30:00.000Z');
-    const result = aVideo('DONE', { sourcePurgedAt: purgedAt }).expire(expiresAt);
-
-    expect(result.ok && result.value.toJSON().sourcePurgedAt).toEqual(purgedAt);
   });
 
   it('refuses before the window ends or outside DONE', () => {
@@ -299,7 +224,7 @@ describe('Video.expire', () => {
 });
 
 describe('Video.delete', () => {
-  it.each<VideoStatus>(['AWAITING_UPLOAD', 'DONE', 'FAILED', 'EXPIRED'])(
+  it.each<VideoStatus>(['DONE', 'FAILED', 'EXPIRED'])(
     'deletes from %s, dropping the package key',
     (status) => {
       const result = aVideo(status).delete(LATER);
@@ -311,24 +236,6 @@ describe('Video.delete', () => {
     },
   );
 
-  it('records when each file was purged', () => {
-    const result = aVideo('DONE').delete(LATER);
-
-    expect(result.ok && result.value.toJSON()).toMatchObject({
-      sourcePurgedAt: LATER,
-      resultPurgedAt: LATER,
-    });
-  });
-
-  it('keeps the purge dates it already had', () => {
-    const result = aVideo('EXPIRED').delete(LATER);
-
-    expect(result.ok && result.value.toJSON()).toMatchObject({
-      sourcePurgedAt: CREATED_AT,
-      resultPurgedAt: CREATED_AT,
-    });
-  });
-
   it.each<VideoStatus>(['QUEUED', 'PROCESSING', 'DELETED'])('refuses %s', (status) => {
     const result = aVideo(status).delete(LATER);
 
@@ -338,15 +245,15 @@ describe('Video.delete', () => {
 });
 
 describe('Video.objectKeysToPurge', () => {
-  it('lists the source until it is purged, and the package while it exists', () => {
-    expect(aVideo('AWAITING_UPLOAD').objectKeysToPurge()).toEqual([
-      `uploads/${OWNER_ID}/${VIDEO_ID}`,
-    ]);
+  it('always lists the original, and the package while there is one', () => {
+    const source = `uploads/${OWNER_ID}/${VIDEO_ID}`;
+
+    expect(aVideo('FAILED').objectKeysToPurge()).toEqual([source]);
     expect(aVideo('DONE').objectKeysToPurge()).toEqual([
-      `uploads/${OWNER_ID}/${VIDEO_ID}`,
+      source,
       framesPackageKeyFor(OWNER_ID, VIDEO_ID),
     ]);
-    expect(aVideo('EXPIRED').objectKeysToPurge()).toEqual([]);
+    expect(aVideo('EXPIRED').objectKeysToPurge()).toEqual([source]);
   });
 });
 

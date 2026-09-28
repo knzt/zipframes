@@ -9,6 +9,8 @@ export interface HttpRouteDefinition {
   /** Fastify path syntax, e.g. `/videos/:videoId`. */
   readonly path: string;
   readonly openApi: Record<string, unknown>;
+  /** The body is one uploaded file (multipart/form-data), handed over as a stream. */
+  readonly multipart?: boolean;
   readonly handle: (request: RoutedHttpRequest) => Promise<HttpReply>;
 }
 

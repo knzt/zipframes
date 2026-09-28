@@ -1,8 +1,8 @@
 import type { Video } from '../entities/video.js';
 
 /**
- * The only fact this context publishes: the upload was confirmed and the
- * video is waiting for the worker. It travels as `video.uploaded`.
+ * The only fact this context publishes: the file is stored and the video is
+ * waiting for the worker. It travels as `video.uploaded`.
  */
 export interface VideoQueued {
   readonly videoId: string;

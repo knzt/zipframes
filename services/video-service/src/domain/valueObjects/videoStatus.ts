@@ -1,6 +1,5 @@
 /** Every stage of a video's life cycle, in the order it usually moves through them. */
 export const VIDEO_STATUSES = [
-  'AWAITING_UPLOAD',
   'QUEUED',
   'PROCESSING',
   'DONE',
@@ -22,4 +21,4 @@ export const PROCESSING_FINISHED: readonly VideoStatus[] = ['DONE', 'FAILED', 'E
  * alone until the worker settles it, so the worker never reads a source that
  * the owner already removed.
  */
-export const DELETABLE: readonly VideoStatus[] = ['AWAITING_UPLOAD', 'DONE', 'FAILED', 'EXPIRED'];
+export const DELETABLE: readonly VideoStatus[] = ['DONE', 'FAILED', 'EXPIRED'];

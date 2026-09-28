@@ -15,7 +15,6 @@ const byStatus = (
   ownerId: string,
   videoId: string,
 ): Record<VideoStatus, Partial<PersistedVideo>> => ({
-  AWAITING_UPLOAD: {},
   QUEUED: {},
   PROCESSING: {},
   DONE: {
@@ -24,13 +23,13 @@ const byStatus = (
     expiresAt: new Date(CREATED_AT.getTime() + RETENTION_MS),
   },
   FAILED: { errorCode: 'UNSUPPORTED_MEDIA', failureReason: 'ffmpeg rejected the media file' },
-  EXPIRED: { frameCount: 12, resultPurgedAt: CREATED_AT, sourcePurgedAt: CREATED_AT },
-  DELETED: { sourcePurgedAt: CREATED_AT },
+  EXPIRED: { frameCount: 12 },
+  DELETED: {},
 });
 
-/** A stored video in `status`, with every other column overridable. */
+/** A video already stored (version 1) in `status`, with every column overridable. */
 export const aVideo = (
-  status: VideoStatus = 'AWAITING_UPLOAD',
+  status: VideoStatus = 'QUEUED',
   overrides: Partial<PersistedVideo> = {},
 ): Video => {
   const id = overrides.id ?? VIDEO_ID;
@@ -48,11 +47,9 @@ export const aVideo = (
     errorCode: null,
     failureReason: null,
     expiresAt: null,
-    sourcePurgedAt: null,
-    resultPurgedAt: null,
     createdAt: CREATED_AT,
     updatedAt: CREATED_AT,
-    version: 0,
+    version: 1,
     ...byStatus(ownerId, id)[status],
     ...overrides,
   });

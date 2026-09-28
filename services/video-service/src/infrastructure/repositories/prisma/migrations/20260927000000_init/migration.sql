@@ -4,7 +4,6 @@
 -- inside the aggregate's invariants.
 
 CREATE TYPE "video_status" AS ENUM (
-  'AWAITING_UPLOAD',
   'QUEUED',
   'PROCESSING',
   'DONE',
@@ -22,15 +21,13 @@ CREATE TABLE "videos" (
   "source_key"         varchar(512)   NOT NULL,
   "result_key"         varchar(512),
   "frame_count"        integer        CHECK ("frame_count" IS NULL OR "frame_count" > 0),
-  "status"             "video_status" NOT NULL DEFAULT 'AWAITING_UPLOAD',
+  "status"             "video_status" NOT NULL,
   "error_code"         varchar(50),
   "failure_reason"     text,
   "expires_at"         timestamptz,
-  "source_purged_at"   timestamptz,
-  "result_purged_at"   timestamptz,
   "created_at"         timestamptz    NOT NULL DEFAULT now(),
   "updated_at"         timestamptz    NOT NULL DEFAULT now(),
-  "version"            integer        NOT NULL DEFAULT 0,
+  "version"            integer        NOT NULL,
   CONSTRAINT "ck_videos_done"        CHECK ("status" <> 'DONE' OR ("result_key" IS NOT NULL AND "frame_count" > 0 AND "expires_at" IS NOT NULL)),
   CONSTRAINT "ck_videos_failed"      CHECK ("status" <> 'FAILED' OR "failure_reason" IS NOT NULL),
   CONSTRAINT "ck_videos_sem_arquivo" CHECK ("status" NOT IN ('EXPIRED', 'DELETED') OR "result_key" IS NULL)

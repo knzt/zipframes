@@ -3,25 +3,23 @@ import { createMetrics, type TechnicalMetrics } from '@zipframes/telemetry';
 import type { FastifyInstance, LightMyRequestResponse } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { ConfirmUploadUseCase } from '../../../../src/application/useCases/confirmUpload/ConfirmUploadUseCase.js';
 import { DeleteVideoUseCase } from '../../../../src/application/useCases/deleteVideo/DeleteVideoUseCase.js';
 import { GetDownloadUrlUseCase } from '../../../../src/application/useCases/getDownloadUrl/GetDownloadUrlUseCase.js';
 import { GetVideoUseCase } from '../../../../src/application/useCases/getVideo/GetVideoUseCase.js';
 import { ListUserVideosUseCase } from '../../../../src/application/useCases/listUserVideos/ListUserVideosUseCase.js';
-import { RequestUploadUseCase } from '../../../../src/application/useCases/requestUpload/RequestUploadUseCase.js';
+import { UploadVideoUseCase } from '../../../../src/application/useCases/uploadVideo/UploadVideoUseCase.js';
 import { bindHttpRoutes } from '../../../../src/infrastructure/http/fastify/bindHttpRoutes.js';
 import { registerHealthRoutes } from '../../../../src/infrastructure/http/fastify/health.routes.js';
 import { createHttpServer } from '../../../../src/infrastructure/http/fastify/server.js';
 import { videoRoutes } from '../../../../src/infrastructure/http/routes/videoRoutes.js';
-import { ConfirmUploadController } from '../../../../src/interface-adapters/ConfirmUploadController.js';
 import { DeleteVideoController } from '../../../../src/interface-adapters/DeleteVideoController.js';
 import { GetDownloadUrlController } from '../../../../src/interface-adapters/GetDownloadUrlController.js';
 import { GetVideoController } from '../../../../src/interface-adapters/GetVideoController.js';
 import { ListUserVideosController } from '../../../../src/interface-adapters/ListUserVideosController.js';
-import { RequestUploadController } from '../../../../src/interface-adapters/RequestUploadController.js';
+import { UploadVideoController } from '../../../../src/interface-adapters/UploadVideoController.js';
 import { bearerFor, fakeAuthenticator } from '../../../support/fake-authenticator.js';
 import {
-  FakeStorageUrlSigner,
+  FakeDownloadUrlSigner,
   InMemoryEventPublisher,
   InMemoryObjectStorage,
   InMemoryVideoListCache,
@@ -31,13 +29,12 @@ import { silentLogger } from '../../../support/silent-logger.js';
 import {
   aVideo,
   CORRELATION_ID,
-  MAX_UPLOAD_BYTES,
   OTHER_OWNER_ID,
   OWNER_ID,
   VIDEO_ID,
 } from '../../../support/videos.js';
 
-const SOURCE_KEY = `uploads/${OWNER_ID}/${VIDEO_ID}`;
+const MAX_UPLOAD_BYTES = 16;
 const auth = { authorization: bearerFor(OWNER_ID) };
 
 let app: FastifyInstance;
@@ -51,7 +48,7 @@ beforeEach(async () => {
   videos = new InMemoryVideoRepository();
   storage = new InMemoryObjectStorage();
   publisher = new InMemoryEventPublisher();
-  const signer = new FakeStorageUrlSigner();
+  const signer = new FakeDownloadUrlSigner();
   const cache = new InMemoryVideoListCache();
   metrics = createMetrics({
     service: 'video-service-test',
@@ -64,17 +61,14 @@ beforeEach(async () => {
     corsOrigin: '*',
     logger: silentLogger(),
     version: '0.0.0',
+    maxUploadBytes: MAX_UPLOAD_BYTES,
     metrics,
   });
   bindHttpRoutes(
     app,
     videoRoutes({
-      requestUpload: new RequestUploadController(
-        new RequestUploadUseCase(videos, signer, cache, MAX_UPLOAD_BYTES, 900),
-        fakeAuthenticator,
-      ),
-      confirmUpload: new ConfirmUploadController(
-        new ConfirmUploadUseCase(videos, storage, publisher, cache, MAX_UPLOAD_BYTES),
+      uploadVideo: new UploadVideoController(
+        new UploadVideoUseCase(videos, storage, publisher, cache, MAX_UPLOAD_BYTES),
         fakeAuthenticator,
       ),
       listUserVideos: new ListUserVideosController(
@@ -115,7 +109,6 @@ afterEach(async () => {
 describe('authentication', () => {
   it.each([
     ['POST', '/videos'],
-    ['POST', `/videos/${VIDEO_ID}/confirm`],
     ['GET', '/videos'],
     ['GET', `/videos/${VIDEO_ID}`],
     ['GET', `/videos/${VIDEO_ID}/download`],
@@ -130,34 +123,69 @@ describe('authentication', () => {
   });
 });
 
+const BOUNDARY = 'zipframes-test-boundary';
+
+/** A `multipart/form-data` body with one file part, as a browser would send it. */
+const multipart = (
+  fileName: string,
+  contentType: string,
+  sizeBytes: number,
+  field = 'file',
+): { payload: Buffer; headers: Record<string, string> } => ({
+  payload: Buffer.concat([
+    Buffer.from(
+      `--${BOUNDARY}\r\n` +
+        `Content-Disposition: form-data; name="${field}"; filename="${fileName}"\r\n` +
+        `Content-Type: ${contentType}\r\n\r\n`,
+    ),
+    Buffer.alloc(sizeBytes, 1),
+    Buffer.from(`\r\n--${BOUNDARY}--\r\n`),
+  ]),
+  headers: { 'content-type': `multipart/form-data; boundary=${BOUNDARY}` },
+});
+
 describe('POST /videos', () => {
-  it('opens the video as the token subject and returns 201 with the upload URL', async () => {
-    const response = await app.inject({
+  const upload = (
+    body: ReturnType<typeof multipart>,
+    headers: Record<string, string> = auth,
+  ): Promise<LightMyRequestResponse> =>
+    app.inject({
       method: 'POST',
       url: '/videos',
-      headers: auth,
-      payload: { originalFileName: 'aula.mp4', contentType: 'video/mp4', sizeBytes: 2048 },
+      payload: body.payload,
+      headers: { ...headers, ...body.headers, 'x-correlation-id': CORRELATION_ID },
     });
 
+  it('stores the file as the token subject and answers 201 QUEUED', async () => {
+    const response = await upload(multipart('aula.mp4', 'video/mp4', 10));
+
     expect(response.statusCode).toBe(201);
-    const body = response.json<{ videoId: string; uploadUrl: string; expiresInSeconds: number }>();
-    expect(body.expiresInSeconds).toBe(900);
-    expect(videos.rows.get(body.videoId)?.ownerId).toBe(OWNER_ID);
+    const body = response.json<{ videoId: string; status: string }>();
+    expect(body.status).toBe('QUEUED');
+    expect(videos.rows.get(body.videoId)?.toJSON()).toMatchObject({
+      ownerId: OWNER_ID,
+      sizeBytes: 10,
+    });
+    expect(publisher.published[0]?.correlationId).toBe(CORRELATION_ID);
   });
 
   it('answers 400 with the domain message for an unsupported file', async () => {
-    const response = await app.inject({
-      method: 'POST',
-      url: '/videos',
-      headers: auth,
-      payload: { originalFileName: 'foto.png', contentType: 'image/png', sizeBytes: 2048 },
-    });
+    const response = await upload(multipart('foto.png', 'image/png', 10));
 
     expect(response.statusCode).toBe(400);
     expect(response.json()).toMatchObject({ title: expect.stringContaining('mp4') as string });
+    expect(storage.objects.size).toBe(0);
   });
 
-  it('answers 400 for a body the contract rejects', async () => {
+  it('answers 413 for a file above the limit, keeping nothing', async () => {
+    const response = await upload(multipart('aula.mp4', 'video/mp4', MAX_UPLOAD_BYTES + 100));
+
+    expect(response.statusCode).toBe(413);
+    expect(storage.objects.size).toBe(0);
+    expect(videos.rows.size).toBe(0);
+  });
+
+  it('answers 400 for a request without a file', async () => {
     const response = await app.inject({
       method: 'POST',
       url: '/videos',
@@ -167,49 +195,18 @@ describe('POST /videos', () => {
 
     expect(response.statusCode).toBe(400);
   });
-});
 
-describe('POST /videos/:videoId/confirm', () => {
-  const confirm = (headers = auth, videoId = VIDEO_ID): Promise<LightMyRequestResponse> =>
-    app.inject({
-      method: 'POST',
-      url: `/videos/${videoId}/confirm`,
-      headers: { ...headers, 'x-correlation-id': CORRELATION_ID },
-    });
+  it('answers 401 without reading the file', async () => {
+    const response = await upload(multipart('aula.mp4', 'video/mp4', 10), {});
 
-  it('queues the video and publishes with the request correlation id', async () => {
-    videos.seed(aVideo('AWAITING_UPLOAD'));
-    storage.put(SOURCE_KEY, 2048);
-
-    const response = await confirm();
-
-    expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ videoId: VIDEO_ID, status: 'QUEUED' });
-    expect(publisher.published[0]?.correlationId).toBe(CORRELATION_ID);
+    expect(response.statusCode).toBe(401);
+    expect(storage.objects.size).toBe(0);
   });
 
-  it('answers 400 for an id that is not a UUID', async () => {
-    expect((await confirm(auth, 'abc')).statusCode).toBe(400);
-  });
-
-  it("answers 404 for another owner's video", async () => {
-    videos.seed(aVideo('AWAITING_UPLOAD'));
-
-    expect((await confirm({ authorization: bearerFor(OTHER_OWNER_ID) })).statusCode).toBe(404);
-  });
-
-  it('answers 409 when nothing was uploaded', async () => {
-    videos.seed(aVideo('AWAITING_UPLOAD'));
-
-    expect((await confirm()).statusCode).toBe(409);
-  });
-
-  it('answers 503 problem+json when the broker does not confirm', async () => {
-    videos.seed(aVideo('AWAITING_UPLOAD'));
-    storage.put(SOURCE_KEY, 2048);
+  it('answers 503 problem+json and records FAILED when the broker does not confirm', async () => {
     publisher.failWith = new Error('channel closed');
 
-    const response = await confirm();
+    const response = await upload(multipart('aula.mp4', 'video/mp4', 10));
 
     expect(response.statusCode).toBe(503);
     expect(response.json()).toMatchObject({
@@ -217,6 +214,7 @@ describe('POST /videos/:videoId/confirm', () => {
       title: 'the video could not be queued, try again',
       correlationId: CORRELATION_ID,
     });
+    expect([...videos.rows.values()].map((video) => video.status)).toEqual(['FAILED']);
   });
 });
 
@@ -387,12 +385,7 @@ describe('server behaviour', () => {
     }>();
 
     expect(Object.keys(document.paths).sort()).toEqual(
-      expect.arrayContaining([
-        '/videos',
-        '/videos/{videoId}',
-        '/videos/{videoId}/confirm',
-        '/videos/{videoId}/download',
-      ]),
+      expect.arrayContaining(['/videos', '/videos/{videoId}', '/videos/{videoId}/download']),
     );
     expect(document.components.securitySchemes).toHaveProperty('bearerAuth');
   });

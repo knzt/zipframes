@@ -16,12 +16,11 @@ import {
 import { createProcessingStatusObserver } from '../infrastructure/observability/processingStatusObserver.js';
 import { startIntervalJob } from '../infrastructure/scheduling/intervalJob.js';
 import { createApplyProcessingEventController } from './factories/controllers/applyProcessingEventController.js';
-import { createConfirmUploadController } from './factories/controllers/confirmUploadController.js';
 import { createDeleteVideoController } from './factories/controllers/deleteVideoController.js';
 import { createGetDownloadUrlController } from './factories/controllers/getDownloadUrlController.js';
 import { createGetVideoController } from './factories/controllers/getVideoController.js';
 import { createListUserVideosController } from './factories/controllers/listUserVideosController.js';
-import { createRequestUploadController } from './factories/controllers/requestUploadController.js';
+import { createUploadVideoController } from './factories/controllers/uploadVideoController.js';
 import { createAmqplib, createAmqpPing } from './factories/externals/amqplib.js';
 import { createJwtAuthenticator } from './factories/externals/authenticator.js';
 import { createPrisma, createPrismaPing } from './factories/externals/prisma.js';
@@ -32,9 +31,13 @@ import { createObjectStorageGateway } from './factories/gateways/objectStorageGa
 import { createVideoListCacheGateway } from './factories/gateways/videoListCacheGateway.js';
 import { createExpireFramesPackagesUseCase } from './factories/use-cases/expireFramesPackagesUseCase.js';
 
-const HOUR_MS = 60 * 60 * 1000;
+export interface RunningVideoService {
+  /** Where the HTTP server listens; with `PORT=0` it carries the port the system picked. */
+  readonly url: string;
+  readonly stop: () => Promise<void>;
+}
 
-export const startVideoService = async (): Promise<{ stop: () => Promise<void> }> => {
+export const startVideoService = async (): Promise<RunningVideoService> => {
   const config = loadConfig();
   const logger = createLogger({
     service: 'video-service',
@@ -92,9 +95,8 @@ export const startVideoService = async (): Promise<{ stop: () => Promise<void> }
         audience: config.jwtAudience,
       }),
       maxUploadBytes: config.maxUploadBytes,
-      uploadUrlTtlSeconds: config.uploadUrlTtlSeconds,
       downloadUrlTtlSeconds: config.downloadUrlTtlSeconds,
-      retentionMs: config.resultRetentionHours * HOUR_MS,
+      retentionMs: config.resultRetentionSeconds * 1000,
       expirationBatchSize: config.expirationBatchSize,
     };
 
@@ -102,14 +104,14 @@ export const startVideoService = async (): Promise<{ stop: () => Promise<void> }
       corsOrigin: config.corsOrigin,
       logger,
       version: config.serviceVersion,
+      maxUploadBytes: config.maxUploadBytes,
       metrics: technicalMetrics,
     });
     closers.push(() => app.close());
     bindHttpRoutes(
       app,
       videoRoutes({
-        requestUpload: createRequestUploadController(externals),
-        confirmUpload: createConfirmUploadController(externals),
+        uploadVideo: createUploadVideoController(externals),
         listUserVideos: createListUserVideosController(externals),
         getVideo: createGetVideoController(externals),
         getDownloadUrl: createGetDownloadUrlController(externals),
@@ -160,10 +162,11 @@ export const startVideoService = async (): Promise<{ stop: () => Promise<void> }
     );
     closers.push(() => expirationJob.stop());
 
-    await app.listen({ port: config.port, host: '0.0.0.0' });
-    logger.info('video-service listening', { port: config.port, queue: PROCESSING_STATUS_QUEUE });
+    const url = await app.listen({ port: config.port, host: '0.0.0.0' });
+    logger.info('video-service listening', { url, queue: PROCESSING_STATUS_QUEUE });
 
     return {
+      url,
       stop: async () => {
         await app.close();
         await expirationJob.stop();

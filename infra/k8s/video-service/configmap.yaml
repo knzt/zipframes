@@ -8,7 +8,7 @@ data:
   CORS_ORIGIN: '*'
   REDIS_URL: redis://redis.zipframes.svc.cluster.local:6379
   S3_ENDPOINT: http://seaweedfs.zipframes.svc.cluster.local:8333
-  # Host the browser reaches through the Ingress; the presigned URLs are signed for it.
+  # Host the browser reaches through the Ingress; the download URLs are signed for it.
   S3_PUBLIC_ENDPOINT: https://storage.zipframes.local
   S3_REGION: us-east-1
   S3_BUCKET: videos
@@ -17,9 +17,8 @@ data:
   JWT_ISSUER: https://auth.zipframes.local
   JWT_AUDIENCE: zipframes
   MAX_UPLOAD_BYTES: '524288000'
-  UPLOAD_URL_TTL_SECONDS: '900'
   DOWNLOAD_URL_TTL_SECONDS: '300'
-  RESULT_RETENTION_HOURS: '24'
+  RESULT_RETENTION_SECONDS: '86400'
   LIST_CACHE_TTL_SECONDS: '60'
   EXPIRATION_SWEEP_INTERVAL_MS: '60000'
   EXPIRATION_BATCH_SIZE: '100'
