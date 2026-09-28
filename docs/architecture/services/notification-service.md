@@ -65,7 +65,7 @@ notification-service/src/
     └── factories/{externals,repositories,gateways,use-cases,controllers}/
 ```
 
-`amqpTopology.ts` só reexporta `createNotificationConsumerTopology` de `@zipframes/communication`.
+`amqpTopology.ts` declara a fila, o retry por TTL (sem republicar em `zipframes.events`) e a DLX compartilhada, no mesmo padrão do processor-worker. `@zipframes/communication` só entra com `createNotifier` (publicação tipada) e `defineMessageHandler`.
 
 ## Casos de uso
 
