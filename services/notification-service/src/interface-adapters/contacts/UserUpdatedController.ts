@@ -5,8 +5,8 @@ import {
 } from '@zipframes/communication';
 import { userUpdatedEventSchema, type UserUpdatedEvent } from '@zipframes/schemas/auth-service';
 
-import type { Contact } from '../domain/entities/contact.js';
-import type { UpsertContactUseCase } from '../application/useCases/upsertContact/UpsertContactUseCase.js';
+import type { UpsertContactUseCase } from '../../application/useCases/upsertContact/UpsertContactUseCase.js';
+import type { Contact } from '../../domain/entities/contact.js';
 
 export type UserUpdatedHandlerOptions = MessageHandlerOptions<UserUpdatedEvent, Contact>;
 

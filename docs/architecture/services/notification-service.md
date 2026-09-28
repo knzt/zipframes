@@ -6,13 +6,13 @@ Referências: [dominio.md — Notificação](../../domain/dominio.md), [AsyncAPI
 
 ## Objetivo do serviço
 
-Consumir `user.registered`, `user.updated`, `user.deleted`, `video.processed` e `video.failed`, projetar o contato e enviar e-mail. `VIDEO_PROCESSED` avisa que o zip está pronto (nome do arquivo, quantidade de frames, URL GET assinada no endpoint público do S3, fallback `{APP_PUBLIC_URL}/videos/{videoId}/download` se o link falhar, e que o arquivo expira em 24 horas). `VIDEO_FAILED` avisa a falha (nome do arquivo, data do envio e `{APP_PUBLIC_URL}/videos` para enviar de novo). SMTP fica neste processo (Nodemailer). Os outros serviços disparam esses e-mails só publicando eventos, via `createNotifier` de `@zipframes/communication`. Sem Fastify, sem anexo zip, sem tabela `processed_events`.
+Dois trabalhos distintos. Identidade (`user.registered`, `user.updated`, `user.deleted`) projeta o contato. Resultado de vídeo (`video.processed`, `video.failed`) envia o e-mail. `VIDEO_PROCESSED` avisa que o zip está pronto (nome do arquivo, quantidade de frames, URL GET assinada no endpoint público do S3, fallback `{APP_PUBLIC_URL}/videos/{videoId}/download` se o link falhar, e que o arquivo expira em 24 horas). `VIDEO_FAILED` avisa a falha (nome do arquivo, data do envio e `{APP_PUBLIC_URL}/videos` para enviar de novo). SMTP fica neste processo (Nodemailer). O worker dispara esses e-mails publicando via `createNotifier` de `@zipframes/communication`. O auth publica identidade pelo `EventPublisher`. Sem Fastify, sem anexo zip, sem tabela `processed_events`.
 
 ## Camadas
 
 As dependências apontam para dentro. Os quatro anéis e o composition root estão em [layers.md](../layers.md).
 
-`NotificationEventsConsumer.handle` é o handler que `amqp.consume` recebe. Ele olha `eventType` e delega a um controller por mensagem. Cada controller usa `defineMessageHandler` de `@zipframes/communication`, que valida o envelope, faz ack, retry ou dead-letter e manda o poison para a DLQ. O caso de uso chama `ContactRepository`, `NotificationRepository`, `MailGateway` e `ObjectStorage` (`signGetUrl`). `start.ts` abre Prisma, AMQP, Nodemailer e um cliente S3 no endpoint público, chama `createNotificationEventsConsumer({ prisma, mail, smtpFrom, publicS3, bucket, appPublicUrl, downloadTtlSeconds, maxAttempts, handlerOptions })` e dá `amqp.consume(NOTIFICATION_QUEUE, consumer.handle, { retry, waitQueue: NOTIFICATION_RETRY_QUEUE })`. `handlerOptions` leva `retry`, `runInContext` (correlation id) e `onOutcome` (`recordNotificationOutcome` em `infrastructure/observability/notificationOutcome.ts`). A factory do consumer chama as dos controllers, e cada uma chama a do caso de uso, que instancia repositórios e gateways. Não há `handlers/` HTTP. O caso de uso não importa Prisma, Nodemailer nem o SDK da AWS.
+`ContactEventsConsumer.handle` e `EmailEventsConsumer.handle` são os handlers que `amqp.consume` recebe, um por fila. Cada um olha `eventType` só entre os eventos daquela fila e delega a um controller. Cada controller usa `defineMessageHandler` de `@zipframes/communication`, que valida o envelope, faz ack, retry ou dead-letter e manda o poison para a DLQ. O caso de uso chama `ContactRepository`, `NotificationRepository`, `MailGateway` e `ObjectStorage` (`signGetUrl`). `start.ts` abre Prisma, AMQP, Nodemailer e um cliente S3 no endpoint público, chama `createContactEventsConsumer` e `createEmailEventsConsumer` (o mesmo objeto de clientes, `handlerOptions` com `destination` da fila) e dá `amqp.consume` nas duas filas. `handlerOptions` leva `retry`, `runInContext` (correlation id) e `onOutcome` (`recordNotificationOutcome` em `infrastructure/observability/notificationOutcome.ts`). A factory do consumer chama as dos controllers, e cada uma chama a do caso de uso, que instancia repositórios e gateways. Não há `handlers/` HTTP. O caso de uso não importa Prisma, Nodemailer nem o SDK da AWS. `UpsertContactUseCase` ainda drena e-mails PENDING quando o endereço chega — composição de caso de uso, não um evento de identidade tratado como e-mail.
 
 ```
 main  →  interface-adapters / infrastructure  →  application  →  domain
@@ -22,8 +22,8 @@ main  →  interface-adapters / infrastructure  →  application  →  domain
 | ------------------------- | -------------------- | -------------------------------------------------------------------- |
 | `src/domain/`             | Entidades            | `Contact`, `Notification`, `NotificationAttempt`, policies de e-mail |
 | `src/application/`        | Casos de uso e ports | Envio de e-mail, upsert/delete de contato, notify processed/failed   |
-| `src/interface-adapters/` | Controllers          | Um controller AMQP por evento                                        |
-| `src/infrastructure/`     | Drivers              | Prisma, Nodemailer, S3 (só assinar GET), AMQP, consumer              |
+| `src/interface-adapters/` | Controllers          | `contacts/` e `emails/`, um controller AMQP por evento               |
+| `src/infrastructure/`     | Drivers              | Prisma, Nodemailer, S3 (só assinar GET), AMQP, dois consumers        |
 | `src/main/`               | Composition root     | `index.ts`, `start.ts`, `factories/`                                 |
 
 ### Gateway
@@ -47,24 +47,21 @@ notification-service/src/
 │   ├── useCases/{sendNotificationEmail,upsertContact,deleteContact,notifyVideoProcessed,notifyVideoFailed}/
 │   └── interfaces/{repositories,gateways}/
 ├── interface-adapters/
-│   ├── UserRegisteredController.ts
-│   ├── UserUpdatedController.ts
-│   ├── UserDeletedController.ts
-│   ├── VideoProcessedController.ts
-│   └── VideoFailedController.ts
+│   ├── contacts/{UserRegistered,UserUpdated,UserDeleted}Controller.ts
+│   └── emails/{VideoProcessed,VideoFailed}Controller.ts
 ├── infrastructure/
 │   ├── repositories/prisma/
 │   ├── gateways/{mail,storage}/
-│   ├── messaging/amqplib/{connection,amqpTopology,notificationEventsConsumer,amqpSettle}.ts
+│   ├── messaging/amqplib/{connection,amqpTopology,contactEventsConsumer,emailEventsConsumer,amqpSettle}.ts
 │   ├── observability/notificationOutcome.ts
 │   └── loadEnvConfig.ts
 └── main/
     ├── index.ts
     ├── start.ts
-    └── factories/{externals,repositories,gateways,use-cases,controllers,messaging}/
+    └── factories/{externals,repositories,gateways,use-cases,controllers/{contacts,emails},messaging}/
 ```
 
-`amqpTopology.ts` declara a fila, o retry por TTL (sem republicar em `zipframes.events`) e a DLX compartilhada, no mesmo padrão do processor-worker. `@zipframes/communication` só entra com `createNotifier` (publicação tipada) e `defineMessageHandler`.
+`amqpTopology.ts` declara as duas filas, o retry por TTL de cada uma (sem republicar em `zipframes.events`) e a DLX compartilhada, no mesmo padrão do processor-worker. `@zipframes/communication` só entra com `createNotifier` (publicação tipada de `video.processed` / `video.failed`) e `defineMessageHandler`.
 
 ## Casos de uso
 
@@ -80,9 +77,9 @@ notification-service/src/
 
 ## Mensageria
 
-Fila própria `notification-service.events` + `notification-service.events.retry`. Retry devolve a mensagem **direto para a fila principal** pelo exchange default (`''`), e não para `zipframes.events`. Republicar no exchange compartilhado entregaria `video.failed` / identidade de novo a todo assinante a cada retry. Falha permanente usa o DLX compartilhado `zipframes.events.dlx` / `zipframes.events.dlq`.
+Filas próprias `notification-service.contacts` + `.contacts.retry` e `notification-service.emails` + `.emails.retry`. Retry devolve a mensagem **direto para a fila daquele trabalho** pelo exchange default (`''`), e não para `zipframes.events`. Republicar no exchange compartilhado entregaria `video.failed` / identidade de novo a todo assinante a cada retry. Falha permanente usa o DLX compartilhado `zipframes.events.dlx` / `zipframes.events.dlq`.
 
-Bindings: `user.registered`, `user.updated`, `user.deleted`, `video.processed`, `video.failed`.
+Bindings: contacts → `user.registered`, `user.updated`, `user.deleted`. emails → `video.processed`, `video.failed`.
 
 ## Persistência
 

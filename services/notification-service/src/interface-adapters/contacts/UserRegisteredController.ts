@@ -8,8 +8,8 @@ import {
   type UserRegisteredEvent,
 } from '@zipframes/schemas/auth-service';
 
-import type { Contact } from '../domain/entities/contact.js';
-import type { UpsertContactUseCase } from '../application/useCases/upsertContact/UpsertContactUseCase.js';
+import type { UpsertContactUseCase } from '../../application/useCases/upsertContact/UpsertContactUseCase.js';
+import type { Contact } from '../../domain/entities/contact.js';
 
 export type UserRegisteredHandlerOptions = MessageHandlerOptions<UserRegisteredEvent, Contact>;
 

@@ -5,7 +5,7 @@ import {
 } from '@zipframes/communication';
 import { userDeletedEventSchema, type UserDeletedEvent } from '@zipframes/schemas/auth-service';
 
-import type { DeleteContactUseCase } from '../application/useCases/deleteContact/DeleteContactUseCase.js';
+import type { DeleteContactUseCase } from '../../application/useCases/deleteContact/DeleteContactUseCase.js';
 
 export type UserDeletedHandlerOptions = MessageHandlerOptions<UserDeletedEvent, void>;
 

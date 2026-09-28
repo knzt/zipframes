@@ -57,7 +57,7 @@ flowchart LR
   notif -- "SMTP" --> mail
 ```
 
-O auth grava o usuário e publica `user.registered` no exchange `zipframes.events`. O video-service valida o token contra o JWKS do auth, grava o arquivo no storage e o vídeo como `QUEUED` e publica `video.uploaded`. O worker escuta a fila `processor.video.uploaded`, processa e publica `video.processing.started`, `video.processed` ou `video.failed`, que o video-service consome pela fila `video-service.processing-status` para mover o status. O notification-service escuta `notification-service.events` e envia e-mail. O vídeo entra pelo video-service, em stream para o storage; o zip sai direto do storage, por uma URL assinada de curta duração.
+O auth grava o usuário e publica `user.registered` no exchange `zipframes.events`. O video-service valida o token contra o JWKS do auth, grava o arquivo no storage e o vídeo como `QUEUED` e publica `video.uploaded`. O worker escuta a fila `processor.video.uploaded`, processa e publica `video.processing.started`, `video.processed` ou `video.failed`, que o video-service consome pela fila `video-service.processing-status` para mover o status. O notification-service escuta `notification-service.contacts` (identidade) e `notification-service.emails` (resultado) e envia e-mail. O vídeo entra pelo video-service, em stream para o storage; o zip sai direto do storage, por uma URL assinada de curta duração.
 
 Nenhum processo chama outro na subida. O video-service só busca o JWKS no primeiro token que valida. A ordem entre os quatro não importa.
 

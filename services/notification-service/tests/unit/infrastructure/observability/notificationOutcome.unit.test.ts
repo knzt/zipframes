@@ -18,6 +18,7 @@ describe('recordNotificationOutcome', () => {
     const record = recordNotificationOutcome({
       logger: logger as unknown as Logger,
       metrics: technicalMetrics as never,
+      destination: 'notification-service.emails',
     });
 
     record({ kind: 'handled', event: {}, result: null }, { attempt: 1, durationMs: 10 });
@@ -35,5 +36,9 @@ describe('recordNotificationOutcome', () => {
     expect(logger.warn).toHaveBeenCalledTimes(2);
     expect(logger.error).toHaveBeenCalledOnce();
     expect(technicalMetrics.messagesHandledTotal.inc).toHaveBeenCalledTimes(4);
+    expect(technicalMetrics.messagesHandledTotal.inc).toHaveBeenCalledWith({
+      destination: 'notification-service.emails',
+      outcome: 'handled',
+    });
   });
 });

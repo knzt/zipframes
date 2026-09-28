@@ -8,8 +8,8 @@ import {
   type VideoProcessedEvent,
 } from '@zipframes/schemas/processor-worker';
 
-import type { Notification } from '../domain/entities/notification.js';
-import type { NotifyVideoProcessedUseCase } from '../application/useCases/notifyVideoProcessed/NotifyVideoProcessedUseCase.js';
+import type { NotifyVideoProcessedUseCase } from '../../application/useCases/notifyVideoProcessed/NotifyVideoProcessedUseCase.js';
+import type { Notification } from '../../domain/entities/notification.js';
 
 export type VideoProcessedHandlerOptions = MessageHandlerOptions<
   VideoProcessedEvent,

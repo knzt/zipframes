@@ -2,15 +2,17 @@ import type { MessageOutcome, MessageOutcomeContext } from '@zipframes/communica
 import type { Logger } from '@zipframes/logger';
 import type { TechnicalMetrics } from '@zipframes/telemetry';
 
-import { NOTIFICATION_QUEUE } from '../messaging/amqplib/amqpTopology.js';
-
 export const recordNotificationOutcome =
-  (deps: { readonly logger: Logger; readonly metrics: TechnicalMetrics }) =>
+  (deps: {
+    readonly logger: Logger;
+    readonly metrics: TechnicalMetrics;
+    readonly destination: string;
+  }) =>
   (
     outcome: MessageOutcome<unknown, unknown>,
     { attempt, durationMs }: MessageOutcomeContext,
   ): void => {
-    const destination = NOTIFICATION_QUEUE;
+    const destination = deps.destination;
     const durationSeconds = durationMs / 1000;
     const kind = outcome.kind;
     deps.metrics.messagesHandledTotal.inc({ destination, outcome: kind });

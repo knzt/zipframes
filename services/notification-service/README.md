@@ -9,18 +9,18 @@ Arquitetura: [docs/architecture/services/notification-service.md](../../docs/arc
 ```
 src/domain/               # Contact, Notification, NotificationAttempt, policies de e-mail
 src/application/          # casos de uso e ports
-src/interface-adapters/   # um controller AMQP por evento + router
+src/interface-adapters/   # contacts/ e emails/, um controller AMQP por evento
 src/infrastructure/       # Prisma, Nodemailer, S3 (só signGetUrl), AMQP
 src/main/                 # start.ts e factories (sem handlers HTTP)
 ```
 
 ## O que faz
 
-- projeta `user.registered` / `user.updated` / `user.deleted` em `contacts`
-- consome `video.processed` e `video.failed` da fila `notification-service.events`
+- projeta `user.registered` / `user.updated` / `user.deleted` na fila `notification-service.contacts`
+- consome `video.processed` e `video.failed` na fila `notification-service.emails`
 - retry pela fila wait com TTL (não republica em `zipframes.events`)
 - e-mail de zip pronto: nome do arquivo, quantidade de frames, URL GET assinada (24h) e fallback `{APP_PUBLIC_URL}/videos/{videoId}/download`
-- e-mail de falha: nome do arquivo e motivo, sem link
+- e-mail de falha: nome do arquivo, data do envio e `{APP_PUBLIC_URL}/videos` para enviar de novo
 - sem anexo zip, sem Fastify; probes exec (`kill -0 1`)
 
 ## Testes

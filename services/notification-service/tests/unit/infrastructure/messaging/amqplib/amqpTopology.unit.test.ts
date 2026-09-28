@@ -1,44 +1,60 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  CONTACTS_QUEUE,
+  CONTACTS_RETRY_QUEUE,
+  CONTACT_ROUTING_KEYS,
   createNotificationAmqpTopology,
   DEFAULT_EXCHANGE,
   DLQ_QUEUE,
   DLX_EXCHANGE,
+  EMAILS_QUEUE,
+  EMAILS_RETRY_QUEUE,
+  EMAIL_ROUTING_KEYS,
   EVENT_EXCHANGE,
-  NOTIFICATION_QUEUE,
-  NOTIFICATION_RETRY_QUEUE,
-  NOTIFICATION_ROUTING_KEYS,
 } from '../../../../../src/infrastructure/messaging/amqplib/amqpTopology.js';
 
 describe('createNotificationAmqpTopology', () => {
-  it('returns expired retries to the service queue and dead-letters the main queue', () => {
+  it('binds identity events to contacts and video outcomes to emails', () => {
     const topology = createNotificationAmqpTopology();
-    const retry = topology.queues.find((queue) => queue.name === NOTIFICATION_RETRY_QUEUE);
-    const main = topology.queues.find((queue) => queue.name === NOTIFICATION_QUEUE);
 
-    expect(retry?.deadLetterExchange).toBe(DEFAULT_EXCHANGE);
-    expect(retry?.deadLetterRoutingKey).toBe(NOTIFICATION_QUEUE);
-    expect(main?.deadLetterExchange).toBe(DLX_EXCHANGE);
-    expect(main?.deadLetterRoutingKey).toBe(NOTIFICATION_QUEUE);
     expect(topology.bindings).toEqual(
       expect.arrayContaining([
         { queue: DLQ_QUEUE, exchange: DLX_EXCHANGE, routingKey: '#' },
-        ...NOTIFICATION_ROUTING_KEYS.map((routingKey) => ({
-          queue: NOTIFICATION_QUEUE,
+        ...CONTACT_ROUTING_KEYS.map((routingKey) => ({
+          queue: CONTACTS_QUEUE,
+          exchange: EVENT_EXCHANGE,
+          routingKey,
+        })),
+        ...EMAIL_ROUTING_KEYS.map((routingKey) => ({
+          queue: EMAILS_QUEUE,
           exchange: EVENT_EXCHANGE,
           routingKey,
         })),
       ]),
     );
+    expect(topology.bindings).not.toEqual(
+      expect.arrayContaining([
+        { queue: CONTACTS_QUEUE, exchange: EVENT_EXCHANGE, routingKey: 'video.processed' },
+        { queue: EMAILS_QUEUE, exchange: EVENT_EXCHANGE, routingKey: 'user.registered' },
+      ]),
+    );
   });
 
-  it('never routes a retry through the shared events exchange', () => {
-    const retry = createNotificationAmqpTopology().queues.find(
-      (queue) => queue.name === NOTIFICATION_RETRY_QUEUE,
-    );
+  it('returns expired retries to the same job queue, not the events exchange', () => {
+    const topology = createNotificationAmqpTopology();
+    const contactsRetry = topology.queues.find((queue) => queue.name === CONTACTS_RETRY_QUEUE);
+    const emailsRetry = topology.queues.find((queue) => queue.name === EMAILS_RETRY_QUEUE);
+    const contacts = topology.queues.find((queue) => queue.name === CONTACTS_QUEUE);
+    const emails = topology.queues.find((queue) => queue.name === EMAILS_QUEUE);
 
-    expect(retry?.deadLetterExchange).not.toBe(EVENT_EXCHANGE);
-    expect(retry?.deadLetterExchange).toBe(DEFAULT_EXCHANGE);
+    expect(contactsRetry?.deadLetterExchange).toBe(DEFAULT_EXCHANGE);
+    expect(contactsRetry?.deadLetterRoutingKey).toBe(CONTACTS_QUEUE);
+    expect(emailsRetry?.deadLetterExchange).toBe(DEFAULT_EXCHANGE);
+    expect(emailsRetry?.deadLetterRoutingKey).toBe(EMAILS_QUEUE);
+    expect(contacts?.deadLetterExchange).toBe(DLX_EXCHANGE);
+    expect(emails?.deadLetterExchange).toBe(DLX_EXCHANGE);
+    expect(contactsRetry?.deadLetterExchange).not.toBe(EVENT_EXCHANGE);
+    expect(emailsRetry?.deadLetterExchange).not.toBe(EVENT_EXCHANGE);
   });
 });

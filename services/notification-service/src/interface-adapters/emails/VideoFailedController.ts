@@ -5,8 +5,8 @@ import {
 } from '@zipframes/communication';
 import { videoFailedEventSchema, type VideoFailedEvent } from '@zipframes/schemas/processor-worker';
 
-import type { Notification } from '../domain/entities/notification.js';
-import type { NotifyVideoFailedUseCase } from '../application/useCases/notifyVideoFailed/NotifyVideoFailedUseCase.js';
+import type { NotifyVideoFailedUseCase } from '../../application/useCases/notifyVideoFailed/NotifyVideoFailedUseCase.js';
+import type { Notification } from '../../domain/entities/notification.js';
 
 export type VideoFailedHandlerOptions = MessageHandlerOptions<VideoFailedEvent, Notification>;
 

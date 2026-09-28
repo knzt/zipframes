@@ -4,16 +4,19 @@ import { createMetrics } from '@zipframes/telemetry';
 
 import { loadConfig } from '../infrastructure/loadEnvConfig.js';
 import {
+  CONTACTS_QUEUE,
+  CONTACTS_RETRY_QUEUE,
   createNotificationAmqpTopology,
-  NOTIFICATION_QUEUE,
-  NOTIFICATION_RETRY_QUEUE,
+  EMAILS_QUEUE,
+  EMAILS_RETRY_QUEUE,
 } from '../infrastructure/messaging/amqplib/amqpTopology.js';
 import { recordNotificationOutcome } from '../infrastructure/observability/notificationOutcome.js';
 import { createAmqplib } from './factories/externals/amqplib.js';
 import { createNodemailer } from './factories/externals/nodemailer.js';
 import { createPrisma } from './factories/externals/prisma.js';
 import { createS3 } from './factories/externals/s3.js';
-import { createNotificationEventsConsumer } from './factories/messaging/notificationEventsConsumer.js';
+import { createContactEventsConsumer } from './factories/messaging/contactEventsConsumer.js';
+import { createEmailEventsConsumer } from './factories/messaging/emailEventsConsumer.js';
 
 export const startNotificationService = async (): Promise<{ stop: () => Promise<void> }> => {
   const config = loadConfig();
@@ -38,7 +41,7 @@ export const startNotificationService = async (): Promise<{ stop: () => Promise<
     const prisma = createPrisma(config.databaseUrl);
     closers.push(() => prisma.$disconnect());
 
-    const amqp = await createAmqplib(config.amqpUrl, 1);
+    const amqp = await createAmqplib(config.amqpUrl, 2);
     closers.push(() => amqp.close());
     await amqp.assertTopology(createNotificationAmqpTopology());
 
@@ -51,7 +54,7 @@ export const startNotificationService = async (): Promise<{ stop: () => Promise<
     });
     const mail = createNodemailer(config.smtpUrl);
 
-    const consumer = createNotificationEventsConsumer({
+    const shared = {
       prisma,
       mail,
       smtpFrom: config.smtpFrom,
@@ -60,19 +63,46 @@ export const startNotificationService = async (): Promise<{ stop: () => Promise<
       appPublicUrl: config.appPublicUrl,
       downloadTtlSeconds: config.downloadUrlTtlSeconds,
       maxAttempts: config.maxAttempts,
+    };
+
+    const contacts = createContactEventsConsumer({
+      ...shared,
       handlerOptions: {
         retry,
         runInContext: (event, run) => runWithCorrelationId(event.correlationId, run),
-        onOutcome: recordNotificationOutcome({ logger, metrics: technicalMetrics }),
+        onOutcome: recordNotificationOutcome({
+          logger,
+          metrics: technicalMetrics,
+          destination: CONTACTS_QUEUE,
+        }),
+      },
+    });
+    const emails = createEmailEventsConsumer({
+      ...shared,
+      handlerOptions: {
+        retry,
+        runInContext: (event, run) => runWithCorrelationId(event.correlationId, run),
+        onOutcome: recordNotificationOutcome({
+          logger,
+          metrics: technicalMetrics,
+          destination: EMAILS_QUEUE,
+        }),
       },
     });
 
-    await amqp.consume(NOTIFICATION_QUEUE, consumer.handle, {
+    await amqp.consume(CONTACTS_QUEUE, contacts.handle, {
       retry,
-      waitQueue: NOTIFICATION_RETRY_QUEUE,
+      waitQueue: CONTACTS_RETRY_QUEUE,
+    });
+    await amqp.consume(EMAILS_QUEUE, emails.handle, {
+      retry,
+      waitQueue: EMAILS_RETRY_QUEUE,
     });
 
-    logger.info('notification-service started', { queue: NOTIFICATION_QUEUE });
+    logger.info('notification-service started', {
+      contactsQueue: CONTACTS_QUEUE,
+      emailsQueue: EMAILS_QUEUE,
+    });
 
     return {
       stop: async () => {
