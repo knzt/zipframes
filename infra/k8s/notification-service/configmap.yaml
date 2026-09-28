@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: notification-service
+  namespace: zipframes
+data:
+  S3_ENDPOINT: http://seaweedfs.zipframes.svc.cluster.local:8333
+  S3_PUBLIC_ENDPOINT: http://seaweedfs.zipframes.svc.cluster.local:8333
+  S3_REGION: us-east-1
+  S3_BUCKET: videos
+  S3_FORCE_PATH_STYLE: 'true'
+  APP_PUBLIC_URL: http://video-service.zipframes.svc.cluster.local:3001
+  SMTP_FROM: ZipFrames <noreply@zipframes.local>
+  MAX_ATTEMPTS: '3'
+  RETRY_BASE_DELAY_MS: '1000'
+  RETRY_MAX_DELAY_MS: '30000'
+  DOWNLOAD_URL_TTL_SECONDS: '86400'
+  LOG_LEVEL: info
+  SERVICE_VERSION: '0.1.0'

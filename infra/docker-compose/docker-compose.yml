@@ -289,6 +289,55 @@ services:
       start_period: 15s
     networks: [zipframes]
 
+  # ─── Notificações ───────────────────────────────────────────
+  notification-service:
+    profiles: [apps]
+    build:
+      context: ../..
+      dockerfile: services/notification-service/Dockerfile
+      secrets:
+        - node_auth_token
+    image: zipframes-notification-service
+    container_name: zipframes-notification-service
+    # The broker can report healthy a moment before it accepts AMQP; the
+    # process exits on a refused connection, so let Compose start it again.
+    restart: on-failure
+    depends_on:
+      notification-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      storage-init:
+        condition: service_completed_successfully
+      mailpit:
+        condition: service_started
+    environment:
+      NOTIFICATION_DATABASE_URL: postgresql://${NOTIFICATION_DB_USER:-zipframes}:${NOTIFICATION_DB_PASSWORD:-zipframes}@notification-db:5432/${NOTIFICATION_DB_NAME:-notification_db}
+      AMQP_URL: amqp://${RABBITMQ_USER:-zipframes}:${RABBITMQ_PASSWORD:-zipframes}@rabbitmq:5672
+      SMTP_URL: smtp://mailpit:1025
+      SMTP_FROM: ZipFrames <noreply@zipframes.local>
+      S3_ENDPOINT: http://storage:8333
+      S3_PUBLIC_ENDPOINT: http://localhost:${STORAGE_S3_PORT:-8333}
+      S3_ACCESS_KEY: ${STORAGE_ACCESS_KEY:-zipframes}
+      S3_SECRET_KEY: ${STORAGE_SECRET_KEY:-zipframes-local-secret}
+      S3_REGION: ${STORAGE_REGION:-us-east-1}
+      S3_BUCKET: ${STORAGE_BUCKET:-videos}
+      S3_FORCE_PATH_STYLE: 'true'
+      APP_PUBLIC_URL: http://localhost:3001
+      MAX_ATTEMPTS: '3'
+      RETRY_BASE_DELAY_MS: '1000'
+      RETRY_MAX_DELAY_MS: '30000'
+      DOWNLOAD_URL_TTL_SECONDS: '86400'
+      LOG_LEVEL: info
+      SERVICE_VERSION: '0.1.0'
+    healthcheck:
+      test: ['CMD-SHELL', 'kill -0 1']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks: [zipframes]
+
   # ─── Captura de e-mails no ambiente local ──────────────────────────────
   mailpit:
     image: axllent/mailpit:v1.24
