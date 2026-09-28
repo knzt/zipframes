@@ -8,7 +8,6 @@ export interface NotifyVideoFailedInput {
   readonly videoId: string;
   readonly ownerId: string;
   readonly originalFileName?: string;
-  readonly reason: string;
   readonly uploadedAt?: Date;
 }
 
@@ -34,7 +33,6 @@ export class NotifyVideoFailedUseCase {
         videoId: input.videoId,
         type: 'VIDEO_FAILED',
         originalFileName: input.originalFileName ?? 'video',
-        failureReason: input.reason,
         ...(input.uploadedAt === undefined ? {} : { uploadedAt: input.uploadedAt }),
         createdAt: new Date(),
       }),

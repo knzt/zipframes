@@ -34,7 +34,6 @@ const failed = (): Notification =>
     videoId,
     type: 'VIDEO_FAILED',
     originalFileName: 'clip.mp4',
-    failureReason: 'no frames extracted',
     uploadedAt: new Date('2026-09-22T12:00:00.000Z'),
     createdAt: new Date('2026-09-28T12:00:00.000Z'),
   });

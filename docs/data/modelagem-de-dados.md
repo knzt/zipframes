@@ -197,7 +197,6 @@ erDiagram
     notification_status status
     varchar target
     varchar original_file_name
-    text failure_reason
     varchar result_key
     integer frame_count
     timestamptz uploaded_at
@@ -238,10 +237,9 @@ A projeção é gravada com `INSERT ... ON CONFLICT (user_id) DO UPDATE`, o que 
 | `video_id`           | `uuid`                 | not null                    |                                                                                    |
 | `type`               | `notification_type`    | not null                    | `VIDEO_PROCESSED` ou `VIDEO_FAILED`                                                |
 | `channel`            | `notification_channel` | not null, default `EMAIL`   | Abre espaço para outros canais                                                     |
-| `status`             | `notification_status`  | not null, default `PENDING` | `PENDING`, `SENT` ou `FAILED`                                                      |
+| `status`             | `notification_status`  | not null, default `PENDING` | `PENDING`, `SENT` ou `FAILED` (`FAILED` = tentativas SMTP esgotadas)               |
 | `target`             | `varchar(255)`         |                             | Endereço usado no envio, copiado do contato no momento em que a mensagem sai       |
 | `original_file_name` | `varchar(255)`         | not null                    | Nome do arquivo original                                                           |
-| `failure_reason`     | `text`                 |                             | Motivo em `VIDEO_FAILED` (CHECK obriga quando o tipo é falha)                      |
 | `result_key`         | `varchar(512)`         |                             | Chave do zip em `VIDEO_PROCESSED`                                                  |
 | `frame_count`        | `integer`              |                             | Quantidade de frames em `VIDEO_PROCESSED`                                          |
 | `uploaded_at`        | `timestamptz`          |                             | Instantâneo de `video.uploaded.occurredAt`; o drain PENDING ainda renderiza a data |
@@ -252,16 +250,16 @@ O `target` guarda um fato histórico: para onde a mensagem foi de verdade. `cont
 
 ### `notification_attempts`
 
-**Só as tentativas que falharam viram linha aqui.** A tabela existe para controlar o limite de tentativas e para registrar por que cada uma falhou. O envio bem-sucedido não precisa de linha própria: ele já está em `notifications`, com `status` em `SENT`, `sent_at` e `target`.
+**Só as tentativas SMTP que falharam viram linha aqui.** A tabela existe para controlar o limite de tentativas e para registrar por que cada envio falhou. O motivo técnico do processamento (`video.failed.reason`) não é persistido. O envio bem-sucedido não precisa de linha própria: ele já está em `notifications`, com `status` em `SENT`, `sent_at` e `target`.
 
-| Coluna            | Tipo           | Restrições                                                | Observação                         |
-| ----------------- | -------------- | --------------------------------------------------------- | ---------------------------------- |
-| `id`              | `uuid`         | PK                                                        |                                    |
-| `notification_id` | `uuid`         | not null, FK para `notifications` com `ON DELETE CASCADE` | Mesma base, então a FK é permitida |
-| `attempt`         | `smallint`     | not null, `> 0`                                           | 1 na primeira falha                |
-| `target`          | `varchar(255)` | not null                                                  | Endereço tentado                   |
-| `error`           | `text`         | not null                                                  | Motivo da falha                    |
-| `attempted_at`    | `timestamptz`  | not null, default `now()`                                 |                                    |
+| Coluna            | Tipo           | Restrições                                                | Observação                          |
+| ----------------- | -------------- | --------------------------------------------------------- | ----------------------------------- |
+| `id`              | `uuid`         | PK                                                        |                                     |
+| `notification_id` | `uuid`         | not null, FK para `notifications` com `ON DELETE CASCADE` | Mesma base, então a FK é permitida  |
+| `attempt`         | `smallint`     | not null, `> 0`                                           | 1 na primeira falha                 |
+| `target`          | `varchar(255)` | not null                                                  | Endereço tentado                    |
+| `error`           | `text`         | not null                                                  | Erro SMTP / retry daquela tentativa |
+| `attempted_at`    | `timestamptz`  | not null, default `now()`                                 |                                     |
 
 A regra de negócio é direta: **no máximo três tentativas**. Antes de tentar de novo, o serviço conta as linhas da notificação. Se já houver três, ele desiste e marca a notificação como `FAILED`, em vez de reenfileirar a mensagem.
 
@@ -303,15 +301,13 @@ CREATE TABLE notifications (
   status             notification_status  NOT NULL DEFAULT 'PENDING',
   target             varchar(255),
   original_file_name varchar(255)         NOT NULL,
-  failure_reason     text,
   result_key         varchar(512),
   frame_count        integer,
   uploaded_at        timestamptz,
   created_at         timestamptz          NOT NULL DEFAULT now(),
   sent_at            timestamptz,
   CONSTRAINT uq_notifications_video_tipo UNIQUE (video_id, type),
-  CONSTRAINT ck_notifications_sent CHECK (status <> 'SENT' OR (sent_at IS NOT NULL AND target IS NOT NULL)),
-  CONSTRAINT ck_notifications_failed_reason CHECK (type <> 'VIDEO_FAILED' OR failure_reason IS NOT NULL)
+  CONSTRAINT ck_notifications_sent CHECK (status <> 'SENT' OR (sent_at IS NOT NULL AND target IS NOT NULL))
 );
 
 -- Guarda apenas as tentativas que falharam.

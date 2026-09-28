@@ -18,7 +18,6 @@ const toDomain = (row: {
   readonly status: PersistedNotification['status'];
   readonly target: string | null;
   readonly originalFileName: string;
-  readonly failureReason: string | null;
   readonly resultKey: string | null;
   readonly frameCount: number | null;
   readonly uploadedAt: Date | null;
@@ -59,7 +58,6 @@ export class PrismaNotificationRepository implements NotificationRepository {
             status: data.status,
             target: data.target,
             originalFileName: data.originalFileName,
-            failureReason: data.failureReason,
             resultKey: data.resultKey,
             frameCount: data.frameCount,
             uploadedAt: data.uploadedAt,

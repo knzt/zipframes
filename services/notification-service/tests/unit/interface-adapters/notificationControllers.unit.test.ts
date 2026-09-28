@@ -159,7 +159,6 @@ describe('video controllers', () => {
       videoId,
       ownerId: userId,
       originalFileName: 'clip.mp4',
-      reason: 'no frames extracted',
       uploadedAt: new Date('2026-09-22T12:00:00.000Z'),
     });
   });

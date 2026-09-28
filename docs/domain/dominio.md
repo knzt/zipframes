@@ -174,7 +174,7 @@ O contexto de Processamento não persiste estado próprio: cada mensagem carrega
 
 A projeção é mantida por _event-carried state transfer_: o contexto de Identidade publica os eventos de cadastro, alteração e exclusão, e o de Notificação mantém sua própria cópia. Não existe consulta ao auth-service nem acesso ao banco dele. A gravação é um upsert por `userId`, e o `updatedAt` descarta eventos que chegarem fora de ordem.
 
-**Agregado `Notification`**: `id`, `userId`, `videoId`, `type` (`VIDEO_PROCESSED` ou `VIDEO_FAILED`), `channel` (`EMAIL`), `status` (`PENDING`, `SENT`, `FAILED`), `target`, `originalFileName`, `uploadedAt` (quando o vídeo entrou na fila), `createdAt`, `sentAt`, e a coleção de tentativas que falharam (`NotificationAttempt`: número da tentativa, destino, erro e data).
+**Agregado `Notification`**: `id`, `userId`, `videoId`, `type` (`VIDEO_PROCESSED` ou `VIDEO_FAILED`), `channel` (`EMAIL`), `status` (`PENDING`, `SENT`, `FAILED`), `target`, `originalFileName`, `uploadedAt` (quando o vídeo entrou na fila), `createdAt`, `sentAt`, e a coleção de tentativas SMTP que falharam (`NotificationAttempt`: número da tentativa, destino, erro e data). `FAILED` na linha principal é o esgotamento das tentativas de envio, não o motivo do processamento.
 
 O `target` registra o endereço usado no envio, que é copiado do contato no momento em que a mensagem sai. O contato guarda o estado atual, e a notificação guarda o fato histórico.
 
@@ -182,7 +182,7 @@ Regras:
 
 - **No máximo uma notificação por vídeo e tipo.** Reentregas de `video.processed` / `video.failed` não geram e-mails duplicados.
 - **Contato ausente não perde a notificação:** se o resultado chegar antes de `user.registered`, a notificação fica `PENDING` e é enviada quando o contato for projetado.
-- **Cada tentativa que falha é registrada**, com destino, erro e data. O envio bem-sucedido não vira tentativa: ele fica na própria notificação, como `SENT`, com destino e data de envio.
+- **Cada tentativa SMTP que falha é registrada** em `notification_attempts`, com destino, erro e data. O envio bem-sucedido não vira tentativa: ele fica na própria notificação, como `SENT`, com destino e data de envio. O motivo técnico do processamento não entra nessa tabela nem na linha de `notifications`.
 - **No máximo três tentativas.** Ao esgotá-las, a notificação fica `FAILED` e para de ser reenfileirada. O limite é configurável.
 - **Falha no envio do e-mail** é transitória e segue a mesma política de retry das mensagens.
 - **O e-mail de zip pronto** traz o nome do arquivo, a quantidade de frames, a URL GET assinada e o fallback `{APP_PUBLIC_URL}/videos/{videoId}/download`. Depois do link: "Se ele falhar, gere um novo em:" e "O arquivo expira em 24 horas." Sem JWT Bearer e sem dizer que o link assinado vale 24 horas.

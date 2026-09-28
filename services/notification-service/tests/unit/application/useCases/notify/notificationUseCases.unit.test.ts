@@ -96,14 +96,12 @@ describe('NotifyVideoFailedUseCase', () => {
     await useCase.execute({
       videoId,
       ownerId: userId,
-      reason: 'bad media',
       originalFileName: 'a.mp4',
       uploadedAt: new Date('2026-09-22T12:00:00.000Z'),
     });
     await useCase.execute({
       videoId,
       ownerId: userId,
-      reason: 'bad media',
       originalFileName: 'a.mp4',
       uploadedAt: new Date('2026-09-22T12:00:00.000Z'),
     });
@@ -120,7 +118,6 @@ describe('UpsertContactUseCase', () => {
       videoId,
       ownerId: userId,
       originalFileName: 'demo.mp4',
-      reason: 'timeout',
       uploadedAt: new Date('2026-09-22T12:00:00.000Z'),
     });
     expect(notifications.rows[0]?.status).toBe('PENDING');
@@ -172,7 +169,6 @@ describe('DeleteContactUseCase', () => {
     await new NotifyVideoFailedUseCase(notifications, sendNotificationEmail).execute({
       videoId,
       ownerId: userId,
-      reason: 'gone',
     });
 
     await new DeleteContactUseCase(contacts, notifications).execute(userId);

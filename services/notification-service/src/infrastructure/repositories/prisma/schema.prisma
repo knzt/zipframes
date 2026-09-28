@@ -48,7 +48,6 @@ model Notification {
   status           NotificationStatus    @default(PENDING)
   target           String?               @db.VarChar(255)
   originalFileName String                @map("original_file_name") @db.VarChar(255)
-  failureReason    String?               @map("failure_reason") @db.Text
   resultKey        String?               @map("result_key") @db.VarChar(512)
   frameCount       Int?                  @map("frame_count")
   uploadedAt       DateTime?             @map("uploaded_at") @db.Timestamptz

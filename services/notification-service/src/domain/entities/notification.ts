@@ -18,7 +18,6 @@ export interface CreateNotificationProps {
   readonly videoId: string;
   readonly type: NotificationType;
   readonly originalFileName: string;
-  readonly failureReason?: string;
   readonly resultKey?: string;
   readonly frameCount?: number;
   readonly uploadedAt?: Date;
@@ -34,7 +33,6 @@ export interface PersistedNotification {
   readonly status: NotificationStatus;
   readonly target: string | null;
   readonly originalFileName: string;
-  readonly failureReason: string | null;
   readonly resultKey: string | null;
   readonly frameCount: number | null;
   readonly uploadedAt: Date | null;
@@ -52,7 +50,6 @@ interface NotificationState {
   readonly status: NotificationStatus;
   readonly target: string | null;
   readonly originalFileName: string;
-  readonly failureReason: string | null;
   readonly resultKey: string | null;
   readonly frameCount: number | null;
   readonly uploadedAt: Date | null;
@@ -85,7 +82,6 @@ export class Notification {
       status: 'PENDING',
       target: null,
       originalFileName: props.originalFileName,
-      failureReason: props.failureReason ?? null,
       resultKey: props.resultKey ?? null,
       frameCount: props.frameCount ?? null,
       uploadedAt: props.uploadedAt ?? null,
@@ -132,10 +128,6 @@ export class Notification {
 
   get originalFileName(): string {
     return this.state.originalFileName;
-  }
-
-  get failureReason(): string | null {
-    return this.state.failureReason;
   }
 
   get resultKey(): string | null {
@@ -215,7 +207,6 @@ export class Notification {
       status: this.state.status,
       target: this.state.target,
       originalFileName: this.state.originalFileName,
-      failureReason: this.state.failureReason,
       resultKey: this.state.resultKey,
       frameCount: this.state.frameCount,
       uploadedAt: this.state.uploadedAt,

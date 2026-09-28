@@ -44,7 +44,6 @@ describe('Notification', () => {
       videoId,
       type: 'VIDEO_FAILED',
       originalFileName: 'demo.mp4',
-      failureReason: 'no frames',
       uploadedAt: new Date('2026-09-22T12:00:00.000Z'),
       createdAt: new Date('2026-09-28T12:00:00.000Z'),
     });
@@ -88,7 +87,6 @@ describe('Notification', () => {
     expect(restored.frameCount).toBe(10);
     expect(restored.createdAt.toISOString()).toBe('2026-09-28T12:00:00.000Z');
     expect(restored.sentAt).toBeNull();
-    expect(restored.failureReason).toBeNull();
     expect(restored.attempts).toHaveLength(1);
     expect(restored.attempts[0]?.error).toBe('smtp down');
   });

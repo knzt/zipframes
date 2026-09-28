@@ -23,15 +23,13 @@ CREATE TABLE "notifications" (
   "status"             "notification_status" NOT NULL DEFAULT 'PENDING',
   "target"             varchar(255),
   "original_file_name" varchar(255)          NOT NULL,
-  "failure_reason"     text,
   "result_key"         varchar(512),
   "frame_count"        integer,
   "uploaded_at"        timestamptz,
   "created_at"         timestamptz           NOT NULL DEFAULT now(),
   "sent_at"            timestamptz,
   CONSTRAINT "uq_notifications_video_tipo" UNIQUE ("video_id", "type"),
-  CONSTRAINT "ck_notifications_sent" CHECK ("status" <> 'SENT' OR ("sent_at" IS NOT NULL AND "target" IS NOT NULL)),
-  CONSTRAINT "ck_notifications_failed_reason" CHECK ("type" <> 'VIDEO_FAILED' OR "failure_reason" IS NOT NULL)
+  CONSTRAINT "ck_notifications_sent" CHECK ("status" <> 'SENT' OR ("sent_at" IS NOT NULL AND "target" IS NOT NULL))
 );
 
 CREATE TABLE "notification_attempts" (

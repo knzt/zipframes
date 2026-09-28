@@ -86,7 +86,7 @@ Bindings: `user.registered`, `user.updated`, `user.deleted`, `video.processed`, 
 
 ## Persistência
 
-Postgres (`notification-db`). Schema em `src/infrastructure/repositories/prisma/`. Unique `(video_id, type)`. Sem `processed_events`.
+Postgres (`notification-db`). Schema em `src/infrastructure/repositories/prisma/`. Unique `(video_id, type)`. Sem `processed_events`. Falhas SMTP ficam só em `notification_attempts`; `status = FAILED` na linha principal é o esgotamento dessas tentativas. O motivo do processamento não é persistido.
 
 ## Testes
 
