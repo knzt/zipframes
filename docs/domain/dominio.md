@@ -131,7 +131,7 @@ Regras:
 
 - **Extensões aceitas:** `mp4`, `avi`, `mov`, `mkv`, `wmv`, `flv` e `webm`, as mesmas do projeto base.
 - **Nome e tipo são validados antes de qualquer byte ser recebido.** Um arquivo que não é vídeo é recusado sem ocupar o storage.
-- **Tamanho máximo configurável** (500 MB por padrão), medido nos bytes que chegam, não num valor declarado pelo cliente. Um arquivo vazio ou acima do limite é recusado e o que já tinha sido gravado é apagado.
+- **Tamanho máximo configurável** (100 MB por padrão), medido nos bytes que chegam, não num valor declarado pelo cliente. Um arquivo vazio ou acima do limite é recusado e o que já tinha sido gravado é apagado.
 - **O vídeo nasce `QUEUED`**: só existe depois que o arquivo inteiro está no storage, então não há um estado de "aguardando envio".
 - **Transições inválidas são rejeitadas pela entidade.** Por exemplo, um vídeo `DONE` nunca volta para `PROCESSING`.
 - **`DONE` e `FAILED` encerram o processamento.** Eventos de processamento que chegarem depois deles (ou de `EXPIRED` e `DELETED`) são ignorados, o que torna o agregado tolerante a mensagens duplicadas ou fora de ordem. As únicas transições posteriores são a expiração e a exclusão a pedido, que não vêm de eventos do worker.
@@ -236,6 +236,7 @@ Um vídeo pode conter rosto, voz e outros dados pessoais de quem aparece nele, e
 | Pacote de frames (zip)               | Object storage    | 24 horas após a conclusão            | É o resultado entregue. A janela cobre quem não baixa na hora, sem virar um arquivo permanente        |
 | Frames soltos e arquivos temporários | Disco do worker   | Durante a tentativa                  | Removidos ao fim do trabalho, com sucesso ou falha                                                    |
 | Metadados do vídeo                   | `video-db`        | Enquanto a conta existir             | Sustentam a listagem e o histórico sem guardar conteúdo pessoal                                       |
+| Conta                                | `auth-db`         | Enquanto o titular não a exclui      | Nome, e-mail e senha (hash), necessários para autenticar                                              |
 | Contato                              | `notification-db` | Enquanto a conta existir             | Necessário para notificar resultado e falha                                                           |
 | Histórico de notificações            | `notification-db` | Enquanto a conta existir             | Comprova o aviso enviado ao usuário                                                                   |
 
@@ -243,14 +244,14 @@ O prazo de 24 horas é configurável, e o mesmo valor alimenta o `expiresAt` do 
 
 ### Como a eliminação acontece
 
-- **Do original:** o próprio worker apaga o arquivo ao terminar, logo após publicar o resultado. Uma rotina de limpeza varre os originais que sobraram por falha no apagamento.
-- **Do pacote:** uma rotina periódica no video-service busca os vídeos `DONE` com `expiresAt` vencido, apaga o objeto, limpa a `resultKey` e muda o status para `EXPIRED`. A mesma rotina apaga o original de um vídeo `DONE` que o worker não tenha conseguido remover.
+- **Do original:** o próprio worker apaga o arquivo ao terminar, com sucesso ou com falha, logo após publicar o resultado. Se esse apagamento falhar num vídeo `DONE`, a rotina de expiração remove o original junto com o pacote. Num vídeo `FAILED`, o arquivo fica até o dono excluir o vídeo ou a conta.
+- **Do pacote:** uma rotina periódica no video-service busca os vídeos `DONE` com `expiresAt` vencido, apaga o objeto, limpa a `resultKey` e muda o status para `EXPIRED`.
 - **A pedido do titular:** o dono exclui um vídeo e os arquivos que ainda existirem são apagados na hora, com o vídeo indo para `DELETED`.
-- **Na exclusão da conta:** o auth-service publica `user.deleted`, e cada contexto apaga o que é seu. O contexto de Gestão de Vídeos remove os objetos e os metadados dos vídeos daquele dono, e o de Notificação apaga o contato e o histórico.
+- **Na exclusão da conta:** o auth-service apaga o usuário e publica `user.deleted`. O contexto de Gestão de Vídeos remove os objetos e os metadados de todos os vídeos daquele dono, em qualquer status; o de Notificação apaga o contato e o histórico.
 
 ### Minimização no dia a dia
 
-- **Logs registram identificadores**, como `videoId`, `ownerId` e `correlationId`, nunca e-mail, nome do arquivo original ou conteúdo.
+- **Logs registram identificadores**, como `videoId`, `ownerId` e `correlationId`, nunca e-mail ou conteúdo. A exceção é o processor-worker, que registra o nome original do arquivo quando termina ou recusa um vídeo.
 - **Mensagens carregam chaves de storage**, nunca o arquivo.
 - **O download é sempre por URL pré-assinada de curta duração**, restrita a um único objeto, e nunca por um endereço público e estável. O envio passa pelo video-service, que valida o dono antes de gravar.
 - **Cada vídeo é visível apenas para o dono**, e para os demais ele não existe.

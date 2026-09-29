@@ -15,7 +15,10 @@ import type {
   SignDownloadInput,
   SignedDownloadUrl,
 } from '../../src/application/interfaces/gateways/DownloadUrlSigner.js';
-import type { VideoListCache } from '../../src/application/interfaces/gateways/VideoListCache.js';
+import type {
+  FirstPageKey,
+  VideoListCache,
+} from '../../src/application/interfaces/gateways/VideoListCache.js';
 import {
   VIDEO_CHANGED_CONCURRENTLY,
   type ListByOwnerQuery,
@@ -53,10 +56,15 @@ export class InMemoryVideoRepository implements VideoRepository {
     return Promise.resolve(
       [...this.rows.values()]
         .filter((video) => video.ownerId === ownerId && video.status !== 'DELETED')
+        .filter((video) => query.status === undefined || video.status === query.status)
         .filter((video) => video.createdAt.getTime() < before)
         .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
         .slice(0, query.limit),
     );
+  }
+
+  listAllByOwner(ownerId: string): Promise<readonly Video[]> {
+    return Promise.resolve([...this.rows.values()].filter((video) => video.ownerId === ownerId));
   }
 
   findExpired(now: Date, limit: number): Promise<readonly Video[]> {
@@ -85,6 +93,15 @@ export class InMemoryVideoRepository implements VideoRepository {
     this.rows.set(video.id, stored);
     this.saves += 1;
     return Promise.resolve(stored);
+  }
+
+  deleteAllByOwner(ownerId: string): Promise<void> {
+    for (const [id, video] of this.rows) {
+      if (video.ownerId === ownerId) {
+        this.rows.delete(id);
+      }
+    }
+    return Promise.resolve();
   }
 }
 
@@ -136,16 +153,19 @@ export class FakeDownloadUrlSigner implements DownloadUrlSigner {
   }
 }
 
+const pageKeyOf = (ownerId: string, page: FirstPageKey): string =>
+  `${ownerId}:${String(page.limit)}:${page.status ?? '*'}`;
+
 export class InMemoryVideoListCache implements VideoListCache {
   readonly pages = new Map<string, readonly Video[]>();
   readonly invalidated: string[] = [];
 
-  get(ownerId: string, limit: number): Promise<readonly Video[] | null> {
-    return Promise.resolve(this.pages.get(`${ownerId}:${String(limit)}`) ?? null);
+  get(ownerId: string, page: FirstPageKey): Promise<readonly Video[] | null> {
+    return Promise.resolve(this.pages.get(pageKeyOf(ownerId, page)) ?? null);
   }
 
-  set(ownerId: string, limit: number, videos: readonly Video[]): Promise<void> {
-    this.pages.set(`${ownerId}:${String(limit)}`, videos);
+  set(ownerId: string, page: FirstPageKey, videos: readonly Video[]): Promise<void> {
+    this.pages.set(pageKeyOf(ownerId, page), videos);
     return Promise.resolve();
   }
 

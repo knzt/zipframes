@@ -1,4 +1,5 @@
 import type { Video } from '../../../domain/entities/video.js';
+import type { ListableVideoStatus } from '../../../domain/valueObjects/videoStatus.js';
 
 /**
  * Code of the `ConflictError` that `save` throws when the same video was
@@ -12,6 +13,8 @@ export interface ListByOwnerQuery {
   readonly limit: number;
   /** Keyset cursor: only videos created strictly before this instant. */
   readonly before?: Date;
+  /** Only videos in this status. */
+  readonly status?: ListableVideoStatus;
 }
 
 export interface VideoRepository {
@@ -25,6 +28,8 @@ export interface VideoRepository {
   readonly findByIdForOwner: (videoId: string, ownerId: string) => Promise<Video | null>;
   /** Newest first, without deleted videos. */
   readonly listByOwner: (ownerId: string, query: ListByOwnerQuery) => Promise<readonly Video[]>;
+  /** Every video of the owner, in any status: for account deletion. */
+  readonly listAllByOwner: (ownerId: string) => Promise<readonly Video[]>;
   /** `DONE` videos whose retention ended at or before `now`, oldest first. */
   readonly findExpired: (now: Date, limit: number) => Promise<readonly Video[]>;
   /**
@@ -34,4 +39,6 @@ export interface VideoRepository {
    * was read.
    */
   readonly save: (video: Video) => Promise<Video>;
+  /** Hard-deletes every row of the owner: the metadata half of account deletion. */
+  readonly deleteAllByOwner: (ownerId: string) => Promise<void>;
 }

@@ -67,12 +67,13 @@ Todo o resto passa pelo exchange `zipframes.events`, do tipo topic. A routing ke
 | Evento                     | Publicado por    | Consumido por                   |
 | -------------------------- | ---------------- | ------------------------------- |
 | `user.registered`          | auth-service     | notifier-service                |
+| `user.deleted`             | auth-service     | video-service, notifier-service |
 | `video.uploaded`           | video-service    | processor-worker                |
 | `video.processing.started` | processor-worker | video-service                   |
 | `video.processed`          | processor-worker | video-service, notifier-service |
 | `video.failed`             | processor-worker | video-service, notifier-service |
 
-O notifier-service também está preparado para `user.updated` e `user.deleted`, que o auth-service ainda não publica.
+O notifier-service também está preparado para `user.updated`, que o auth-service ainda não publica: não há como mudar nome ou e-mail depois do cadastro.
 
 ### Entrega e falhas
 

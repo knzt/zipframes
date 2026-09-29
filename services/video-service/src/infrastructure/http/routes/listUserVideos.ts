@@ -11,7 +11,9 @@ export const listUserVideosRoute = (controller: ListUserVideosController): HttpR
   openApi: {
     tags: VIDEO_TAGS,
     summary: 'Lista os vídeos do usuário, do mais recente para o mais antigo',
-    description: 'Para a próxima página, envie `before` com o `createdAt` do último item recebido.',
+    description:
+      'Para a próxima página, envie `before` com o `createdAt` do último item recebido. ' +
+      '`status` mostra só os vídeos nesse status (QUEUED, PROCESSING, DONE, FAILED ou EXPIRED).',
     security: BEARER_SECURITY,
     querystring: jsonSchemaOf(videoService.listVideosQuerySchema),
     response: {

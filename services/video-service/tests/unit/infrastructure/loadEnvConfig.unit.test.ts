@@ -23,7 +23,7 @@ describe('loadConfig', () => {
       s3PublicEndpoint: 'http://localhost:8333',
       s3Region: 'us-east-1',
       s3ForcePathStyle: true,
-      maxUploadBytes: 524_288_000,
+      maxUploadBytes: 104_857_600,
       downloadUrlTtlSeconds: 300,
       resultRetentionSeconds: 86_400,
       listCacheTtlSeconds: 60,

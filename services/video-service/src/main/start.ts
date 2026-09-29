@@ -10,9 +10,12 @@ import { videoRoutes } from '../infrastructure/http/routes/videoRoutes.js';
 import { loadConfig } from '../infrastructure/loadEnvConfig.js';
 import {
   createVideoServiceAmqpTopology,
+  IDENTITY_EVENTS_QUEUE,
+  IDENTITY_EVENTS_RETRY_QUEUE,
   PROCESSING_STATUS_QUEUE,
   PROCESSING_STATUS_RETRY_QUEUE,
 } from '../infrastructure/messaging/amqplib/amqpTopology.js';
+import { createIdentityEventObserver } from '../infrastructure/observability/identityEventObserver.js';
 import { createProcessingStatusObserver } from '../infrastructure/observability/processingStatusObserver.js';
 import { startIntervalJob } from '../infrastructure/scheduling/intervalJob.js';
 import { createApplyProcessingEventController } from './factories/controllers/applyProcessingEventController.js';
@@ -21,6 +24,7 @@ import { createGetDownloadUrlController } from './factories/controllers/getDownl
 import { createGetVideoController } from './factories/controllers/getVideoController.js';
 import { createListUserVideosController } from './factories/controllers/listUserVideosController.js';
 import { createUploadVideoController } from './factories/controllers/uploadVideoController.js';
+import { createUserDeletedController } from './factories/controllers/userDeletedController.js';
 import { createAmqplib, createAmqpPing } from './factories/externals/amqplib.js';
 import { createJwtAuthenticator } from './factories/externals/authenticator.js';
 import { createPrisma, createPrismaPing } from './factories/externals/prisma.js';
@@ -140,6 +144,19 @@ export const startVideoService = async (): Promise<RunningVideoService> => {
     await amqp.consume(PROCESSING_STATUS_QUEUE, applyProcessingEventController.handle, {
       retry,
       waitQueue: PROCESSING_STATUS_RETRY_QUEUE,
+    });
+
+    const userDeletedController = createUserDeletedController({
+      ...externals,
+      handlerOptions: {
+        retry,
+        runInContext: (event, run) => runWithCorrelationId(event.correlationId, run),
+        onOutcome: createIdentityEventObserver({ logger }),
+      },
+    });
+    await amqp.consume(IDENTITY_EVENTS_QUEUE, userDeletedController.handle, {
+      retry,
+      waitQueue: IDENTITY_EVENTS_RETRY_QUEUE,
     });
 
     const expireFramesPackages = createExpireFramesPackagesUseCase({

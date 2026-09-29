@@ -10,6 +10,9 @@ export const VIDEO_STATUSES = [
 
 export type VideoStatus = (typeof VIDEO_STATUSES)[number];
 
+/** Statuses the owner's list can show: a deleted video is never listed. */
+export type ListableVideoStatus = Exclude<VideoStatus, 'DELETED'>;
+
 /**
  * Statuses in which processing is over. Processing events that arrive after
  * one of them are ignored, which is what makes redelivery harmless.

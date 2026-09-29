@@ -7,7 +7,7 @@ import type { GetVideoUseCase } from '../application/useCases/getVideo/GetVideoU
 import type { RoutedHttpRequest } from './RoutedHttpRequest.js';
 import { toVideoListItem } from './videoPresenter.js';
 
-/** `GET /videos/:videoId`: status of one of the caller's videos. */
+/** `GET /videos/:videoId`: one of the caller's videos, the same fields as a list item. */
 export class GetVideoController {
   private readonly handler: (request: HttpRequest) => Promise<HttpReply>;
 

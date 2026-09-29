@@ -65,8 +65,8 @@ const uploadVideo = async (ownerId: string, content = Buffer.alloc(2048, 7)): Pr
   return videoService.uploadVideoResponseSchema.parse(await response.json()).videoId;
 };
 
-/** Publishes what the processor-worker would, on the broker the service consumes from. */
-const publishWorkerEvent = (eventType: string, payload: Record<string, unknown>): void => {
+/** Publishes on the broker the service consumes from, as the worker or auth-service would. */
+const publishEvent = (eventType: string, payload: Record<string, unknown>): void => {
   channel.publish(
     EVENT_EXCHANGE,
     eventType,
@@ -110,7 +110,7 @@ const reachStatus = (videoId: string, ownerId: string, status: string): Promise<
 const finishProcessing = async (videoId: string, ownerId: string, zip: Buffer): Promise<string> => {
   const resultKey = `outputs/${ownerId}/${videoId}.zip`;
   await service.s3.send(new PutObjectCommand({ Bucket: BUCKET, Key: resultKey, Body: zip }));
-  publishWorkerEvent('video.processed', { videoId, resultKey, frameCount: 3, durationMs: 50 });
+  publishEvent('video.processed', { videoId, resultKey, frameCount: 3, durationMs: 50 });
   return resultKey;
 };
 
@@ -150,7 +150,7 @@ describe('the life of a video', () => {
 
   it("follows the worker's events to DONE and hands out the package", async () => {
     const zip = Buffer.from('PK-frames');
-    publishWorkerEvent('video.processing.started', { videoId, attempt: 1 });
+    publishEvent('video.processing.started', { videoId, attempt: 1 });
     expect(await reachStatus(videoId, ownerId, 'PROCESSING')).toBe('PROCESSING');
 
     await finishProcessing(videoId, ownerId, zip);
@@ -166,7 +166,7 @@ describe('the life of a video', () => {
   });
 
   it('ignores a late failure once the video is done', async () => {
-    publishWorkerEvent('video.failed', {
+    publishEvent('video.failed', {
       videoId,
       ownerId,
       errorCode: 'LATE',
@@ -230,7 +230,7 @@ describe('uploads that break the rules', () => {
     const ownerId = randomUUID();
     const videoId = await uploadVideo(ownerId);
 
-    publishWorkerEvent('video.failed', {
+    publishEvent('video.failed', {
       videoId,
       ownerId,
       errorCode: 'UNSUPPORTED_MEDIA',
@@ -243,6 +243,65 @@ describe('uploads that break the rules', () => {
       status: 'FAILED',
       failureReason: 'ffmpeg rejected the media file',
     });
+  });
+
+  it('lets the owner delete a failed video, taking the original with it', async () => {
+    const ownerId = randomUUID();
+    const videoId = await uploadVideo(ownerId);
+
+    publishEvent('video.failed', {
+      videoId,
+      ownerId,
+      errorCode: 'UNSUPPORTED_MEDIA',
+      reason: 'ffmpeg rejected the media file',
+      attempts: 1,
+    });
+    await reachStatus(videoId, ownerId, 'FAILED');
+
+    expect((await call('DELETE', `/videos/${videoId}`, ownerId)).status).toBe(204);
+    expect(await objectExists(`uploads/${ownerId}/${videoId}`)).toBe(false);
+    expect(await (await call('GET', '/videos', ownerId)).json()).toEqual({ items: [] });
+  });
+});
+
+describe('account deletion', () => {
+  it('removes every video and object of the owner on user.deleted, whatever their status', async () => {
+    const ownerId = randomUUID();
+    const doneVideoId = await uploadVideo(ownerId);
+    const resultKey = await finishProcessing(doneVideoId, ownerId, Buffer.from('PK-frames'));
+    await reachStatus(doneVideoId, ownerId, 'DONE');
+    const queuedVideoId = await uploadVideo(ownerId);
+    const sourceKey = `uploads/${ownerId}/${doneVideoId}`;
+    const queuedSourceKey = `uploads/${ownerId}/${queuedVideoId}`;
+
+    publishEvent('user.deleted', { userId: ownerId });
+
+    await eventually(
+      () => call('GET', `/videos/${doneVideoId}`, ownerId),
+      (response) => response.status === 404,
+    );
+    expect((await call('GET', `/videos/${queuedVideoId}`, ownerId)).status).toBe(404);
+    const listing = await call('GET', '/videos', ownerId);
+    expect(listing.status).toBe(200);
+    expect(await listing.json()).toEqual({ items: [] });
+    expect(await objectExists(sourceKey)).toBe(false);
+    expect(await objectExists(resultKey)).toBe(false);
+    expect(await objectExists(queuedSourceKey)).toBe(false);
+  });
+
+  it('leaves other owners alone', async () => {
+    const ownerId = randomUUID();
+    const untouchedOwnerId = randomUUID();
+    const videoId = await uploadVideo(ownerId);
+    const untouchedVideoId = await uploadVideo(untouchedOwnerId);
+
+    publishEvent('user.deleted', { userId: ownerId });
+
+    await eventually(
+      () => call('GET', `/videos/${videoId}`, ownerId),
+      (response) => response.status === 404,
+    );
+    expect(await statusOf(untouchedVideoId, untouchedOwnerId)).toBe('QUEUED');
   });
 });
 

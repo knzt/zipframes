@@ -2,7 +2,7 @@
 
 Ciclo de vida dos vídeos do ZipFrames: envio, status, listagem, download, expiração e exclusão.
 
-O vídeo chega em um único `POST /videos` (multipart) e vai em stream para o storage; o zip sai direto do storage por uma URL pré-assinada de curta duração. Aqui ficam os metadados e a máquina de estados do vídeo. O dono de cada vídeo é o `sub` do token emitido pelo auth-service, validado localmente contra o JWKS dele. O processamento acontece no processor-worker: este serviço publica `video.uploaded` e consome `video.processing.started`, `video.processed` e `video.failed`.
+O vídeo chega em um único `POST /videos` (multipart) e vai em stream para o storage; o zip sai direto do storage por uma URL pré-assinada de curta duração. Aqui ficam os metadados e a máquina de estados do vídeo. O dono de cada vídeo é o `sub` do token emitido pelo auth-service, validado localmente contra o JWKS dele. O processamento acontece no processor-worker: este serviço publica `video.uploaded` e consome `video.processing.started`, `video.processed` e `video.failed`. Também consome `user.deleted` do auth-service, para apagar os vídeos e arquivos de uma conta excluída.
 
 O contrato HTTP é o documento gerado em `GET /docs` (as rotas comuns de saúde e documentação estão em [`docs/architecture/README.md`](../../docs/architecture/README.md#http)). Os eventos estão em [`docs/asyncapi/events.yaml`](../../docs/asyncapi/events.yaml). A arquitetura interna está em [`docs/architecture/services/video-service.md`](../../docs/architecture/services/video-service.md).
 
@@ -12,10 +12,10 @@ O contrato HTTP é o documento gerado em `GET /docs` (as rotas comuns de saúde 
 src/
 ├── domain/                 # Video (agregado e máquina de estados), FileName, VideoFile, VideoStatus, chaves
 ├── application/
-│   ├── useCases/           # UploadVideo, ListUserVideos, GetVideo, GetDownloadUrl,
-│   │                       # DeleteVideo, ApplyProcessingEvent, ExpireFramesPackages
+│   ├── useCases/           # UploadVideo, ListUserVideos, GetVideo, GetDownloadUrl, DeleteVideo,
+│   │                       # ApplyProcessingEvent, ExpireFramesPackages, DeleteAccountVideos
 │   └── interfaces/         # VideoRepository, EventPublisher, ObjectStorage, DownloadUrlSigner, VideoListCache
-├── interface-adapters/     # controllers HTTP e o controller dos eventos do worker
+├── interface-adapters/     # controllers HTTP e os controllers dos eventos consumidos
 ├── infrastructure/
 │   ├── http/               # catálogo de rotas; Fastify em http/fastify/
 │   ├── repositories/prisma/
@@ -38,13 +38,13 @@ As regras de dependência entre as pastas de `src/` estão em [`docs/architectur
 
 ## Rotas
 
-| Método e path                    | O que faz                                                  |
-| -------------------------------- | ---------------------------------------------------------- |
-| `POST /videos`                   | Recebe o arquivo (multipart, campo `file`) e o põe na fila |
-| `GET /videos?limit&before`       | Vídeos do usuário, mais recentes primeiro                  |
-| `GET /videos/{videoId}`          | Status de um vídeo                                         |
-| `GET /videos/{videoId}/download` | URL do zip (5 min); 409 se não está pronto, 410 se expirou |
-| `DELETE /videos/{videoId}`       | Apaga os arquivos e mantém o histórico mínimo              |
+| Método e path                     | O que faz                                                                 |
+| --------------------------------- | ------------------------------------------------------------------------- |
+| `POST /videos`                    | Recebe o arquivo (multipart, campo `file`) e o põe na fila                |
+| `GET /videos?limit&before&status` | Vídeos do usuário, mais recentes primeiro, com filtro opcional por status |
+| `GET /videos/{videoId}`           | Um vídeo: status, frames extraídos, motivo da falha e validade do zip     |
+| `GET /videos/{videoId}/download`  | URL do zip (5 min); 409 se não está pronto, 410 se expirou                |
+| `DELETE /videos/{videoId}`        | Apaga os arquivos e mantém o histórico mínimo                             |
 
 Todas exigem `Authorization: Bearer <token>` de `POST /login` no auth-service.
 

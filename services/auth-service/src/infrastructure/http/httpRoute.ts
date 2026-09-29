@@ -8,3 +8,6 @@ export interface HttpRouteDefinition {
   readonly openApi: Record<string, unknown>;
   readonly handle: (request: HttpRequest) => Promise<HttpReply>;
 }
+
+/** Every authenticated route here needs a bearer token. */
+export const BEARER_SECURITY = [{ bearerAuth: [] }];

@@ -3,7 +3,11 @@ import { randomUUID } from 'node:crypto';
 import { startPostgres, type PostgresHandle } from '@zipframes/test-toolkit';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { VIDEO_CHANGED_CONCURRENTLY } from '../../src/application/interfaces/repositories/VideoRepository.js';
+import {
+  VIDEO_CHANGED_CONCURRENTLY,
+  type ListByOwnerQuery,
+} from '../../src/application/interfaces/repositories/VideoRepository.js';
+import type { Video } from '../../src/domain/entities/video.js';
 import { PrismaVideoRepository } from '../../src/infrastructure/repositories/prisma/video.repository.js';
 import { createPrisma, type Prisma } from '../../src/main/factories/externals/prisma.js';
 import { migrate } from '../support/video-service.js';
@@ -92,6 +96,29 @@ describe('PrismaVideoRepository queries', () => {
 
     expect(found).toContain(expired.id);
     expect(found).not.toContain(fresh.id);
+  });
+
+  it('lists an owner newest first, filtered by status and never with deleted videos', async () => {
+    const ownerId = randomUUID();
+    const stored = async (status: Parameters<typeof aVideo>[0], minute: number): Promise<Video> =>
+      repository.save(
+        aVideo(status, {
+          id: randomUUID(),
+          ownerId,
+          createdAt: new Date(Date.UTC(2026, 8, 27, 10, minute)),
+          version: 0,
+        }),
+      );
+    const failed = await stored('FAILED', 1);
+    const queued = await stored('QUEUED', 2);
+    await stored('DELETED', 3);
+
+    const ids = async (query: ListByOwnerQuery): Promise<string[]> =>
+      (await repository.listByOwner(ownerId, query)).map((video) => video.id);
+
+    expect(await ids({ limit: 10 })).toEqual([queued.id, failed.id]);
+    expect(await ids({ limit: 10, status: 'FAILED' })).toEqual([failed.id]);
+    expect(await ids({ limit: 10, before: queued.createdAt })).toEqual([failed.id]);
   });
 
   it('scopes a lookup to the owner', async () => {

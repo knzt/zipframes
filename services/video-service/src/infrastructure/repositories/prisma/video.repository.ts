@@ -40,12 +40,17 @@ export class PrismaVideoRepository implements VideoRepository {
     const rows = await this.prisma.video.findMany({
       where: {
         ownerId,
-        status: { not: 'DELETED' },
+        status: query.status ?? { not: 'DELETED' },
         ...(query.before !== undefined ? { createdAt: { lt: query.before } } : {}),
       },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: query.limit,
     });
+    return rows.map(toDomain);
+  }
+
+  async listAllByOwner(ownerId: string): Promise<readonly Video[]> {
+    const rows = await this.prisma.video.findMany({ where: { ownerId } });
     return rows.map(toDomain);
   }
 
@@ -90,5 +95,9 @@ export class PrismaVideoRepository implements VideoRepository {
       throw changedConcurrently();
     }
     return Video.fromPersistence({ ...video.toJSON(), version: video.version + 1 });
+  }
+
+  async deleteAllByOwner(ownerId: string): Promise<void> {
+    await this.prisma.video.deleteMany({ where: { ownerId } });
   }
 }

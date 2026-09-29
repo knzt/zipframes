@@ -16,8 +16,9 @@ Ele substitui o protótipo apresentado aos investidores, que processava tudo den
 | Processar mais de um vídeo ao mesmo tempo | Workers sem estado consomem uma fila; o KEDA sobe de 1 a 5 réplicas conforme o tamanho dela                                   | [processor-worker](docs/architecture/services/processor-worker.md#concorrência-e-escala) |
 | Não perder requisições em picos           | O upload responde depois de gravar e enfileirar; filas duráveis, confirmação do broker, retry com backoff e DLQ               | [Entrega e falhas](docs/architecture/README.md#entrega-e-falhas)                         |
 | Acesso protegido por usuário e senha      | auth-service com senha em bcrypt e JWT RS256, validado pelo video-service com a chave pública                                 | [auth-service](docs/architecture/services/auth-service.md)                               |
-| Listagem de status dos vídeos do usuário  | `GET /videos`, paginado, com o status de cada vídeo e cache no Redis                                                          | [video-service](docs/architecture/services/video-service.md)                             |
+| Listagem de status dos vídeos do usuário  | `GET /videos`, paginado e com filtro por status, e `GET /videos/{id}` para um vídeo; primeira página em cache no Redis        | [video-service](docs/architecture/services/video-service.md)                             |
 | Notificação em caso de erro               | notifier-service envia e-mail em `video.failed` (e também quando o zip fica pronto)                                           | [notifier-service](docs/architecture/services/notifier-service.md)                       |
+| Dados pessoais (LGPD, além do pedido)     | Original apagado ao fim do processamento, zip expira em 24 horas, exclusão a pedido do dono e da conta                        | [Dados pessoais e retenção](#dados-pessoais-e-retenção)                                  |
 | Persistência dos dados                    | Um Postgres por serviço e um object storage compatível com S3                                                                 | [Modelagem de dados](docs/data/modelagem-de-dados.md)                                    |
 | Arquitetura escalável                     | Microsserviços sem estado no Kubernetes, HPA nos serviços HTTP e KEDA no worker                                               | [C4 containers](docs/architecture/c4/02-containers.md)                                   |
 | Versionamento no GitHub                   | Este repositório e o dos [pacotes compartilhados](https://github.com/zipframes/zipframes-packages), com Conventional Commits  | Histórico de PRs                                                                         |
@@ -50,7 +51,8 @@ flowchart LR
   worker -- "lê o vídeo, grava o zip" --> storage
   worker -- "processed / failed" --> broker
   broker -- "status" --> video
-  auth -- "user.registered" --> broker
+  auth -- "user.registered, user.deleted" --> broker
+  broker -- "user.deleted" --> video
   broker -- "contatos e resultados" --> notif
   notif -- "SMTP" --> mail
 ```
@@ -125,14 +127,40 @@ VIDEO_ID=$(curl -fsS -X POST $API/videos \
   -H "authorization: Bearer $TOKEN" -F 'file=@aula.mp4;type=video/mp4' | jq -r .videoId)
 
 curl -fsS $API/videos -H "authorization: Bearer $TOKEN"        # QUEUED → PROCESSING → DONE
+curl -fsS "$API/videos?status=FAILED" -H "authorization: Bearer $TOKEN"   # só os que falharam
+curl -fsS $API/videos/$VIDEO_ID -H "authorization: Bearer $TOKEN"          # um vídeo
 
 curl -fsS "$API/videos/$VIDEO_ID/download" -H "authorization: Bearer $TOKEN" \
   | jq -r .downloadUrl | xargs curl -fsS -o frames.zip
 ```
 
-Qualquer vídeo curto serve como `aula.mp4`. Aceitos: mp4, avi, mov, mkv, wmv, flv e webm, até 500 MB. A senha precisa ter letra e dígito e pelo menos 8 caracteres.
+Qualquer vídeo curto serve como `aula.mp4`. Aceitos: mp4, avi, mov, mkv, wmv, flv e webm, até 100 MB. A senha precisa ter letra e dígito e pelo menos 8 caracteres.
 
 Depois do processamento, o e-mail "Seu zip está pronto" aparece no Mailpit. Para ver o caminho de falha, envie um arquivo com extensão de vídeo que não seja vídeo de verdade: o status vira `FAILED` e chega o e-mail de falha.
+
+## Dados pessoais e retenção
+
+Um vídeo pode mostrar o rosto e a voz de quem aparece nele, e os frames também. Por isso cada arquivo fica guardado só enquanto serve à finalidade do envio, seguindo os princípios de necessidade e de eliminação ao fim do tratamento da LGPD (art. 6º, III, e arts. 15 e 16).
+
+| Dado                           | Onde fica                 | Por quanto tempo                                             |
+| ------------------------------ | ------------------------- | ------------------------------------------------------------ |
+| Vídeo enviado                  | Object storage            | Até o fim do processamento: o worker apaga ao terminar       |
+| Zip com os frames              | Object storage            | 24 horas depois de pronto (`RESULT_RETENTION_SECONDS`)       |
+| Frames e arquivos temporários  | Disco do worker           | Só durante a tentativa, com sucesso ou falha                 |
+| Metadados do vídeo             | Postgres do video-service | Enquanto a conta existir; sustentam a listagem e o histórico |
+| Nome, e-mail e senha (bcrypt)  | Postgres do auth-service  | Enquanto a conta existir                                     |
+| Contato e histórico de e-mails | Postgres do notifier      | Enquanto a conta existir                                     |
+
+Como isso é aplicado:
+
+- Uma varredura a cada minuto apaga os zips vencidos e move o vídeo para `EXPIRED`. O registro continua na listagem, sem arquivo.
+- O dono pode excluir um vídeo a qualquer momento depois do processamento (`DELETE /videos/{id}`). O zip e o que restar do original são apagados na hora, e o vídeo vai para `DELETED`.
+- O dono pode excluir a própria conta (`DELETE /account` no auth-service). O auth-service apaga o cadastro e publica `user.deleted`; o video-service apaga todos os vídeos e arquivos daquele dono, em qualquer status, e o notifier-service apaga o contato e o histórico de notificações.
+- O zip só sai por URL assinada que vale 5 minutos e abre um único objeto.
+- Cada vídeo só existe para o dono. Para os outros usuários, a API responde 404.
+- Os eventos levam identificadores e chaves de storage, nunca o arquivo. Nome e e-mail só vão para o notifier, que precisa deles para mandar o aviso.
+
+As regras completas estão em [Retenção e proteção de dados](docs/domain/dominio.md#retenção-e-proteção-de-dados).
 
 ## Testes
 

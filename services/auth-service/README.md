@@ -12,9 +12,9 @@ O contrato HTTP é o documento gerado em `GET /docs` (as rotas comuns de saúde 
 src/
 ├── domain/                 # User, Password, UserRegistered
 ├── application/
-│   ├── useCases/           # LoginUseCase, RegisterUserUseCase
+│   ├── useCases/           # LoginUseCase, RegisterUserUseCase, DeleteAccountUseCase
 │   └── interfaces/         # ports declarados pelo caso de uso
-├── interface-adapters/     # LoginController, RegisterUserController
+├── interface-adapters/     # LoginController, RegisterUserController, DeleteAccountController
 ├── infrastructure/
 │   ├── http/               # HttpRouteDefinition, schemas; Fastify em http/fastify/
 │   ├── repositories/prisma/

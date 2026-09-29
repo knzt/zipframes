@@ -6,7 +6,7 @@ O video-service por dentro: o caminho de uma requisição HTTP, de um evento do 
 flowchart TB
   ingress["<b>Ingress</b>"]
   authsvc["<b>auth-service</b><br/>JWKS"]
-  brokerin[["<b>RabbitMQ</b><br/>eventos do worker"]]
+  brokerin[["<b>RabbitMQ</b><br/>eventos do worker<br/>e de identidade"]]
   timer(["<b>Agendador</b><br/>a cada minuto"])
 
   subgraph vs["video-service [Container]"]
@@ -23,11 +23,12 @@ flowchart TB
       direction LR
       ctrl["UploadVideo, ListUserVideos,<br/>GetVideo, GetDownloadUrl,<br/>DeleteVideo<br/><i>Controllers</i>"]
       consumer["ApplyProcessingEvent<br/><i>Controller</i>"]
+      consumer2["UserDeleted<br/><i>Controller</i>"]
     end
 
     subgraph app["Use Cases"]
       direction LR
-      uc["UploadVideo<br/>ListUserVideos<br/>GetVideo<br/>GetDownloadUrl<br/>DeleteVideo<br/>ApplyProcessingEvent<br/>ExpireFramesPackages"]
+      uc["UploadVideo<br/>ListUserVideos<br/>GetVideo<br/>GetDownloadUrl<br/>DeleteVideo<br/>ApplyProcessingEvent<br/>ExpireFramesPackages<br/>DeleteAccountVideos"]
       interfaces["<b>Interfaces</b><br/>VideoRepository<br/>EventPublisher<br/>ObjectStorage<br/>DownloadUrlSigner<br/>VideoListCache"]
     end
 
@@ -57,10 +58,13 @@ flowchart TB
   timer --> interval
   fastify --> ctrl
   authsvc -. "chaves públicas<br/>(defineAuthenticatedHandler)" .-> ctrl
+  authsvc -- "user.deleted" --> brokerin
   amqpin --> consumer
+  amqpin --> consumer2
   interval --> uc
   ctrl --> uc
   consumer --> uc
+  consumer2 --> uc
   uc --> video
   video --- vos
   uc --> interfaces
@@ -77,7 +81,7 @@ flowchart TB
   classDef domc fill:#f3d0d0,stroke:#b35c5c,color:#2e1515
   class ingress,authsvc,brokerin,timer,db,storage,cache,brokerout ext
   class fastify,amqpin,interval,repo,events,objstore,signer,listcache fwc
-  class ctrl,consumer adc
+  class ctrl,consumer,consumer2 adc
   class uc,interfaces appc
   class video,vos domc
 ```
@@ -85,6 +89,8 @@ flowchart TB
 O diagrama segue o caminho em tempo de execução: entra pelos frameworks (HTTP, fila ou relógio), passa pelos controllers, chega aos casos de uso e às entidades, e sai pelas interfaces que o caso de uso declara até as classes que as implementam. O RabbitMQ aparece duas vezes apenas para separar consumo e publicação. O agendador da expiração chama o caso de uso direto: não há controller, porque não há entrada externa a validar.
 
 A idempotência do consumo vem da máquina de estados do `Video`: um evento repetido ou atrasado encontra o vídeo num estado que não aceita aquela transição e é descartado. Por isso o serviço dispensa uma tabela de eventos processados (detalhes em [modelagem de dados](../../data/modelagem-de-dados.md)). O domínio gera o id do vídeo e o caso de uso lê o relógio direto; os testes controlam o tempo com os fake timers do Vitest.
+
+`DeleteAccountVideos` é idempotente de outro jeito: um `user.deleted` repetido encontra os vídeos já apagados, e apagar um objeto ou uma linha que já não existe é inofensivo.
 
 ## Componentes
 
@@ -98,9 +104,11 @@ A idempotência do consumo vem da máquina de estados do `Video`: um evento repe
 | Use Cases            | `DeleteVideo`                                          | Apaga os arquivos e marca o vídeo `DELETED`                                                                                                     |
 | Use Cases            | `ApplyProcessingEvent`                                 | Aplica os eventos do worker de forma idempotente e invalida o cache                                                                             |
 | Use Cases            | `ExpireFramesPackages`                                 | Apaga os pacotes vencidos e marca os vídeos `EXPIRED`                                                                                           |
+| Use Cases            | `DeleteAccountVideos`                                  | Ao consumir `user.deleted`, apaga todos os vídeos e arquivos do dono, em qualquer status                                                        |
 | Use Cases            | Interfaces                                             | Declaradas pelos casos de uso em `application/interfaces/`                                                                                      |
 | Interface Adapters   | Controllers HTTP                                       | `defineAuthenticatedHandler`: validam o token (JWKS), a entrada e traduzem o `Result` em resposta                                               |
 | Interface Adapters   | `ApplyProcessingEventController`                       | `defineMessageHandler`: valida o envelope contra os três eventos do worker e chama o caso de uso                                                |
+| Interface Adapters   | `UserDeletedController`                                | `defineMessageHandler`: valida o envelope de `user.deleted` e chama `DeleteAccountVideos`                                                       |
 | Frameworks & Drivers | `PrismaVideoRepository`                                | Um `save` que insere (versão 1) ou atualiza com lock otimista (`UPDATE ... WHERE version = $1`)                                                 |
 | Frameworks & Drivers | `AmqpEventPublisherGateway`                            | Monta o envelope e publica no exchange `zipframes.events` com confirmação do broker                                                             |
 | Frameworks & Drivers | `S3ObjectStorageGateway`, `S3DownloadUrlSignerGateway` | Upload multipart em stream e exclusão de objetos; assinatura da URL de download com o endpoint público                                          |

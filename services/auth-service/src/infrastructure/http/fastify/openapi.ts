@@ -30,6 +30,16 @@ export const registerOpenApi = async (
         version: options.version,
         description: options.description,
       },
+      components: {
+        securitySchemes: {
+          bearerAuth: {
+            type: 'http',
+            scheme: 'bearer',
+            bearerFormat: 'JWT',
+            description: 'Token de acesso emitido por POST /login.',
+          },
+        },
+      },
     },
   });
 

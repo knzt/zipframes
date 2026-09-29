@@ -1,12 +1,19 @@
 import type { Redis } from 'ioredis';
 
-import type { VideoListCache } from '../../../application/interfaces/gateways/VideoListCache.js';
+import type {
+  FirstPageKey,
+  VideoListCache,
+} from '../../../application/interfaces/gateways/VideoListCache.js';
 import { Video, type PersistedVideo } from '../../../domain/entities/video.js';
 
 export type CacheOperation = 'get' | 'set' | 'invalidate';
 
-/** One hash per owner, one field per page size: invalidating is a single DEL. */
+/** One hash per owner, one field per page size and filter: invalidating is a single DEL. */
 export const listCacheKeyOf = (ownerId: string): string => `video-service:videos:${ownerId}`;
+
+/** `20` for the unfiltered page of 20, `20:FAILED` for the failed ones. */
+export const listCacheFieldOf = (page: FirstPageKey): string =>
+  page.status === undefined ? String(page.limit) : `${String(page.limit)}:${page.status}`;
 
 type CachedVideo = Omit<PersistedVideo, 'expiresAt' | 'createdAt' | 'updatedAt'> & {
   readonly expiresAt: string | null;
@@ -34,9 +41,9 @@ export class RedisVideoListCacheGateway implements VideoListCache {
     private readonly onError?: (operation: CacheOperation, error: unknown) => void,
   ) {}
 
-  async get(ownerId: string, limit: number): Promise<readonly Video[] | null> {
+  async get(ownerId: string, page: FirstPageKey): Promise<readonly Video[] | null> {
     try {
-      const cached = await this.redis.hget(listCacheKeyOf(ownerId), String(limit));
+      const cached = await this.redis.hget(listCacheKeyOf(ownerId), listCacheFieldOf(page));
       return cached === null ? null : (JSON.parse(cached) as CachedVideo[]).map(fromCached);
     } catch (error) {
       this.onError?.('get', error);
@@ -44,12 +51,12 @@ export class RedisVideoListCacheGateway implements VideoListCache {
     }
   }
 
-  async set(ownerId: string, limit: number, videos: readonly Video[]): Promise<void> {
+  async set(ownerId: string, page: FirstPageKey, videos: readonly Video[]): Promise<void> {
     const key = listCacheKeyOf(ownerId);
     try {
       await this.redis
         .multi()
-        .hset(key, String(limit), JSON.stringify(videos.map((video) => video.toJSON())))
+        .hset(key, listCacheFieldOf(page), JSON.stringify(videos.map((video) => video.toJSON())))
         .expire(key, this.ttlSeconds)
         .exec();
     } catch (error) {

@@ -253,11 +253,22 @@ describe('GET /videos', () => {
     ]);
   });
 
-  it.each(['limit=0', 'limit=101', 'before=yesterday'])('answers 400 for %s', async (query) => {
-    const response = await app.inject({ method: 'GET', url: `/videos?${query}`, headers: auth });
+  it('filters by status', async () => {
+    const response = await app.inject({ method: 'GET', url: '/videos?status=DONE', headers: auth });
 
-    expect(response.statusCode).toBe(400);
+    expect(response.json<{ items: { videoId: string }[] }>().items).toEqual([
+      expect.objectContaining({ videoId: '00000000-0000-4000-8000-000000000001', status: 'DONE' }),
+    ]);
   });
+
+  it.each(['limit=0', 'limit=101', 'before=yesterday', 'status=DELETED', 'status=done'])(
+    'answers 400 for %s',
+    async (query) => {
+      const response = await app.inject({ method: 'GET', url: `/videos?${query}`, headers: auth });
+
+      expect(response.statusCode).toBe(400);
+    },
+  );
 
   it('shows another user an empty list', async () => {
     const response = await app.inject({

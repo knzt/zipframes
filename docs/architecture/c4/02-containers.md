@@ -35,9 +35,9 @@ flowchart TB
   video -- "Grava o vídeo e apaga<br/>na retenção [S3]" --> storage
   worker -- "Baixa o vídeo e grava o zip<br/>[S3]" --> storage
 
-  auth -- "user.registered<br/>[AMQP]" --> broker
+  auth -- "user.registered, user.deleted<br/>[AMQP]" --> broker
   video -- "video.uploaded<br/>[AMQP]" --> broker
-  broker -- "started, processed, failed<br/>[AMQP]" --> video
+  broker -- "started, processed, failed,<br/>user.deleted [AMQP]" --> video
   broker -- "video.uploaded<br/>[AMQP]" --> worker
   worker -- "started, processed, failed<br/>[AMQP]" --> broker
   broker -- "user.*, video.processed,<br/>video.failed [AMQP]" --> notif
@@ -57,7 +57,7 @@ Não há interface web. O usuário usa a API com qualquer cliente HTTP (curl, a 
 
 O Ingress separa por host: `auth.zipframes.localhost` vai para o auth-service, `api.zipframes.localhost` para o video-service e `storage.zipframes.localhost` para o SeaweedFS. O storage só é exposto para o download: o video-service assina a URL do zip com esse host público, e o navegador baixa o arquivo direto do storage, sem passar pelo serviço. O upload, ao contrário, passa pelo video-service, que grava o arquivo em stream.
 
-Nenhum serviço lê o banco de outro. O que um contexto precisa saber do outro chega por evento: o notifier-service mantém uma cópia própria dos contatos a partir de `user.registered`, por exemplo.
+Nenhum serviço lê o banco de outro. O que um contexto precisa saber do outro chega por evento: o notifier-service mantém uma cópia própria dos contatos a partir de `user.registered`, por exemplo, e tanto ele quanto o video-service reagem a `user.deleted` apagando o que guardam daquele dono.
 
 ## Containers
 

@@ -11,12 +11,14 @@ Todas exigem `Authorization: Bearer <token>`. O dono do vídeo é sempre o `sub`
 | Rota                               | Sucesso | Falhas                                                       |
 | ---------------------------------- | ------- | ------------------------------------------------------------ |
 | `POST /videos` (multipart, `file`) | 201     | 400 arquivo inválido ou vazio, 401, 413 acima do limite, 503 |
-| `GET /videos?limit&before`         | 200     | 400, 401                                                     |
+| `GET /videos?limit&before&status`  | 200     | 400, 401                                                     |
 | `GET /videos/{videoId}`            | 200     | 401, 404                                                     |
 | `GET /videos/{videoId}/download`   | 200     | 401, 404, 409 ainda não pronto, 410 expirado ou excluído     |
 | `DELETE /videos/{videoId}`         | 204     | 401, 404, 409 na fila ou em processamento                    |
 
-A listagem é paginada por keyset: a próxima página usa `before` com o `createdAt` do último item recebido. Ela mostra o histórico, inclusive vídeos que falharam ou expiraram, com o status e o motivo da falha.
+A listagem é paginada por keyset: a próxima página usa `before` com o `createdAt` do último item recebido. Ela mostra o histórico, inclusive vídeos que falharam ou expiraram, com o status e o motivo da falha. `status` mostra só os vídeos em um status (`QUEUED`, `PROCESSING`, `DONE`, `FAILED` ou `EXPIRED`); vídeos excluídos nunca aparecem.
+
+`GET /videos/{videoId}` devolve um vídeo com os mesmos campos de um item da listagem: nome do arquivo, status, quantidade de frames, motivo da falha, validade do zip e datas. O link do zip vem de `/download`.
 
 As rotas de operação (`/health/*`, `/metrics`, `/docs`) estão na [visão geral](../README.md#http). A porta padrão é 3001.
 
@@ -50,7 +52,7 @@ O vídeo chega numa única chamada, `POST /videos` com `multipart/form-data`. O 
 
 1. Nome, extensão (mp4, avi, mov, mkv, wmv, flv, webm) e tipo são validados antes de ler qualquer byte.
 2. O arquivo vai em stream para `uploads/{ownerId}/{videoId}`, em partes de 5 MB. A memória usada por envio fica limitada às partes em trânsito, qualquer que seja o tamanho do vídeo.
-3. O tamanho recebido é validado. O limite padrão é 500 MB (`MAX_UPLOAD_BYTES`); acima dele, o objeto parcial é apagado e a resposta é 413.
+3. O tamanho recebido é validado. O limite padrão é 100 MB (`MAX_UPLOAD_BYTES`); acima dele, o objeto parcial é apagado e a resposta é 413.
 4. O vídeo é gravado como `QUEUED`.
 5. `video.uploaded` é publicado com confirmação do broker, e a resposta é 201.
 
@@ -67,6 +69,12 @@ O vídeo é gravado antes do evento para que o worker nunca publique um resultad
 O download devolve uma URL assinada do storage, válida por 5 minutos (`DOWNLOAD_URL_TTL_SECONDS`). A URL é assinada com o endereço público do storage, porque quem baixa é o navegador do usuário, que não alcança o endereço interno. O arquivo sai direto do storage, sem passar pelo serviço.
 
 O zip fica disponível por 24 horas (`RESULT_RETENTION_SECONDS`). Uma varredura roda a cada minuto, apaga os zips vencidos (e um original que tenha sobrado) e move os vídeos para `EXPIRED`. O registro do vídeo continua na listagem.
+
+## Exclusão de conta
+
+O serviço consome `user.deleted`, publicado pelo auth-service quando o dono exclui a própria conta. `DeleteAccountVideosUseCase` busca todos os vídeos do dono, em qualquer status, apaga cada objeto que ainda exista no storage e depois apaga as linhas — ao contrário da exclusão a pedido do dono, aqui não sobra histórico, porque não há mais conta para consultá-lo. Um vídeo `QUEUED` ou `PROCESSING` é apagado do mesmo jeito: se o worker publicar um evento depois, `ApplyProcessingEventUseCase` não encontra o vídeo e apenas confirma a mensagem.
+
+A operação é idempotente por conta própria: apagar um objeto ou uma linha que já não existe não é erro, então um `user.deleted` reduplicado não tem efeito.
 
 ## Eventos do worker
 
@@ -87,29 +95,28 @@ Dois usuários enviando o mesmo arquivo nunca se chocam, porque cada upload é u
 
 ## Cache da listagem
 
-A primeira página da listagem de cada usuário fica no Redis por 60 segundos (`LIST_CACHE_TTL_SECONDS`). Qualquer mudança nos vídeos do usuário apaga a entrada.
+A primeira página da listagem de cada usuário fica no Redis por 60 segundos (`LIST_CACHE_TTL_SECONDS`), uma entrada por tamanho de página e por filtro de status. Qualquer mudança nos vídeos do usuário apaga todas elas de uma vez.
 
 O Redis nunca é a fonte da verdade. Se ele cair, a leitura vai ao Postgres e a queda aparece uma vez no log; por isso a readiness não depende dele. Uma leitura que corre junto com uma gravação pode repor no cache o estado anterior, e o TTL curto limita quanto tempo isso dura.
 
 ## Operação
 
-| Item      | Valor                                                         |
-| --------- | ------------------------------------------------------------- |
-| Banco     | `video-db` (Postgres), tabela `videos`                        |
-| Cache     | Redis                                                         |
-| Storage   | Originais em `uploads/`, zips em `outputs/`, bucket `videos`  |
-| Publica   | `video.uploaded`                                              |
-| Consome   | `video.processing.started`, `video.processed`, `video.failed` |
-| Readiness | Postgres, RabbitMQ e o bucket                                 |
-| Escala    | HPA por CPU, de 1 a 3 réplicas, alvo de 70%                   |
-| Manifests | [`infra/k8s/video-service`](../../../infra/k8s/video-service) |
+| Item      | Valor                                                                         |
+| --------- | ----------------------------------------------------------------------------- |
+| Banco     | `video-db` (Postgres), tabela `videos`                                        |
+| Cache     | Redis                                                                         |
+| Storage   | Originais em `uploads/`, zips em `outputs/`, bucket `videos`                  |
+| Publica   | `video.uploaded`                                                              |
+| Consome   | `video.processing.started`, `video.processed`, `video.failed`, `user.deleted` |
+| Readiness | Postgres, RabbitMQ e o bucket                                                 |
+| Escala    | HPA por CPU, de 1 a 3 réplicas, alvo de 70%                                   |
+| Manifests | [`infra/k8s/video-service`](../../../infra/k8s/video-service)                 |
 
 ## Testes
 
-Os testes de unidade cobrem a máquina de estados, os casos de uso (com repositório falso que respeita a trava de versão), o servidor HTTP inteiro com multipart e o consumo dos eventos. O teste de integração sobe o processo de verdade contra Postgres, RabbitMQ, SeaweedFS e Redis em containers, com um JWKS servido por HTTP, e passa pelo upload, pelos eventos do worker, pelo download, pela exclusão, pelo 413, pelo 401 e pela expiração. A cobertura mínima é de 95% das linhas e 90% dos branches.
+Os testes de unidade cobrem a máquina de estados, os casos de uso (com repositório falso que respeita a trava de versão), o servidor HTTP inteiro com multipart e o consumo dos eventos, inclusive `user.deleted`. O teste de integração sobe o processo de verdade contra Postgres, RabbitMQ, SeaweedFS e Redis em containers, com um JWKS servido por HTTP, e passa pelo upload, pelos eventos do worker, pelo download, pela exclusão, pelo 413, pelo 401 e pela expiração. A cobertura mínima é de 95% das linhas e 90% dos branches.
 
 ## Limitações
 
-- `user.deleted` ainda não é consumido: quando o auth-service publicar o evento, os vídeos e arquivos daquele usuário precisarão ser apagados aqui.
-- Um vídeo `FAILED` cujo original o worker não conseguiu apagar fica com o arquivo no storage. Em `DONE`, a expiração apaga o que sobrou.
+- Um vídeo `FAILED` cujo original o worker não conseguiu apagar fica com o arquivo no storage até o dono excluir o vídeo ou a conta. Em `DONE`, a expiração apaga o que sobrou.
 - Não há detecção de vídeos parados em `QUEUED` ou `PROCESSING` por muito tempo. O índice `idx_videos_em_andamento` já existe para essa consulta.

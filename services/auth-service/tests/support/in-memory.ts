@@ -23,6 +23,15 @@ export class InMemoryUserRepository implements UserRepository {
     this.users.set(user.email, user);
     return Promise.resolve(user);
   }
+
+  deleteById(userId: string): Promise<void> {
+    for (const [email, user] of this.users) {
+      if (user.id === userId) {
+        this.users.delete(email);
+      }
+    }
+    return Promise.resolve();
+  }
 }
 
 export class InMemoryEventPublisher implements EventPublisher {

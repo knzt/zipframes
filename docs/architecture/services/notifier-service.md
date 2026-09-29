@@ -49,5 +49,5 @@ Os testes de unidade cobrem a unicidade por tipo, o `PENDING` à espera do conta
 
 ## Limitações
 
-- O auth-service ainda não publica `user.updated` nem `user.deleted`. O consumo existe e é testado, mas hoje só `user.registered` chega em produção.
+- O auth-service ainda não publica `user.updated`: não há como mudar nome ou e-mail depois do cadastro, então esse consumo nunca dispara em produção.
 - Não há outro canal além de e-mail.
