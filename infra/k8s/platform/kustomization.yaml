@@ -1,0 +1,13 @@
+# What the four processes depend on inside the cluster. The operators and
+# Traefik are installed by infra/kind/bootstrap.sh; this only declares
+# the instances. Credentials are Secrets the bootstrap creates, not files here.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  - postgres.yaml
+  - rabbitmq.yaml
+  - redis.yaml
+  - seaweedfs.yaml
+  - mailpit.yaml
+  - ingress.yaml

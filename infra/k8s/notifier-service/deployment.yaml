@@ -18,8 +18,9 @@ spec:
       terminationGracePeriodSeconds: 40
       containers:
         - name: notifier-service
-          image: zipframes-notifier-service:local
-          imagePullPolicy: IfNotPresent
+          image: ghcr.io/knzt/zipframes-notifier-service:main
+          # :main moves on every publish; a restart pulls the newest.
+          imagePullPolicy: Always
           envFrom:
             - configMapRef:
                 name: notifier-service

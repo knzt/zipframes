@@ -1,0 +1,5 @@
+# The only owner of the namespace; the service applications only use it.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: zipframes

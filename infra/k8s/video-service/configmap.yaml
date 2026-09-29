@@ -9,7 +9,7 @@ data:
   REDIS_URL: redis://redis.zipframes.svc.cluster.local:6379
   S3_ENDPOINT: http://seaweedfs.zipframes.svc.cluster.local:8333
   # Host the browser reaches through the Ingress; the download URLs are signed for it.
-  S3_PUBLIC_ENDPOINT: https://storage.zipframes.local
+  S3_PUBLIC_ENDPOINT: http://storage.zipframes.localhost
   S3_REGION: us-east-1
   S3_BUCKET: videos
   S3_FORCE_PATH_STYLE: 'true'

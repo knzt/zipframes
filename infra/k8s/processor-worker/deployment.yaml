@@ -6,7 +6,7 @@ metadata:
   labels:
     app: processor-worker
 spec:
-  replicas: 1
+  # No replicas: the autoscaler owns it, and Argo CD would reset it otherwise.
   selector:
     matchLabels:
       app: processor-worker
@@ -18,8 +18,9 @@ spec:
       terminationGracePeriodSeconds: 40
       containers:
         - name: processor-worker
-          image: zipframes-processor-worker:local
-          imagePullPolicy: IfNotPresent
+          image: ghcr.io/knzt/zipframes-processor-worker:main
+          # :main moves on every publish; a restart pulls the newest.
+          imagePullPolicy: Always
           envFrom:
             - configMapRef:
                 name: processor-worker

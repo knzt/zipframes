@@ -1,25 +1,22 @@
+# App of apps: the bootstrap applies only this file, and Argo CD creates
+# the other Applications in this directory from main.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: notifier-service
+  name: zipframes
   namespace: argocd
 spec:
   project: default
   source:
     repoURL: https://github.com/knzt/zipframes.git
     targetRevision: main
-    path: infra/k8s/notifier-service
+    path: infra/argocd
+    directory:
+      exclude: root.yaml
   destination:
     server: https://kubernetes.default.svc
-    namespace: zipframes
+    namespace: argocd
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
-    # The platform Application owns the namespace; until it syncs, retry.
-    retry:
-      limit: 10
-      backoff:
-        duration: 10s
-        factor: 2
-        maxDuration: 3m

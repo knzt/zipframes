@@ -6,7 +6,7 @@ metadata:
   labels:
     app: auth-service
 spec:
-  replicas: 1
+  # No replicas: the autoscaler owns it, and Argo CD would reset it otherwise.
   selector:
     matchLabels:
       app: auth-service
@@ -18,8 +18,9 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: auth-service
-          image: zipframes-auth-service:local
-          imagePullPolicy: IfNotPresent
+          image: ghcr.io/knzt/zipframes-auth-service:main
+          # :main moves on every publish; a restart pulls the newest.
+          imagePullPolicy: Always
           ports:
             - name: http
               containerPort: 3000

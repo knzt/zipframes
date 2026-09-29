@@ -1,6 +1,7 @@
-# Reusable checks for one service: install, test, and a local image.
+# Reusable checks for one service: install, test, and an image.
 # Callers on push to main may filter by path. Pull requests targeting
-# main always invoke this. Nothing here pushes an image or deploys.
+# main always invoke this. With `publish`, the image that passed both
+# jobs is pushed to GHCR as :<sha> and :main. Nothing here deploys.
 name: service-ci
 
 on:
@@ -11,9 +12,13 @@ on:
         required: true
         type: string
       image:
-        description: Local image tag. The image is not pushed.
+        description: Local image tag. It is pushed only under the GHCR name.
         required: true
         type: string
+      publish:
+        description: Push the tested image to ghcr.io/<owner>/zipframes-<service>
+        type: boolean
+        default: false
       prisma:
         description: Generate the Prisma client before typecheck and tests
         type: boolean
@@ -107,17 +112,36 @@ jobs:
         working-directory: services/${{ inputs.service }}
         run: pnpm stage-runtime
 
+      # The source label links the GHCR package to this repository.
       - name: Build the local image
         run: |
           if [ "${{ inputs.docker_secret }}" = "true" ]; then
             docker build \
               --secret id=node_auth_token,env=NODE_AUTH_TOKEN \
+              --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
               --file "services/${{ inputs.service }}/Dockerfile" \
               --tag "${{ inputs.image }}" \
               .
           else
-            docker build --tag "${{ inputs.image }}" "services/${{ inputs.service }}"
+            docker build \
+              --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
+              --tag "${{ inputs.image }}" \
+              "services/${{ inputs.service }}"
           fi
+
+      # The publish job pushes this exact image, not a rebuild.
+      - name: Save the image
+        if: ${{ inputs.publish }}
+        run: docker save "${{ inputs.image }}" | gzip > image.tar.gz
+
+      - name: Upload the image
+        if: ${{ inputs.publish }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: image-${{ inputs.service }}
+          path: image.tar.gz
+          retention-days: 1
+          compression-level: 0
 
   integration:
     name: Integration
@@ -158,3 +182,33 @@ jobs:
       - name: Integration tests
         working-directory: services/${{ inputs.service }}
         run: pnpm test:integration
+
+  publish:
+    name: Publish to GHCR
+    if: ${{ inputs.publish }}
+    needs: [verify, integration]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: image-${{ inputs.service }}
+
+      - name: Load the tested image
+        run: gunzip -c image.tar.gz | docker load
+
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+
+      # GHCR names must be lowercase. :main is what the manifests run;
+      # :<sha> keeps every published build addressable for a rollback.
+      - name: Push
+        run: |
+          repo="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/zipframes-${{ inputs.service }}"
+          for tag in "${GITHUB_SHA}" main; do
+            docker tag "${{ inputs.image }}" "${repo}:${tag}"
+            docker push "${repo}:${tag}"
+          done
+          echo "Pushed \`${repo}:${GITHUB_SHA}\` and \`:main\`" >> "$GITHUB_STEP_SUMMARY"
