@@ -1,6 +1,6 @@
 import type { Password } from '@zipframes/value-objects';
 
-import type { PasswordHash } from '../../../domain/valueObjects/passwordHash.js';
+import type { PasswordHash } from '../../../domain/entities/user.js';
 
 export interface PasswordHasher {
   hash: (password: Password) => Promise<PasswordHash>;

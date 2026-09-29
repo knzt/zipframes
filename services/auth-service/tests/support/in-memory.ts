@@ -6,7 +6,7 @@ import type { UserRepository } from '../../src/application/interfaces/repositori
 import type { PasswordHasher } from '../../src/application/interfaces/services/PasswordHasher.js';
 import type { TokenIssuer } from '../../src/application/interfaces/services/TokenIssuer.js';
 import type { User, UserId } from '../../src/domain/entities/user.js';
-import type { PasswordHash } from '../../src/domain/valueObjects/passwordHash.js';
+import type { PasswordHash } from '../../src/domain/entities/user.js';
 
 /**
  * In-memory stand-ins for the domain and use-case interfaces, so the use

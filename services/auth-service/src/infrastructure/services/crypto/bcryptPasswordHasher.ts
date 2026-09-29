@@ -3,8 +3,8 @@ import bcrypt from 'bcryptjs';
 import type { Password } from '@zipframes/value-objects';
 
 import type { PasswordHasher } from '../../../application/interfaces/services/PasswordHasher.js';
-import { asPasswordHash } from '../../../domain/valueObjects/passwordHash.js';
-import type { PasswordHash } from '../../../domain/valueObjects/passwordHash.js';
+import { asPasswordHash } from '../../../domain/entities/user.js';
+import type { PasswordHash } from '../../../domain/entities/user.js';
 
 const SALT_ROUNDS = 12;
 
