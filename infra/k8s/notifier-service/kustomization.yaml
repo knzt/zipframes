@@ -7,4 +7,4 @@ resources:
 # the commit SHA of each tested image; Argo CD rolls out that change.
 images:
   - name: ghcr.io/knzt/zipframes-notifier-service
-    newTag: 86c833f57e66e813572f831ece90d9d4a20524f2
+    newTag: ffd1730ffceb036877b1f8fb20eec844dfd4a28d
