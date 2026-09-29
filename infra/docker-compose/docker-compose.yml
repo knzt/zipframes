@@ -146,7 +146,11 @@ services:
     networks: [zipframes]
     restart: 'no'
 
-  # Profile `apps`: `docker compose up` não constrói nem sobe os processos.
+  # ─── Serviços da aplicação (profile `apps`) ─────────────────
+  # Ficam fora do `docker compose up` (pnpm infra:up), que sobe só a infra
+  # acima, para rodar os serviços na máquina com `pnpm dev`.
+  # `pnpm infra:apps` constrói e sobe os quatro; o build precisa de NODE_AUTH_TOKEN.
+
   # ─── Identidade ─────────────────────────────────────────────
   auth-service:
     profiles: [apps]
