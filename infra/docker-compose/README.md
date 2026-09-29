@@ -58,7 +58,7 @@ pnpm --dir services/processor-worker stage-runtime
 pnpm infra:apps
 ```
 
-`pnpm infra:apps` é `docker compose ... --profile apps up -d --build`. Os containers do auth, do video e do notification aplicam as migrations na subida (`prisma migrate deploy`). O auth e o video escutam nas portas 3000 e 3001. O worker e o notification consomem AMQP e não publicam porta HTTP. A chave montada no auth é `infra/docker-compose/auth/jwt-dev.pem`, com `JWT_KID=auth-dev-1`. O video busca o JWKS em `http://auth-service:3000` e assina a URL de download do zip para `http://localhost:8333` (`S3_PUBLIC_ENDPOINT`), o endereço que o cliente na máquina alcança. O notification assina o GET do zip no mesmo endpoint público e envia SMTP para o Mailpit (`smtp://mailpit:1025`). O vídeo em si chega pelo `POST /videos` (multipart) e o serviço o grava no storage.
+`pnpm infra:apps` é `docker compose ... --profile apps up -d --build`. Os containers do auth, do video e do notification aplicam as migrations na subida (`prisma migrate deploy`). O auth e o video escutam nas portas 3000 e 3001. O worker e o notification consomem AMQP e não publicam porta HTTP. A chave montada no auth é `infra/docker-compose/auth/jwt-dev.pem`, com `JWT_KID=auth-dev-1`; ela é gerada na primeira subida e não é versionada. O video busca o JWKS em `http://auth-service:3000` e assina a URL de download do zip para `http://localhost:8333` (`S3_PUBLIC_ENDPOINT`), o endereço que o cliente na máquina alcança. O notification assina o GET do zip no mesmo endpoint público e envia SMTP para o Mailpit (`smtp://mailpit:1025`). O vídeo em si chega pelo `POST /videos` (multipart) e o serviço o grava no storage.
 
 ```bash
 curl -fsS http://localhost:3000/health/ready
