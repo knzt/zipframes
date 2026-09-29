@@ -4,9 +4,6 @@ import { err, ok, ValidationError } from '@zipframes/core';
 import type { Brand, Result } from '@zipframes/core';
 import { Email, Name } from '@zipframes/value-objects';
 
-import { asPasswordHash } from '../valueObjects/password.js';
-import type { PasswordHash } from '../valueObjects/password.js';
-
 export type UserId = Brand<string, 'UserId'>;
 
 /**
@@ -14,6 +11,19 @@ export type UserId = Brand<string, 'UserId'>;
  * persisted or freshly generated UUID is already a user id.
  */
 export const brandUserId = (id: string): UserId => id as UserId;
+
+/**
+ * A bcrypt hash. Kept distinct from `Password` on purpose: the two must
+ * never be mixed up, and only the hash is ever persisted.
+ *
+ * `Password` lives in @zipframes/value-objects, the single source of the
+ * system's value objects. The hash stays here because it is not a
+ * validated value — it is whatever the hashing adapter produced, and its
+ * only owner in the domain is this aggregate.
+ */
+export type PasswordHash = Brand<string, 'PasswordHash'>;
+
+export const asPasswordHash = (hash: string): PasswordHash => hash as PasswordHash;
 
 export interface RegisterUserProps {
   readonly id?: string;

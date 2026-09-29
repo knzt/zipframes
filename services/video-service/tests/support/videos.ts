@@ -1,3 +1,5 @@
+import { VideoFile } from '@zipframes/value-objects';
+
 import { Video, type PersistedVideo } from '../../src/domain/entities/video.js';
 import { framesPackageKeyFor, sourceKeyFor } from '../../src/domain/policies/storageKeys.js';
 import type { VideoStatus } from '../../src/domain/valueObjects/videoStatus.js';
@@ -9,6 +11,17 @@ export const CORRELATION_ID = '0194f3a0-0000-7000-8000-00000000d004';
 export const CREATED_AT = new Date('2026-09-27T10:00:00.000Z');
 export const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
 export const RETENTION_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * A valid `VideoFile`, built through the value object rather than written
+ * as a literal: the branded type is what `Video.receive` expects, and
+ * going through `create` keeps the fixture honest about the policy.
+ */
+export const aVideoFile = (name = 'aula.mp4', contentType = 'video/mp4'): VideoFile => {
+  const result = VideoFile.create({ name, contentType });
+  if (!result.ok) throw new Error(`expected ${name} / ${contentType} to be a valid video file`);
+  return result.value;
+};
 
 /** Columns a video has in each status, so the builder only yields valid rows. */
 const byStatus = (

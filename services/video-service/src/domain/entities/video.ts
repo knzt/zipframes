@@ -2,11 +2,10 @@ import { randomUUID } from 'node:crypto';
 
 import { err, ok, ValidationError } from '@zipframes/core';
 import type { Brand, Result } from '@zipframes/core';
+import { asVideoFileName, type VideoFile, type VideoFileName } from '@zipframes/value-objects';
 
 import { InvalidVideoTransitionError } from '../errors/videoErrors.js';
 import { framesPackageKeyFor, sourceKeyFor } from '../policies/storageKeys.js';
-import { asFileName, type FileName } from '../valueObjects/fileName.js';
-import type { VideoFile } from '../valueObjects/videoFile.js';
 import { DELETABLE, PROCESSING_FINISHED, type VideoStatus } from '../valueObjects/videoStatus.js';
 
 export type VideoId = Brand<string, 'VideoId'>;
@@ -59,7 +58,7 @@ export interface PersistedVideo {
 interface VideoState extends Omit<PersistedVideo, 'id' | 'ownerId' | 'originalFileName'> {
   readonly id: VideoId;
   readonly ownerId: OwnerId;
-  readonly originalFileName: FileName;
+  readonly originalFileName: VideoFileName;
 }
 
 /** What the processing context reported, already stripped of transport. */
@@ -131,7 +130,7 @@ export class Video {
       ...data,
       id: brandVideoId(data.id),
       ownerId: brandOwnerId(data.ownerId),
-      originalFileName: asFileName(data.originalFileName),
+      originalFileName: asVideoFileName(data.originalFileName),
     });
   }
 
@@ -238,7 +237,7 @@ export class Video {
     return this.state.ownerId;
   }
 
-  get originalFileName(): FileName {
+  get originalFileName(): VideoFileName {
     return this.state.originalFileName;
   }
 

@@ -10,7 +10,7 @@ O contrato HTTP é o documento gerado em `GET /docs` (as rotas comuns de saúde 
 
 ```
 src/
-├── domain/                 # User, Password, UserRegistered
+├── domain/                 # User (com UserId e PasswordHash), UserRegistered
 ├── application/
 │   ├── useCases/           # LoginUseCase, RegisterUserUseCase, DeleteAccountUseCase
 │   └── interfaces/         # ports declarados pelo caso de uso

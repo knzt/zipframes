@@ -10,7 +10,7 @@ O contrato HTTP é o documento gerado em `GET /docs` (as rotas comuns de saúde 
 
 ```
 src/
-├── domain/                 # Video (agregado e máquina de estados), FileName, VideoFile, VideoStatus, chaves
+├── domain/                 # Video (agregado e máquina de estados), VideoStatus, chaves de objeto
 ├── application/
 │   ├── useCases/           # UploadVideo, ListUserVideos, GetVideo, GetDownloadUrl, DeleteVideo,
 │   │                       # ApplyProcessingEvent, ExpireFramesPackages, DeleteAccountVideos
