@@ -15,4 +15,8 @@ export class PrismaUserRepository implements UserRepository {
     const persisted = await this.prisma.user.create({ data: user.toJSON() });
     return User.fromPersistence(persisted);
   }
+
+  async deleteById(userId: string): Promise<void> {
+    await this.prisma.user.deleteMany({ where: { id: userId } });
+  }
 }

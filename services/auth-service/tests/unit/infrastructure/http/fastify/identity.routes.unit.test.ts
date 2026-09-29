@@ -8,6 +8,7 @@ import { bindHttpRoutes } from '../../../../../src/infrastructure/http/fastify/b
 import { registerHealthRoutes } from '../../../../../src/infrastructure/http/fastify/health.routes.js';
 import { createHttpServer } from '../../../../../src/infrastructure/http/fastify/server.js';
 import type { HttpRouteDefinition } from '../../../../../src/infrastructure/http/httpRoute.js';
+import type { DeleteAccountController } from '../../../../../src/interface-adapters/DeleteAccountController.js';
 import type { LoginController } from '../../../../../src/interface-adapters/LoginController.js';
 import type { RegisterUserController } from '../../../../../src/interface-adapters/RegisterUserController.js';
 import { identityRoutes } from '../../../../../src/infrastructure/http/routes/identityRoutes.js';
@@ -29,6 +30,10 @@ const stubLogin: LoginController = {
   }),
 } as unknown as LoginController;
 
+const stubDeleteAccount: DeleteAccountController = {
+  handle: async () => ({ status: 204, body: undefined }),
+} as unknown as DeleteAccountController;
+
 const withHandle = (
   routes: readonly HttpRouteDefinition[],
   path: string,
@@ -38,6 +43,7 @@ const withHandle = (
 const buildApp = async (overrides?: {
   registerUserHandler?: IdentityHandler;
   loginHandler?: IdentityHandler;
+  deleteAccountHandler?: IdentityHandler;
   jwksHandler?: IdentityHandler;
   isReady?: () => Promise<{ ready: boolean; reason?: string }>;
   renderMetrics?: () => Promise<string>;
@@ -48,6 +54,7 @@ const buildApp = async (overrides?: {
   let routes = identityRoutes({
     registerUser: stubRegisterUser,
     login: stubLogin,
+    deleteAccount: stubDeleteAccount,
     jwks: [{ kty: 'RSA', kid: 'k1', alg: 'RS256', use: 'sig', n: 'abc', e: 'AQAB' }],
   });
   if (overrides?.registerUserHandler !== undefined) {
@@ -55,6 +62,9 @@ const buildApp = async (overrides?: {
   }
   if (overrides?.loginHandler !== undefined) {
     routes = withHandle(routes, '/login', overrides.loginHandler);
+  }
+  if (overrides?.deleteAccountHandler !== undefined) {
+    routes = withHandle(routes, '/account', overrides.deleteAccountHandler);
   }
   if (overrides?.jwksHandler !== undefined) {
     routes = withHandle(routes, '/.well-known/jwks.json', overrides.jwksHandler);
@@ -157,6 +167,23 @@ describe('identity route binding', () => {
     });
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ tokenType: 'Bearer', expiresIn: 900 });
+    await app.close();
+  });
+
+  it('forwards the delete-account request with no body', async () => {
+    const handle = vi.fn(async () => ({ status: 204, body: undefined }));
+    const app = await buildApp({ deleteAccountHandler: handle });
+
+    const response = await app.inject({
+      method: 'DELETE',
+      url: '/account',
+      headers: { authorization: 'Bearer token', 'x-correlation-id': 'corr-delete' },
+    });
+
+    expect(handle).toHaveBeenCalledWith(
+      expect.objectContaining({ authorization: 'Bearer token', correlationId: 'corr-delete' }),
+    );
+    expect(response.statusCode).toBe(204);
     await app.close();
   });
 

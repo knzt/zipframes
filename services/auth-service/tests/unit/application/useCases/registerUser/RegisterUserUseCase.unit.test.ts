@@ -147,6 +147,7 @@ describe('repository create failure', () => {
       create: async (): Promise<never> => {
         throw new Error('unique constraint');
       },
+      deleteById: async () => undefined,
     };
     const useCase = new RegisterUserUseCase(raceRepository, new FakeHasher(), eventPublisher);
 

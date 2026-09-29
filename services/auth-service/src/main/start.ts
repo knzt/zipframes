@@ -7,11 +7,12 @@ import { registerHealthRoutes } from '../infrastructure/http/fastify/health.rout
 import { createHttpServer } from '../infrastructure/http/fastify/server.js';
 import { loadConfig } from '../infrastructure/loadEnvConfig.js';
 import { assertAmqpTopology } from '../infrastructure/messaging/amqplib/amqpTopology.js';
+import { createDeleteAccountController } from './factories/controllers/deleteAccountController.js';
 import { createLoginController } from './factories/controllers/loginController.js';
 import { createRegisterUserController } from './factories/controllers/registerUserController.js';
 import { createAmqplib, createAmqpPing } from './factories/externals/amqplib.js';
 import { createPrisma, createPrismaPing } from './factories/externals/prisma.js';
-import { createTokenIssuer } from './factories/services/tokenIssuer.js';
+import { createTokenServices } from './factories/services/tokenServices.js';
 import { identityRoutes } from '../infrastructure/http/routes/identityRoutes.js';
 
 export interface RunningAuthService {
@@ -38,7 +39,7 @@ export const startAuthService = async (): Promise<RunningAuthService> => {
     const prisma = createPrisma(config.databaseUrl);
     closers.push(() => prisma.$disconnect());
 
-    const { tokenIssuer, keys } = await createTokenIssuer({
+    const { tokenIssuer, authenticator, publicJwk } = await createTokenServices({
       privateKeyPem: config.jwtPrivateKeyPem,
       kid: config.jwtKid,
       issuer: config.jwtIssuer,
@@ -59,7 +60,8 @@ export const startAuthService = async (): Promise<RunningAuthService> => {
       identityRoutes({
         registerUser: createRegisterUserController({ prisma, amqp, logger }),
         login: createLoginController({ prisma, tokenIssuer }),
-        jwks: [keys.publicJwk],
+        deleteAccount: createDeleteAccountController({ prisma, amqp, logger, authenticator }),
+        jwks: [publicJwk],
       }),
     );
     registerHealthRoutes(app, {

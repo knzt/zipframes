@@ -1,4 +1,4 @@
-import type { UserRegisteredPayload } from '@zipframes/schemas/auth-service';
+import type { UserDeletedPayload, UserRegisteredPayload } from '@zipframes/schemas/auth-service';
 
 export interface EventPublisherUserRegistered {
   readonly eventType: 'user.registered';
@@ -6,7 +6,13 @@ export interface EventPublisherUserRegistered {
   readonly payload: UserRegisteredPayload;
 }
 
-export type EventPublisherInput = EventPublisherUserRegistered;
+export interface EventPublisherUserDeleted {
+  readonly eventType: 'user.deleted';
+  readonly correlationId: string;
+  readonly payload: UserDeletedPayload;
+}
+
+export type EventPublisherInput = EventPublisherUserRegistered | EventPublisherUserDeleted;
 
 export interface EventPublisher {
   readonly publish: (input: EventPublisherInput) => Promise<void>;

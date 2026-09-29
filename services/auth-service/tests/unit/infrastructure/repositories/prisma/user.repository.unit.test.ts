@@ -68,3 +68,15 @@ describe('PrismaUserRepository.create', () => {
     await expect(repository.create(sampleUser)).rejects.toBe(prismaError);
   });
 });
+
+describe('PrismaUserRepository.deleteById', () => {
+  it('deletes by id, harmlessly matching zero rows if the id is gone', async () => {
+    const deleteMany = vi.fn(async () => ({ count: 1 }));
+    const prisma = { user: { findUnique: vi.fn(), create: vi.fn(), deleteMany } };
+    const repository = new PrismaUserRepository(prisma as never);
+
+    await repository.deleteById(sampleUser.id);
+
+    expect(deleteMany).toHaveBeenCalledWith({ where: { id: sampleUser.id } });
+  });
+});
