@@ -49,6 +49,11 @@ export class PrismaVideoRepository implements VideoRepository {
     return rows.map(toDomain);
   }
 
+  async listAllByOwner(ownerId: string): Promise<readonly Video[]> {
+    const rows = await this.prisma.video.findMany({ where: { ownerId } });
+    return rows.map(toDomain);
+  }
+
   async findExpired(now: Date, limit: number): Promise<readonly Video[]> {
     const rows = await this.prisma.video.findMany({
       where: { status: 'DONE', expiresAt: { lte: now } },
@@ -90,5 +95,9 @@ export class PrismaVideoRepository implements VideoRepository {
       throw changedConcurrently();
     }
     return Video.fromPersistence({ ...video.toJSON(), version: video.version + 1 });
+  }
+
+  async deleteAllByOwner(ownerId: string): Promise<void> {
+    await this.prisma.video.deleteMany({ where: { ownerId } });
   }
 }

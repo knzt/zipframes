@@ -63,6 +63,10 @@ export class InMemoryVideoRepository implements VideoRepository {
     );
   }
 
+  listAllByOwner(ownerId: string): Promise<readonly Video[]> {
+    return Promise.resolve([...this.rows.values()].filter((video) => video.ownerId === ownerId));
+  }
+
   findExpired(now: Date, limit: number): Promise<readonly Video[]> {
     return Promise.resolve(
       [...this.rows.values()]
@@ -89,6 +93,15 @@ export class InMemoryVideoRepository implements VideoRepository {
     this.rows.set(video.id, stored);
     this.saves += 1;
     return Promise.resolve(stored);
+  }
+
+  deleteAllByOwner(ownerId: string): Promise<void> {
+    for (const [id, video] of this.rows) {
+      if (video.ownerId === ownerId) {
+        this.rows.delete(id);
+      }
+    }
+    return Promise.resolve();
   }
 }
 
