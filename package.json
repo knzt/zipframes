@@ -15,6 +15,7 @@
     "infra:down": "docker compose -f infra/docker-compose/docker-compose.yml --profile apps down",
     "infra:logs": "docker compose -f infra/docker-compose/docker-compose.yml --profile apps logs -f",
     "infra:reset": "docker compose -f infra/docker-compose/docker-compose.yml --profile apps down -v && docker compose -f infra/docker-compose/docker-compose.yml up -d",
+    "db:seed": "pnpm --dir services/auth-service db:seed && pnpm --dir services/video-service db:seed && pnpm --dir services/notifier-service db:seed",
     "deps:auth": "pnpm --dir services/auth-service add",
     "deps:worker": "pnpm --dir services/processor-worker add",
     "deps:video": "pnpm --dir services/video-service add",

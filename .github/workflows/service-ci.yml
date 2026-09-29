@@ -36,9 +36,20 @@ on:
         description: Pass NODE_AUTH_TOKEN into the image build as a BuildKit secret
         type: boolean
         default: false
+      sonar:
+        description: |
+          Send the analysis to SonarQube Cloud. Needs `coverage: true`, a
+          SONAR_TOKEN for this service's project, and
+          services/<service>/sonar-project.properties.
+        type: boolean
+        default: false
     secrets:
       NODE_AUTH_TOKEN:
         required: true
+      # One project per service on the free tier means one token per
+      # service. The caller passes its own.
+      SONAR_TOKEN:
+        required: false
 
 permissions:
   contents: read
@@ -55,6 +66,10 @@ jobs:
       NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          # Sonar reads the git history to attribute new code to a commit
+          # and an author. A shallow clone leaves that blame blank.
+          fetch-depth: ${{ inputs.sonar && 0 || 1 }}
 
       - uses: pnpm/action-setup@v5
 
@@ -103,6 +118,17 @@ jobs:
         if: ${{ inputs.coverage }}
         working-directory: services/${{ inputs.service }}
         run: pnpm test:coverage
+
+      # Reads services/<service>/sonar-project.properties. On a pull request
+      # the action derives the PR decoration from the event payload, so the
+      # analysis lands on the PR instead of on the branch.
+      - name: SonarQube Cloud
+        if: ${{ inputs.sonar }}
+        uses: SonarSource/sonarqube-scan-action@v6
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          projectBaseDir: services/${{ inputs.service }}
 
       - name: Build
         working-directory: services/${{ inputs.service }}

@@ -41,5 +41,11 @@ jobs:
       publish: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
       image: zipframes-processor-worker:local
       stage_runtime: true
+      # Sonar reports coverage from the lcov the coverage run writes.
+      coverage: true
+      sonar: true
     secrets:
       NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
+      # A global analysis token covers every project in the organization, so
+      # the four services share this secret.
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

@@ -176,6 +176,8 @@ pnpm --dir services/video-service test          # unidade e integração
 
 O CI falha abaixo da cobertura mínima de cada serviço: 100% de linhas e branches no auth-service, 95% e 90% no video-service, 80% no processor-worker e no notifier-service. Na raiz, `pnpm lint`, `pnpm format` e `pnpm check:layers` conferem estilo e as regras de dependência entre camadas.
 
+O mesmo relatório de cobertura vai para o SonarQube Cloud, um projeto por serviço; a configuração está em [docs/qualidade/sonarqube.md](docs/qualidade/sonarqube.md).
+
 ## CI/CD
 
 ```
@@ -190,27 +192,32 @@ Cada serviço tem o próprio workflow em [.github/workflows](.github/workflows),
 
 ## Banco e recursos
 
-| O quê                             | Onde                                                                                         |
-| --------------------------------- | -------------------------------------------------------------------------------------------- |
-| Migrations (SQL) de cada serviço  | `services/<serviço>/src/infrastructure/repositories/prisma/migrations/`                      |
-| Modelo de dados comentado         | [docs/data/modelagem-de-dados.md](docs/data/modelagem-de-dados.md)                           |
-| Manifests do Kubernetes           | [infra/k8s](infra/k8s): um diretório por serviço e `platform/` para bancos, broker e storage |
-| Criação do cluster e dos segredos | [infra/kind/bootstrap.sh](infra/kind/bootstrap.sh)                                           |
-| Infraestrutura local              | [infra/docker-compose](infra/docker-compose/README.md)                                       |
+| O quê                             | Onde                                                                                                                        |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Migrations (SQL) de cada serviço  | `services/<serviço>/src/infrastructure/repositories/prisma/migrations/`                                                     |
+| Modelo de dados comentado         | [docs/data/modelagem-de-dados.md](docs/data/modelagem-de-dados.md)                                                          |
+| Dados de demonstração (seeds)     | `services/<serviço>/scripts/seed.ts`, descritos em [docs/data/dados-de-demonstracao.md](docs/data/dados-de-demonstracao.md) |
+| Manifests do Kubernetes           | [infra/k8s](infra/k8s): um diretório por serviço e `platform/` para bancos, broker e storage                                |
+| Criação do cluster e dos segredos | [infra/kind/bootstrap.sh](infra/kind/bootstrap.sh)                                                                          |
+| Infraestrutura local              | [infra/docker-compose](infra/docker-compose/README.md)                                                                      |
 
 As migrations rodam na subida de cada serviço (`prisma migrate deploy`), então um banco novo fica pronto sem passo manual.
 
+Para popular os três bancos locais com um usuário demo, vídeos em todos os status e as notificações correspondentes, rode `pnpm db:seed` na raiz (ou `pnpm --dir services/<serviço> db:seed` para um só). Os seeds são idempotentes e valem apenas para desenvolvimento.
+
 ## Documentação
 
-| Documento                                              | Conteúdo                                                    |
-| ------------------------------------------------------ | ----------------------------------------------------------- |
-| [Arquitetura](docs/architecture/README.md)             | Visão geral, comunicação, falhas, organização do código, C4 |
-| [Domínio](docs/domain/dominio.md)                      | Linguagem ubíqua, contextos e regras de negócio             |
-| [Modelagem de dados](docs/data/modelagem-de-dados.md)  | Tabelas, índices e como cada consumidor é idempotente       |
-| [AsyncAPI](docs/asyncapi/events.yaml)                  | Contrato dos eventos                                        |
-| [OpenAPI](docs/openapi/README.md)                      | Onde está o contrato HTTP gerado por cada serviço           |
-| [Análise do projeto base](docs/review-projeto-base.md) | O protótipo original e o que mudou                          |
-| [Kubernetes local](infra/kind/README.md)               | Cluster, operators, segredos, endereços e entrega contínua  |
+| Documento                                                   | Conteúdo                                                    |
+| ----------------------------------------------------------- | ----------------------------------------------------------- |
+| [Arquitetura](docs/architecture/README.md)                  | Visão geral, comunicação, falhas, organização do código, C4 |
+| [Domínio](docs/domain/dominio.md)                           | Linguagem ubíqua, contextos e regras de negócio             |
+| [Modelagem de dados](docs/data/modelagem-de-dados.md)       | Tabelas, índices e como cada consumidor é idempotente       |
+| [Dados de demonstração](docs/data/dados-de-demonstracao.md) | O que os seeds gravam nos três bancos e os UUIDs fixos      |
+| [SonarQube Cloud](docs/qualidade/sonarqube.md)              | Os quatro projetos, o token e como a cobertura chega lá     |
+| [AsyncAPI](docs/asyncapi/events.yaml)                       | Contrato dos eventos                                        |
+| [OpenAPI](docs/openapi/README.md)                           | Onde está o contrato HTTP gerado por cada serviço           |
+| [Análise do projeto base](docs/review-projeto-base.md)      | O protótipo original e o que mudou                          |
+| [Kubernetes local](infra/kind/README.md)                    | Cluster, operators, segredos, endereços e entrega contínua  |
 
 ## Desenvolvimento
 
