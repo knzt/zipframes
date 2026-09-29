@@ -19,6 +19,7 @@ const configSchema = z.object({
   retryMaxDelayMs: z.coerce.number().int().positive(),
   logLevel: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
   serviceVersion: z.string().min(1),
+  operationsPort: z.coerce.number().int().nonnegative().max(65535),
 });
 
 export type WorkerConfig = z.infer<typeof configSchema>;
@@ -38,6 +39,7 @@ const ENV_BY_FIELD: Record<string, string> = {
   retryMaxDelayMs: 'RETRY_MAX_DELAY_MS',
   logLevel: 'LOG_LEVEL',
   serviceVersion: 'SERVICE_VERSION',
+  operationsPort: 'OPERATIONS_PORT',
 };
 
 const formatZodError = (error: z.ZodError): Error => {
@@ -63,6 +65,7 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): WorkerConfig =
       retryMaxDelayMs: env.RETRY_MAX_DELAY_MS ?? '30000',
       logLevel: env.LOG_LEVEL ?? 'info',
       serviceVersion: env.SERVICE_VERSION ?? '0.0.0',
+      operationsPort: env.OPERATIONS_PORT ?? '9464',
     });
   } catch (error) {
     if (error instanceof z.ZodError) {

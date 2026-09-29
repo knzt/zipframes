@@ -24,6 +24,7 @@ describe('loadConfig', () => {
     expect(config.smtpFrom).toBe('ZipFrames <noreply@zipframes.local>');
     expect(config.downloadUrlTtlSeconds).toBe(86_400);
     expect(config.appPublicUrl).toBe('http://localhost:3001');
+    expect(config.operationsPort).toBe(9464);
   });
 
   it('rejects a missing required variable', () => {

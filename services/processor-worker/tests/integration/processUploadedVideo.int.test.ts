@@ -135,6 +135,7 @@ describe('processUploadedVideo message flow', () => {
     process.env.S3_FORCE_PATH_STYLE = 'true';
     process.env.WORK_DIR = workDir;
     process.env.PROCESSING_TIMEOUT_MS = '60000';
+    process.env.OPERATIONS_PORT = '0';
     process.env.MAX_ATTEMPTS = '3';
     process.env.RETRY_BASE_DELAY_MS = '1000';
     process.env.RETRY_MAX_DELAY_MS = '5000';

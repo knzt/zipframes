@@ -86,6 +86,7 @@ export const startNotifierServiceUnderTest = async (): Promise<NotifierServiceUn
     S3_BUCKET: BUCKET,
     S3_FORCE_PATH_STYLE: 'true',
     APP_PUBLIC_URL: 'http://localhost:3001',
+    OPERATIONS_PORT: '0',
     MAX_ATTEMPTS: '3',
     RETRY_BASE_DELAY_MS: '50',
     RETRY_MAX_DELAY_MS: '200',

@@ -1,8 +1,11 @@
 import type { RetryOptions } from '@zipframes/communication';
+import { createReadinessCheck } from '@zipframes/core';
 import { createLogger, runWithCorrelationId } from '@zipframes/logger';
 import { createMetrics } from '@zipframes/telemetry';
 
+import { startOperationsServer } from '../infrastructure/http/operationsServer.js';
 import { loadConfig } from '../infrastructure/loadEnvConfig.js';
+import { createAmqpPing } from '../infrastructure/messaging/amqplib/connection.js';
 import {
   createProcessorAmqpTopology,
   UPLOADED_QUEUE,
@@ -13,6 +16,7 @@ import { createProcessUploadedVideoController } from './factories/controllers/pr
 import { createAmqplib } from './factories/externals/amqplib.js';
 import { createS3 } from './factories/externals/s3.js';
 import { createEventPublisherGateway } from './factories/gateways/eventPublisherGateway.js';
+import { createObjectStorageGateway } from './factories/gateways/objectStorageGateway.js';
 
 export const startWorker = async (): Promise<{ stop: () => Promise<void> }> => {
   const config = loadConfig();
@@ -74,12 +78,25 @@ export const startWorker = async (): Promise<{ stop: () => Promise<void> }> => {
 
     await amqp.consume(UPLOADED_QUEUE, processUploadedVideoController.handle, { retry });
 
+    const operations = await startOperationsServer({
+      port: config.operationsPort,
+      isReady: createReadinessCheck([
+        createAmqpPing(amqp),
+        createObjectStorageGateway({ s3, bucket: config.s3Bucket }),
+      ]),
+      renderMetrics: () => technicalMetrics.registry.metrics(),
+      logger,
+    });
+    closers.push(() => operations.close());
+
     logger.info('processor-worker started', {
       queue: UPLOADED_QUEUE,
+      operationsPort: operations.port,
     });
 
     return {
       stop: async () => {
+        await operations.close();
         await amqp.close();
         logger.info('processor-worker stopped');
       },

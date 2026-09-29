@@ -21,7 +21,7 @@ src/main/                 # start.ts e factories (sem handlers HTTP)
 - retry pela fila wait com TTL (não republica em `zipframes.events`)
 - e-mail de zip pronto: nome do arquivo, quantidade de frames, URL GET assinada (24h) e fallback `{APP_PUBLIC_URL}/videos/{videoId}/download`
 - e-mail de falha: nome do arquivo, data do envio e `{APP_PUBLIC_URL}/videos` para enviar de novo
-- sem anexo zip, sem Fastify; probes exec (`kill -0 1`)
+- sem anexo zip e sem Fastify; saúde e métricas na porta de operação (`OPERATIONS_PORT`, 9464)
 
 ## Testes
 
@@ -47,7 +47,7 @@ pnpm infra:up
 pnpm --dir services/notifier-service dev
 ```
 
-O processo não escuta HTTP. O Compose e o Kubernetes usam probe exec (`kill -0 1`).
+O processo não tem rotas de negócio. Ele responde só `/health/live`, `/health/ready` (Postgres e RabbitMQ) e `/metrics` na porta de operação (`OPERATIONS_PORT`, padrão 9464), usada pelas probes e pelo Prometheus.
 
 A imagem instala o lockfile no build (contexto = raiz do repositório) e aplica `prisma migrate deploy` na subida:
 
