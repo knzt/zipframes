@@ -23,6 +23,7 @@ RABBITMQ_OPERATOR_URL=https://github.com/rabbitmq/cluster-operator/releases/down
 KEDA_URL=https://github.com/kedacore/keda/releases/download/v2.21.0/keda-2.21.0.yaml
 METRICS_SERVER_URL=https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.9.0/components.yaml
 ARGOCD_URL=https://raw.githubusercontent.com/argoproj/argo-cd/v3.5.3/manifests/install.yaml
+PROMETHEUS_OPERATOR_URL=https://github.com/prometheus-operator/prometheus-operator/releases/download/v0.94.1/bundle.yaml
 
 SERVICES=(auth-service video-service processor-worker notifier-service)
 DATABASES=(auth video notification)
@@ -54,6 +55,7 @@ need kind kubectl docker openssl base64
 
 has_secret() { k -n "$NS" get secret "$1" > /dev/null 2>&1; }
 secret_value() { k -n "$NS" get secret "$1" -o "jsonpath={.data.$2}" | base64 -d; }
+secret_value_in() { k -n "$1" get secret "$2" -o "jsonpath={.data.$3}" | base64 -d; }
 # Creates or updates without failing on an existing Secret.
 apply_secret() { k -n "$NS" create secret generic "$@" --dry-run=client -o yaml | k apply -f - > /dev/null; }
 
@@ -79,6 +81,8 @@ step "Operators, autoscaling and Traefik"
 k apply --server-side -f "$CNPG_URL" > /dev/null
 k apply --server-side -f "$RABBITMQ_OPERATOR_URL" > /dev/null
 k apply --server-side -f "$KEDA_URL" > /dev/null
+# CRDs and controller for Prometheus, Alertmanager and the scrape targets.
+k apply --server-side -f "$PROMETHEUS_OPERATOR_URL" > /dev/null
 k apply -f "$METRICS_SERVER_URL" > /dev/null
 # The kubelet certificates in kind are self-signed.
 if ! k -n kube-system get deployment metrics-server -o jsonpath='{.spec.template.spec.containers[0].args}' | grep -q kubelet-insecure-tls; then
@@ -89,6 +93,7 @@ k apply -f "$ROOT/infra/kind/traefik.yaml" > /dev/null
 k -n cnpg-system rollout status deployment/cnpg-controller-manager --timeout=5m
 k -n rabbitmq-system rollout status deployment/rabbitmq-cluster-operator --timeout=5m
 k -n keda rollout status deployment/keda-operator --timeout=5m
+k -n default rollout status deployment/prometheus-operator --timeout=5m
 k -n traefik rollout status deployment/traefik --timeout=5m
 
 step "Credentials in namespace $NS"
@@ -114,6 +119,12 @@ if ! has_secret auth-jwt; then
   k -n "$NS" create secret generic auth-jwt \
     --from-literal=private.pem="$(openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 2> /dev/null)" > /dev/null
   echo "created auth-jwt"
+fi
+k create namespace monitoring --dry-run=client -o yaml | k apply -f - > /dev/null
+if ! k -n monitoring get secret grafana-admin > /dev/null 2>&1; then
+  k -n monitoring create secret generic grafana-admin \
+    --from-literal=password="$(openssl rand -hex 12)" > /dev/null
+  echo "created grafana-admin"
 fi
 
 if [ "$LOAD_IMAGES" = 1 ]; then
@@ -193,6 +204,8 @@ if [ "$MODE" = local ]; then
   for svc in "${SERVICES[@]}"; do
     render "$ROOT/infra/k8s/$svc" | k apply -f - > /dev/null
   done
+  step "Monitoring from this working tree"
+  render "$ROOT/infra/k8s/monitoring" | k apply -f - > /dev/null
 fi
 
 step "Starting the services"
@@ -211,6 +224,9 @@ ZipFrames is up.
   storage   http://storage.zipframes.localhost
   e-mail    http://mail.zipframes.localhost
   rabbitmq  http://rabbitmq.zipframes.localhost  (user: kubectl -n $NS get secret rabbitmq-default-user)
+  grafana   http://grafana.zipframes.localhost  (admin / $(secret_value_in monitoring grafana-admin password))
+  prometheus http://prometheus.zipframes.localhost
+  alerts    http://alertmanager.zipframes.localhost  (alert e-mails land in Mailpit)
 EOF
 if [ "$MODE" = argocd ]; then
   cat << EOF

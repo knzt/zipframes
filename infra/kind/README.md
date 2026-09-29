@@ -31,6 +31,7 @@ No modo Argo CD, o Argo lê este repositório (público) sem credencial. As imag
 | KEDA                        | 2.21.0 | `keda`, escala o worker pela fila `processor.video.uploaded`   |
 | metrics-server              | 0.9.0  | `kube-system`, alimenta os HPAs do auth e do video             |
 | Traefik                     | 3.7.13 | `traefik`, manifests em [`traefik.yaml`](traefik.yaml)         |
+| Prometheus Operator         | 0.94.1 | `default`, gerencia Prometheus e Alertmanager                  |
 | Argo CD (só no modo padrão) | 3.5.3  | `argocd`                                                       |
 
 As instâncias (Postgres, RabbitMQ, Redis, SeaweedFS, Mailpit e o Ingress delas) estão em [`infra/k8s/platform/`](../k8s/platform/). Os operators e o Traefik ficam no bootstrap porque são do cluster, não do ZipFrames.
@@ -52,13 +53,16 @@ Os `secret.example.yaml` em `infra/k8s/<serviço>/` mostram o formato e não ent
 
 `*.localhost` resolve para 127.0.0.1 no navegador e no curl, sem editar o arquivo de hosts.
 
-| Host                                | Destino                                |
-| ----------------------------------- | -------------------------------------- |
-| http://auth.zipframes.localhost     | auth-service                           |
-| http://api.zipframes.localhost      | video-service                          |
-| http://storage.zipframes.localhost  | SeaweedFS (URLs de download assinadas) |
-| http://mail.zipframes.localhost     | Mailpit                                |
-| http://rabbitmq.zipframes.localhost | painel do RabbitMQ                     |
+| Host                                    | Destino                                |
+| --------------------------------------- | -------------------------------------- |
+| http://auth.zipframes.localhost         | auth-service                           |
+| http://api.zipframes.localhost          | video-service                          |
+| http://storage.zipframes.localhost      | SeaweedFS (URLs de download assinadas) |
+| http://mail.zipframes.localhost         | Mailpit                                |
+| http://rabbitmq.zipframes.localhost     | painel do RabbitMQ                     |
+| http://grafana.zipframes.localhost      | Grafana, com o dashboard do ZipFrames  |
+| http://prometheus.zipframes.localhost   | Prometheus: alvos, consultas e alertas |
+| http://alertmanager.zipframes.localhost | Alertmanager                           |
 
 O fluxo do [README](../../README.md#o-fluxo-completo) funciona trocando `localhost:3000` por `auth.zipframes.localhost` e `localhost:3001` por `api.zipframes.localhost`.
 
@@ -75,6 +79,16 @@ Argo CD:
 kubectl -n argocd port-forward svc/argocd-server 8080:443
 kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d
 ```
+
+## Monitoramento
+
+O Prometheus, o Alertmanager e o Grafana ficam no namespace `monitoring`, declarados em [`infra/k8s/monitoring`](../k8s/monitoring). O Grafana abre direto no dashboard do ZipFrames e qualquer pessoa pode ver; para editar, o usuário é `admin` e a senha está no Secret `grafana-admin`:
+
+```bash
+kubectl -n monitoring get secret grafana-admin -o jsonpath='{.data.password}' | base64 -d
+```
+
+Os alertas disparados chegam por e-mail no Mailpit (http://mail.zipframes.localhost), para `ops@zipframes.local`. Para ver um disparar, pare o notifier-service, que não tem autoscaler (`kubectl -n zipframes scale deployment/notifier-service --replicas=0`), e espere uns 3 minutos: o `ZipFramesServiceDown` aparece em http://prometheus.zipframes.localhost/alerts e chega por e-mail. Para voltar, `--replicas=1`.
 
 ## Entrega contínua
 

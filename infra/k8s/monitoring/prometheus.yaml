@@ -1,0 +1,64 @@
+# One Prometheus, run by the operator. It scrapes every ServiceMonitor and
+# PodMonitor in this namespace (scrape-targets.yaml), evaluates every
+# PrometheusRule here (alert-rules.yaml) and sends alerts to Alertmanager.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus
+rules:
+  - apiGroups: ['']
+    resources: [services, endpoints, pods, nodes]
+    verbs: [get, list, watch]
+  - apiGroups: [discovery.k8s.io]
+    resources: [endpointslices]
+    verbs: [get, list, watch]
+  - nonResourceURLs: [/metrics]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus
+subjects:
+  - kind: ServiceAccount
+    name: prometheus
+    namespace: monitoring
+---
+apiVersion: monitoring.coreos.com/v1
+kind: Prometheus
+metadata:
+  name: prometheus
+spec:
+  version: v3.15.0
+  replicas: 1
+  serviceAccountName: prometheus
+  externalUrl: http://prometheus.zipframes.localhost
+  scrapeInterval: 15s
+  evaluationInterval: 30s
+  # Two days is enough for a demo; the data lives in an emptyDir.
+  retention: 2d
+  # Empty selectors: every monitor and rule in this namespace.
+  serviceMonitorSelector: {}
+  podMonitorSelector: {}
+  ruleSelector: {}
+  alerting:
+    alertmanagers:
+      - namespace: monitoring
+        name: alertmanager-operated
+        port: web
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: '1'
+      memory: 1Gi

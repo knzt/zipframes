@@ -1,0 +1,90 @@
+# Alerts that mean a user is affected or about to be. Each one says what to
+# look at first in its description. Thresholds are sized for the demo
+# cluster, not for production traffic.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: zipframes
+spec:
+  groups:
+    - name: zipframes.availability
+      rules:
+        # The absent() terms cover a service with no pod at all, which
+        # leaves no `up` series for the first term to compare.
+        - alert: ZipFramesServiceDown
+          expr: |
+            (sum by (job) (up{job=~"auth-service|video-service|processor-worker|notifier-service"}) == 0)
+              or absent(up{job="auth-service"})
+              or absent(up{job="video-service"})
+              or absent(up{job="processor-worker"})
+              or absent(up{job="notifier-service"})
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: '{{ $labels.job }} está fora do ar'
+            description: >-
+              Nenhum pod de {{ $labels.job }} responde ao Prometheus há 2 minutos.
+              Veja `kubectl -n zipframes get pods` e os logs do serviço.
+
+        - alert: ZipFramesHttpErrors
+          expr: |
+            sum by (job) (rate(http_requests_total{status=~"5.."}[5m]))
+              / sum by (job) (rate(http_requests_total[5m])) > 0.05
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: '{{ $labels.job }} responde 5xx em mais de 5% das requisições'
+            description: >-
+              Erros internos acima de 5% por 5 minutos. A readiness do serviço diz qual
+              dependência está fora; os logs trazem o correlationId de cada falha.
+
+    - name: zipframes.processing
+      rules:
+        - alert: ZipFramesProcessingBacklog
+          expr: sum(rabbitmq_detailed_queue_messages_ready{queue="processor.video.uploaded"}) > 20
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: 'Vídeos esperando na fila há mais de 10 minutos'
+            description: >-
+              {{ $value }} vídeos na fila processor.video.uploaded. Confira se o KEDA subiu
+              réplicas do worker (máximo 5) e se elas estão consumindo.
+
+        - alert: ZipFramesVideoFailures
+          expr: |
+            sum(rate(messages_handled_total{job="processor-worker",outcome=~"permanent_failure|exhausted"}[15m]))
+              / sum(rate(messages_handled_total{job="processor-worker",outcome=~"success|permanent_failure|exhausted"}[15m])) > 0.2
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: 'Mais de 20% dos vídeos estão falhando'
+            description: >-
+              permanent_failure é arquivo recusado pelo ffmpeg; exhausted é falha de
+              infraestrutura depois de todas as tentativas. Os logs do worker trazem o motivo.
+
+        - alert: ZipFramesDeadLetters
+          expr: sum(rabbitmq_detailed_queue_messages{queue="zipframes.events.dlq"}) > 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: 'Há mensagens na DLQ'
+            description: >-
+              {{ $value }} mensagens em zipframes.events.dlq: eventos inválidos ou que
+              esgotaram as tentativas. Inspecione pelo painel do RabbitMQ.
+
+    - name: zipframes.notifications
+      rules:
+        - alert: ZipFramesNotificationsExhausted
+          expr: sum(increase(messages_handled_total{job="notifier-service",outcome="exhausted"}[15m])) > 0
+          labels:
+            severity: warning
+          annotations:
+            summary: 'O notifier-service desistiu de mensagens'
+            description: >-
+              Mensagens de e-mail ou de contato esgotaram as tentativas nos últimos 15 minutos.
+              O mais comum é o SMTP fora do ar.

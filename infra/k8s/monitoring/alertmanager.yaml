@@ -1,0 +1,41 @@
+# Alertmanager groups the firing alerts and sends them by e-mail to the
+# cluster Mailpit, so an alert can be seen at http://mail.zipframes.localhost
+# without any external account. In a real environment the receiver would be
+# an on-call tool or a real mailbox.
+apiVersion: v1
+kind: Secret
+metadata:
+  # The operator reads the configuration from alertmanager-<name>.
+  name: alertmanager-alertmanager
+stringData:
+  alertmanager.yaml: |
+    route:
+      receiver: ops-email
+      group_by: [alertname]
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 4h
+    receivers:
+      - name: ops-email
+        email_configs:
+          - to: ops@zipframes.local
+            from: alertmanager@zipframes.local
+            smarthost: mailpit.zipframes.svc.cluster.local:1025
+            require_tls: false
+            send_resolved: true
+---
+apiVersion: monitoring.coreos.com/v1
+kind: Alertmanager
+metadata:
+  name: alertmanager
+spec:
+  version: v0.34.1
+  replicas: 1
+  externalUrl: http://alertmanager.zipframes.localhost
+  resources:
+    requests:
+      cpu: 20m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
