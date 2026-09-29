@@ -20,8 +20,8 @@ spec:
       containers:
         - name: video-service
           image: ghcr.io/knzt/zipframes-video-service:main
-          # :main moves on every publish; a restart pulls the newest.
-          imagePullPolicy: Always
+          # The tag comes from kustomization.yaml (a commit SHA, never reused).
+          imagePullPolicy: IfNotPresent
           ports:
             - name: http
               containerPort: 3001

@@ -19,8 +19,8 @@ spec:
       containers:
         - name: notifier-service
           image: ghcr.io/knzt/zipframes-notifier-service:main
-          # :main moves on every publish; a restart pulls the newest.
-          imagePullPolicy: Always
+          # The tag comes from kustomization.yaml (a commit SHA, never reused).
+          imagePullPolicy: IfNotPresent
           envFrom:
             - configMapRef:
                 name: notifier-service

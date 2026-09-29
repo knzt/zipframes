@@ -80,13 +80,9 @@ kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.pas
 
 O merge no `main` roda o workflow do serviço. Com testes e integração verdes, o job `Publish to GHCR` envia a imagem testada como `:<sha>` e `:main`. O `workflow_dispatch` de cada workflow publica o `main` atual sem mudança de código (por exemplo, a primeira imagem).
 
-Os manifests usam `:main` com `imagePullPolicy: Always` e a tag nos manifests não muda a cada publicação. O Argo CD entrega mudança de manifest sozinho; imagem nova entra no próximo restart:
+Em seguida, o mesmo job grava o SHA em `newTag` no `infra/k8s/<serviço>/kustomization.yaml` e commita no `main` (`chore(deploy): <serviço> <sha>`). O Argo CD percebe a mudança em até 3 minutos e faz o rolling update. Nenhum passo manual entre o merge e o cluster.
 
-```bash
-kubectl -n zipframes rollout restart deployment/video-service
-```
-
-Para voltar a uma versão, `kubectl -n zipframes set image deployment/video-service video-service=ghcr.io/knzt/zipframes-video-service:<sha>`. O Argo CD desfaz isso no próximo sync, então é para investigação, não para rollback duradouro.
+Como cada imagem tem uma tag que nunca se repete, o histórico do Git é o histórico de deploys: `git log -- infra/k8s/video-service/kustomization.yaml` mostra o que rodou e quando. Para voltar a uma versão, reverta o commit de deploy (`git revert <commit>`) e o Argo CD aplica a tag anterior.
 
 ## Remover
 
