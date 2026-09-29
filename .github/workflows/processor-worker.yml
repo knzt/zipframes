@@ -35,6 +35,7 @@ jobs:
     permissions:
       contents: write
       packages: write
+      pull-requests: write
     uses: ./.github/workflows/service-ci.yml
     with:
       service: processor-worker

@@ -184,11 +184,14 @@ O mesmo relatório de cobertura vai para o SonarQube Cloud, um projeto por servi
 PR ou merge no main
   └─ workflow do serviço: typecheck, lint, regras de camadas, testes, cobertura, build da imagem
        └─ só no main: publica a imagem testada no GHCR (ghcr.io/knzt/zipframes-<serviço>)
-            └─ grava a tag da imagem em infra/k8s/<serviço> e commita no main
+            └─ grava a tag da imagem em infra/k8s/<serviço> e abre um PR de deploy,
+               que o próprio workflow mergeia no main
                  └─ Argo CD aplica a mudança no cluster
 ```
 
 Cada serviço tem o próprio workflow em [.github/workflows](.github/workflows), que só roda quando algo daquele serviço muda. A imagem publicada é exatamente a que passou nos testes. O deploy é GitOps: o cluster roda o que está em `infra/` no `main`, e o histórico do Git é o histórico de deploys. O fluxo completo está em [infra/kind/README.md](infra/kind/README.md#entrega-contínua).
+
+A `main` é protegida e só aceita mudança por pull request, com `enforce_admins` ligado — nem um administrador empurra direto. Por isso o commit de deploy passa por um PR que o próprio workflow abre e mergeia. Ele nasce mergeável porque a `main` não exige aprovação nem check obrigatório; **se algum dia passar a exigir, é nesse passo que a esteira vai travar.**
 
 ## Banco e recursos
 
