@@ -5,6 +5,8 @@ export default defineConfig({
     include: ['tests/unit/**/*.unit.test.ts'],
     coverage: {
       provider: 'v8',
+      // lcov is what the Sonar scanner reads; text keeps the local summary.
+      reporter: ['text', 'lcov'],
       include: [
         'src/domain/**',
         'src/application/**',
