@@ -23,16 +23,15 @@ No modo Argo CD, o Argo lê este repositório (público) sem credencial. As imag
 
 ## O que o bootstrap instala
 
-| Peça                        | Versão | Onde                                                           |
-| --------------------------- | ------ | -------------------------------------------------------------- |
-| cert-manager                | 1.21.2 | `cert-manager`, certificado do webhook do operator do RabbitMQ |
-| CloudNativePG               | 1.30.1 | `cnpg-system`, três `Cluster` (um por serviço)                 |
-| RabbitMQ Cluster Operator   | 2.23.0 | `rabbitmq-system`, um `RabbitmqCluster`                        |
-| KEDA                        | 2.21.0 | `keda`, escala o worker pela fila `processor.video.uploaded`   |
-| metrics-server              | 0.9.0  | `kube-system`, alimenta os HPAs do auth e do video             |
-| Traefik                     | 3.7.13 | `traefik`, manifests em [`traefik.yaml`](traefik.yaml)         |
-| Prometheus Operator         | 0.94.1 | `default`, gerencia Prometheus e Alertmanager                  |
-| Argo CD (só no modo padrão) | 3.5.3  | `argocd`                                                       |
+| Peça                        | Versão | Onde                                                         |
+| --------------------------- | ------ | ------------------------------------------------------------ |
+| CloudNativePG               | 1.30.1 | `cnpg-system`, três `Cluster` (um por serviço)               |
+| RabbitMQ Cluster Operator   | 2.23.0 | `rabbitmq-system`, um `RabbitmqCluster`                      |
+| KEDA                        | 2.21.0 | `keda`, escala o worker pela fila `processor.video.uploaded` |
+| metrics-server              | 0.9.0  | `kube-system`, alimenta os HPAs do auth e do video           |
+| Traefik                     | 3.7.13 | `traefik`, manifests em [`traefik.yaml`](traefik.yaml)       |
+| Prometheus Operator         | 0.94.1 | `default`, gerencia Prometheus e Alertmanager                |
+| Argo CD (só no modo padrão) | 3.5.3  | `argocd`                                                     |
 
 As instâncias (Postgres, RabbitMQ, Redis, SeaweedFS, Mailpit e o Ingress delas) estão em [`infra/k8s/platform/`](../k8s/platform/). Os operators e o Traefik ficam no bootstrap porque são do cluster, não do ZipFrames.
 

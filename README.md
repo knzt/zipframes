@@ -176,7 +176,7 @@ pnpm --dir services/video-service test          # unidade e integração
 
 O CI falha abaixo da cobertura mínima de cada serviço: 100% de linhas e branches no auth-service, 95% e 90% no video-service, 80% no processor-worker e no notifier-service. Na raiz, `pnpm lint`, `pnpm format` e `pnpm check:layers` conferem estilo e as regras de dependência entre camadas.
 
-O mesmo relatório de cobertura vai para o SonarQube Cloud, um projeto por serviço; a configuração está em [docs/qualidade/sonarqube.md](docs/qualidade/sonarqube.md).
+O mesmo relatório de cobertura vai para o SonarQube Cloud, um projeto por serviço; a configuração está em [docs/quality/sonarqube.md](docs/quality/sonarqube.md).
 
 ## CI/CD
 
@@ -214,7 +214,7 @@ Para popular os três bancos locais com um usuário demo, vídeos em todos os st
 | [Domínio](docs/domain/dominio.md)                           | Linguagem ubíqua, contextos e regras de negócio             |
 | [Modelagem de dados](docs/data/modelagem-de-dados.md)       | Tabelas, índices e como cada consumidor é idempotente       |
 | [Dados de demonstração](docs/data/dados-de-demonstracao.md) | O que os seeds gravam nos três bancos e os UUIDs fixos      |
-| [SonarQube Cloud](docs/qualidade/sonarqube.md)              | Os quatro projetos, o token e como a cobertura chega lá     |
+| [SonarQube Cloud](docs/quality/sonarqube.md)                | Os quatro projetos, o token e como a cobertura chega lá     |
 | [AsyncAPI](docs/asyncapi/events.yaml)                       | Contrato dos eventos                                        |
 | [OpenAPI](docs/openapi/README.md)                           | Onde está o contrato HTTP gerado por cada serviço           |
 | [Análise do projeto base](docs/review-projeto-base.md)      | O protótipo original e o que mudou                          |
