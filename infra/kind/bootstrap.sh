@@ -6,8 +6,6 @@
 #   infra/kind/bootstrap.sh --local --load-images
 #                                             same, with images built here
 #
-# Argo CD mode reads a private repository: export GITHUB_TOKEN with
-# read access to it (a fine-grained token with Contents: read is enough).
 # --load-images builds with Compose, so it needs NODE_AUTH_TOKEN and
 # `pnpm install` done in services/processor-worker.
 #
@@ -18,7 +16,6 @@ set -euo pipefail
 CLUSTER=zipframes
 CONTEXT="kind-${CLUSTER}"
 NS=zipframes
-REPO_URL=https://github.com/knzt/zipframes.git
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 CNPG_URL=https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.30/releases/cnpg-1.30.1.yaml
@@ -36,7 +33,7 @@ for arg in "$@"; do
   case "$arg" in
     --local) MODE=local ;;
     --load-images) LOAD_IMAGES=1 ;;
-    -h | --help) sed -n '2,16p' "$0"; exit 0 ;;
+    -h | --help) sed -n '2,13p' "$0"; exit 0 ;;
     *) echo "unknown option: $arg" >&2; exit 2 ;;
   esac
 done
@@ -142,19 +139,11 @@ render() {
 
 if [ "$MODE" = argocd ]; then
   step "Argo CD"
-  : "${GITHUB_TOKEN:?export GITHUB_TOKEN with read access to $REPO_URL}"
   k create namespace argocd --dry-run=client -o yaml | k apply -f - > /dev/null
   k -n argocd apply --server-side --force-conflicts -f "$ARGOCD_URL" > /dev/null
   k -n argocd rollout status deployment/argocd-repo-server --timeout=5m
   k -n argocd rollout status deployment/argocd-applicationset-controller --timeout=5m
-  k -n argocd create secret generic zipframes-repo \
-    --from-literal=type=git \
-    --from-literal=url="$REPO_URL" \
-    --from-literal=username=git \
-    --from-literal=password="$GITHUB_TOKEN" \
-    --dry-run=client -o yaml |
-    k label --local -f - argocd.argoproj.io/secret-type=repository -o yaml |
-    k apply -f - > /dev/null
+  # The repository is public, so Argo CD reads it without credentials.
   k apply -f "$ROOT/infra/argocd/root.yaml" > /dev/null
 else
   step "Platform from this working tree"
