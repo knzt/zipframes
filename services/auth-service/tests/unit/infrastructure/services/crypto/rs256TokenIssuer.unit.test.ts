@@ -15,7 +15,7 @@ const ISSUER = 'https://auth.zipframes.test';
 const AUDIENCE = 'zipframes';
 
 const setUpIssuer = async (): Promise<RsaKeyMaterial> => {
-  const { privateKey } = await generateKeyPair('RS256');
+  const { privateKey } = await generateKeyPair('RS256', { extractable: true });
   const pem = await exportPKCS8(privateKey);
   return deriveRsaKeyMaterial(pem, 'key-1');
 };
@@ -28,7 +28,7 @@ describe('the token an issuer signs', () => {
     const { token, expiresInSeconds } = await issuer.issue(brandUserId('user-123'));
     expect(expiresInSeconds).toBe(15 * 60);
 
-    const { payload } = await jwtVerify(token, keys.privateKey, {
+    const { payload } = await jwtVerify(token, await importJWK(keys.publicJwk, 'RS256'), {
       issuer: ISSUER,
       audience: AUDIENCE,
     });

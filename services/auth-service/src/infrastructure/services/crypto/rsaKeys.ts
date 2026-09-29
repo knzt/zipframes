@@ -1,9 +1,9 @@
 import { exportJWK, importPKCS8 } from 'jose';
-import type { JWK, KeyLike } from 'jose';
+import type { JWK } from 'jose';
 
 export interface RsaKeyMaterial {
   readonly kid: string;
-  readonly privateKey: KeyLike;
+  readonly privateKey: CryptoKey;
   /** The public half only: safe to publish at /.well-known/jwks.json. */
   readonly publicJwk: JWK;
 }
@@ -16,12 +16,16 @@ export interface RsaKeyMaterial {
  * modulus and exponent (`n`, `e`) alongside the private components (`d`,
  * `p`, `q`, `dp`, `dq`, `qi`). Stripping the private ones is enough to get
  * the public key — there is no separate public key file to manage.
+ *
+ * Reading those components back is what `extractable` allows: WebCrypto
+ * imports a private key sealed by default, and `exportJWK` on a sealed key
+ * throws. The key never leaves this process either way.
  */
 export const deriveRsaKeyMaterial = async (
   privateKeyPem: string,
   kid: string,
 ): Promise<RsaKeyMaterial> => {
-  const privateKey = await importPKCS8(privateKeyPem, 'RS256');
+  const privateKey = await importPKCS8(privateKeyPem, 'RS256', { extractable: true });
   const {
     d: _d,
     p: _p,
