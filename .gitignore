@@ -15,6 +15,9 @@ dist
 # testes e cobertura
 coverage
 
+# sonarqube
+.scannerwork
+
 # SO
 .DS_Store
 Thumbs.db
