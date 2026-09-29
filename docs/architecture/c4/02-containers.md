@@ -75,6 +75,6 @@ Nenhum serviço lê o banco de outro. O que um contexto precisa saber do outro c
 
 ## Fora do diagrama
 
-O cluster também roda o que sustenta os containers acima, mas não participa do fluxo de negócio: os operators (CloudNativePG, RabbitMQ Cluster Operator e cert-manager), o KEDA, o metrics-server que alimenta os HPAs e o Argo CD. Como tudo isso sobe está em [infra/kind/README.md](../../../infra/kind/README.md).
+O cluster também roda o que sustenta os containers acima, mas não participa do fluxo de negócio: os operators (CloudNativePG e RabbitMQ Cluster Operator), o KEDA, o metrics-server que alimenta os HPAs e o Argo CD. Como tudo isso sobe está em [infra/kind/README.md](../../../infra/kind/README.md).
 
 Também roda Prometheus, Alertmanager e Grafana, no namespace `monitoring`. O Prometheus coleta as métricas dos quatro serviços e do RabbitMQ; o dashboard e as regras de alerta estão em [infra/k8s/monitoring](../../../infra/k8s/monitoring).

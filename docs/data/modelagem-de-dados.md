@@ -1,4 +1,4 @@
-# Planejamento para data models
+# Modelagem de dados
 
 Cada serviço tem sua própria instância de PostgreSQL e nenhum acessa o banco de outro. Não existe chave estrangeira entre bancos: a ligação entre `users` e `videos`, por exemplo, é feita apenas pelo identificador do usuário, que chega no token.
 
