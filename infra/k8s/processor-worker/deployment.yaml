@@ -19,8 +19,8 @@ spec:
       containers:
         - name: processor-worker
           image: ghcr.io/knzt/zipframes-processor-worker:main
-          # :main moves on every publish; a restart pulls the newest.
-          imagePullPolicy: Always
+          # The tag comes from kustomization.yaml (a commit SHA, never reused).
+          imagePullPolicy: IfNotPresent
           envFrom:
             - configMapRef:
                 name: processor-worker

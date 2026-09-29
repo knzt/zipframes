@@ -4,3 +4,8 @@ resources:
   - configmap.yaml
   - deployment.yaml
   - scaledobject.yaml
+# The publish job in .github/workflows/service-ci.yml rewrites newTag with
+# the commit SHA of each tested image; Argo CD rolls out that change.
+images:
+  - name: ghcr.io/knzt/zipframes-processor-worker
+    newTag: main

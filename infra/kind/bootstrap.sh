@@ -131,10 +131,13 @@ if [ "$LOAD_IMAGES" = 1 ]; then
   done
 fi
 
-# The loaded images exist only on the node; Always would try GHCR first.
+# The loaded images exist only on the node as :main; the manifests pin a
+# GHCR tag that may not be there, so point at :main and never pull.
 render() {
   if [ "$LOAD_IMAGES" = 1 ]; then
-    k kustomize "$1" | sed 's/imagePullPolicy: Always/imagePullPolicy: Never/'
+    k kustomize "$1" | sed -E \
+      -e 's#(image: ghcr\.io/knzt/zipframes-[a-z-]+):[^[:space:]]+#\1:main#' \
+      -e 's/imagePullPolicy: (Always|IfNotPresent)/imagePullPolicy: Never/'
   else
     k kustomize "$1"
   fi

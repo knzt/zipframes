@@ -30,9 +30,10 @@ concurrency:
 
 jobs:
   verify:
-    # publish needs packages: write; the reusable workflow cannot raise it.
+    # publish pushes the image and commits the new tag; the reusable
+    # workflow cannot raise permissions above these.
     permissions:
-      contents: read
+      contents: write
       packages: write
     uses: ./.github/workflows/service-ci.yml
     with:

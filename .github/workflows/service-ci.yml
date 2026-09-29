@@ -1,7 +1,8 @@
 # Reusable checks for one service: install, test, and an image.
 # Callers on push to main may filter by path. Pull requests targeting
 # main always invoke this. With `publish`, the image that passed both
-# jobs is pushed to GHCR as :<sha> and :main. Nothing here deploys.
+# jobs is pushed to GHCR as :<sha> and :main, and :<sha> is written to
+# infra/k8s/<service>/kustomization.yaml on main for Argo CD to roll out.
 name: service-ci
 
 on:
@@ -189,21 +190,25 @@ jobs:
     needs: [verify, integration]
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      # contents: write commits the new tag to the manifests.
+      contents: write
       packages: write
     steps:
+      - uses: actions/checkout@v5
+
       - uses: actions/download-artifact@v8
         with:
           name: image-${{ inputs.service }}
+          path: ${{ runner.temp }}/image
 
       - name: Load the tested image
-        run: gunzip -c image.tar.gz | docker load
+        run: gunzip -c "${{ runner.temp }}/image/image.tar.gz" | docker load
 
       - name: Log in to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
 
-      # GHCR names must be lowercase. :main is what the manifests run;
-      # :<sha> keeps every published build addressable for a rollback.
+      # GHCR names must be lowercase. :<sha> is what the manifests run;
+      # :main is a convenience tag for `docker pull`.
       - name: Push
         run: |
           repo="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/zipframes-${{ inputs.service }}"
@@ -212,3 +217,30 @@ jobs:
             docker push "${repo}:${tag}"
           done
           echo "Pushed \`${repo}:${GITHUB_SHA}\` and \`:main\`" >> "$GITHUB_STEP_SUMMARY"
+
+      # This is the deploy: Argo CD watches infra/ on main and rolls out the
+      # new tag. A push made with GITHUB_TOKEN does not start other workflows,
+      # so this commit does not trigger CI again. The four services can
+      # publish at once; each touches its own file, so a rebase is enough.
+      - name: Pin the tag in the manifests
+        env:
+          KUSTOMIZATION: infra/k8s/${{ inputs.service }}/kustomization.yaml
+        run: |
+          yq -i '.images[0].newTag = strenv(GITHUB_SHA)' "$KUSTOMIZATION"
+          if git diff --quiet -- "$KUSTOMIZATION"; then
+            echo "The manifests already run ${GITHUB_SHA}" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$KUSTOMIZATION"
+          git commit -m "chore(deploy): ${{ inputs.service }} ${GITHUB_SHA::7}"
+          for attempt in 1 2 3 4 5; do
+            if git pull --rebase origin main && git push origin HEAD:main; then
+              echo "Manifests now run \`${GITHUB_SHA::7}\`" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep $((attempt * 3))
+          done
+          echo "Could not push the new tag" >&2
+          exit 1
