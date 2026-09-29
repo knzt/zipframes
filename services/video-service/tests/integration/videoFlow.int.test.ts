@@ -244,6 +244,24 @@ describe('uploads that break the rules', () => {
       failureReason: 'ffmpeg rejected the media file',
     });
   });
+
+  it('lets the owner delete a failed video, taking the original with it', async () => {
+    const ownerId = randomUUID();
+    const videoId = await uploadVideo(ownerId);
+
+    publishEvent('video.failed', {
+      videoId,
+      ownerId,
+      errorCode: 'UNSUPPORTED_MEDIA',
+      reason: 'ffmpeg rejected the media file',
+      attempts: 1,
+    });
+    await reachStatus(videoId, ownerId, 'FAILED');
+
+    expect((await call('DELETE', `/videos/${videoId}`, ownerId)).status).toBe(204);
+    expect(await objectExists(`uploads/${ownerId}/${videoId}`)).toBe(false);
+    expect(await (await call('GET', '/videos', ownerId)).json()).toEqual({ items: [] });
+  });
 });
 
 describe('account deletion', () => {
