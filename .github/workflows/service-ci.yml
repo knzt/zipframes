@@ -247,17 +247,10 @@ jobs:
           echo "Pushed \`${repo}:${GITHUB_SHA}\` and \`:main\`" >> "$GITHUB_STEP_SUMMARY"
 
       # This is the deploy: Argo CD watches infra/ on main and rolls out the
-      # new tag.
-      #
-      # main is a protected branch that takes changes only through a pull
-      # request, and the protection enforces admins, so nothing can push to
-      # it directly. The tag therefore goes through a PR that is opened and
-      # merged right here. It is mergeable the moment it exists, because
-      # main requires no approvals and no status checks; if either is ever
-      # required, this step is where it will start waiting.
-      #
-      # A PR created with GITHUB_TOKEN does not start other workflows, so
-      # this neither runs CI again nor recurses into another deploy.
+      # new tag. main takes changes only through a pull request and enforces
+      # admins, so the tag goes through a PR opened and merged here. A PR
+      # created with GITHUB_TOKEN does not start workflows, so this neither
+      # runs CI again nor recurses into another deploy.
       - name: Pin the tag in the manifests
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
