@@ -65,9 +65,7 @@ Os serviços não compartilham banco nem código. O que atravessa a fronteira é
 
 ## Como rodar
 
-Há três jeitos, do mais completo ao mais leve.
-
-### Kubernetes local (recomendado para avaliação)
+### Kubernetes local
 
 Sobe o sistema inteiro num cluster [kind](https://kind.sigs.k8s.io/) com Postgres e RabbitMQ gerenciados por operators, KEDA, Traefik e Argo CD, a partir das imagens já publicadas no GHCR. Não precisa compilar nada nem ter token.
 
@@ -225,10 +223,3 @@ pnpm --dir services/notifier-service db:generate && pnpm --dir services/notifier
 `db:generate` gera o client do Prisma, `db:deploy` aplica as migrations existentes e `db:migrate` cria uma nova. A chave JWT de desenvolvimento está em `infra/docker-compose/auth/jwt-dev.pem`, e as credenciais locais (todas `zipframes`) estão em [infra/docker-compose/README.md](infra/docker-compose/README.md).
 
 Para adicionar uma dependência a um serviço a partir da raiz: `pnpm deps:auth <pacote>`, `pnpm deps:video`, `pnpm deps:worker` ou `pnpm deps:notifier`.
-
-## Limitações conhecidas
-
-- Não há interface web; a API é usada por qualquer cliente HTTP ou pela Swagger UI de cada serviço.
-- O auth-service não tem alteração nem exclusão de conta, então `user.updated` e `user.deleted` ainda não são publicados (o notifier-service já os consome).
-- Se um processo cair exatamente entre gravar no banco e publicar o evento, o evento se perde. Um outbox fecharia essa janela; o motivo de ele ter ficado de fora está na [arquitetura](docs/architecture/README.md#publicação-depois-da-gravação).
-- O cluster expõe métricas em `/metrics`, mas ainda não roda Prometheus nem Grafana.

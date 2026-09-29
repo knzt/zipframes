@@ -97,12 +97,6 @@ flowchart LR
 - Uma mensagem que não bate com o schema, ou que esgotou as tentativas, vai para a DLQ compartilhada e fica lá para investigação.
 - Quando o worker esgota as tentativas, ele publica `video.failed` antes de descartar a mensagem, para o vídeo não ficar parado em processamento e o usuário ser avisado.
 
-Como uma mensagem pode chegar duas vezes, cada consumidor é idempotente pela própria regra de negócio, sem tabela de eventos já processados: a máquina de estados do vídeo ignora uma transição repetida ou atrasada, o contato é gravado por `userId` e só existe uma notificação por vídeo e tipo. A [modelagem de dados](../data/modelagem-de-dados.md) mostra onde cada garantia está no banco.
-
-### Publicação depois da gravação
-
-Os serviços gravam no banco e depois publicam o evento, com confirmação do broker. Se o broker recusar a publicação, o video-service marca o vídeo como `FAILED` e o usuário vê a falha na listagem. Se o processo morrer exatamente entre a gravação e a publicação, o evento se perde: o vídeo fica em `QUEUED` e o cadastro não gera o `user.registered`. Um outbox transacional fecharia essa janela; ele ficou fora do escopo porque a janela é um único `await` e a recusa do broker, o caso comum, já tem tratamento.
-
 ## Organização de cada serviço
 
 Os quatro serviços seguem a mesma organização, inspirada na Clean Architecture: a regra de negócio fica no centro e não sabe nada de HTTP, banco, fila ou storage. O que muda de tecnologia fica na borda e depende do centro, nunca o contrário.
