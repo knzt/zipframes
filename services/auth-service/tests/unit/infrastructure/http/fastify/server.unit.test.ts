@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { InternalServerError, ValidationError } from '@zipframes/core';
 import { getCorrelationId } from '@zipframes/logger';
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import type { Logger } from '@zipframes/logger';
 
@@ -38,15 +38,6 @@ const buildApp = async (
   app.post('/echo', async () => ({ ok: true }));
   return { app, logger };
 };
-
-// The first server built in a worker pays for loading Fastify,
-// @fastify/swagger and @fastify/swagger-ui — about a second, and nothing
-// that any test here measures. Paying it in a hook keeps it out of the
-// first test's 5s budget, which it could exceed once coverage
-// instrumentation and parallel workers were competing for the CPU.
-beforeAll(async () => {
-  await buildApp();
-});
 
 describe('unhandled HTTP errors', () => {
   it('answers 500 problem details when a handler throws, without leaking the internal message', async () => {
