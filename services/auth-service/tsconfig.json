@@ -8,6 +8,7 @@
   "include": [
     "src/**/*.ts",
     "tests/**/*.ts",
+    "scripts/**/*.ts",
     "vitest.unit.config.ts",
     "vitest.integration.config.ts"
   ],
