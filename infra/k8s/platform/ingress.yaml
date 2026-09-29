@@ -1,0 +1,41 @@
+# *.localhost resolves to 127.0.0.1 in browsers and curl, so no hosts file.
+# storage: the presigned download URLs are signed for this host, so the
+# Host header must reach SeaweedFS unchanged (Traefik keeps it).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: platform
+  namespace: zipframes
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: storage.zipframes.localhost
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: seaweedfs
+                port:
+                  name: s3
+    - host: mail.zipframes.localhost
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: mailpit
+                port:
+                  name: web
+    - host: rabbitmq.zipframes.localhost
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: rabbitmq
+                port:
+                  name: management

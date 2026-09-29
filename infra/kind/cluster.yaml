@@ -1,0 +1,21 @@
+# One node is enough for the demo: KEDA scales the worker as pods, not nodes.
+# Ports 80/443 of the host reach Traefik, which binds them as hostPorts on
+# the node labeled ingress-ready.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: zipframes
+nodes:
+  - role: control-plane
+    kubeadmConfigPatches:
+      - |
+        kind: InitConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "ingress-ready=true"
+    extraPortMappings:
+      - containerPort: 80
+        hostPort: 80
+        protocol: TCP
+      - containerPort: 443
+        hostPort: 443
+        protocol: TCP

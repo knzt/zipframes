@@ -11,7 +11,9 @@ zipframes/
 ├── services/processor-worker/   # frames e zip, sem banco
 ├── services/notifier-service/ # e-mails de resultado e de falha, Postgres
 ├── infra/docker-compose/        # Postgres, RabbitMQ, SeaweedFS, Mailpit e o resto da máquina
-├── infra/k8s/                   # manifests dos quatro processos; não inclui a infra
+├── infra/k8s/                   # Kustomize dos quatro processos e da plataforma (bancos, broker, storage)
+├── infra/kind/                  # cluster local, Traefik e o bootstrap
+├── infra/argocd/                # Applications do Argo CD (app of apps)
 └── docs/                        # arquitetura e contratos
 ```
 
@@ -170,7 +172,7 @@ pnpm --dir services/notifier-service dev
 
 `pnpm infra:up` sobe só a infra. Não constrói imagem de serviço. `db:deploy` aplica as migrations que já existem. `db:migrate` é `prisma migrate dev`, para mudar o schema, não para a primeira subida.
 
-Para subir tudo em container em vez disso, veja [`infra/docker-compose/README.md`](infra/docker-compose/README.md) (`pnpm infra:apps`).
+Para subir tudo em container em vez disso, veja [`infra/docker-compose/README.md`](infra/docker-compose/README.md) (`pnpm infra:apps`). Para subir em Kubernetes local, com operators, KEDA, Traefik e Argo CD, veja [`infra/kind/README.md`](infra/kind/README.md).
 
 ## O fluxo completo
 
@@ -224,5 +226,5 @@ A imagem do worker não baixa dependência. Antes dela, `pnpm --dir services/pro
 ## Limitações
 
 - Não há cliente web. O auth não publica `user.updated` nem `user.deleted`; o notifier-service já consome esses eventos nos testes.
-- `infra/k8s/` não declara Postgres, RabbitMQ, Redis, SeaweedFS nem Mailpit. Os Secrets de exemplo não entram no Kustomize. O worker declara um `ScaledObject` do KEDA. Sem cluster, CRDs e imagens já carregadas, esses manifests não sobem o sistema.
-- As imagens ficam locais. Os manifests do Argo CD apontam para `infra/k8s/` e não são um ambiente local pronto.
+- Os manifests rodam `:main` e a tag não é reescrita a cada publicação. O Argo CD entrega mudança de manifest sozinho; imagem nova entra com `kubectl rollout restart`.
+- Os Secrets do cluster são gerados pelo `infra/kind/bootstrap.sh`, não versionados. Fora do kind, é preciso criá-los no formato dos `secret.example.yaml`.

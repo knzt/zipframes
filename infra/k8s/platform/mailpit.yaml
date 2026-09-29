@@ -1,0 +1,63 @@
+# Captures the notifier e-mails; the inbox is at http://mail.zipframes.localhost.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mailpit
+  namespace: zipframes
+  labels:
+    app: mailpit
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mailpit
+  template:
+    metadata:
+      labels:
+        app: mailpit
+    spec:
+      containers:
+        - name: mailpit
+          image: axllent/mailpit:v1.24
+          env:
+            - name: MP_MAX_MESSAGES
+              value: '500'
+            - name: MP_SMTP_AUTH_ACCEPT_ANY
+              value: '1'
+            - name: MP_SMTP_AUTH_ALLOW_INSECURE
+              value: '1'
+          ports:
+            - name: smtp
+              containerPort: 1025
+            - name: web
+              containerPort: 8025
+          readinessProbe:
+            httpGet:
+              path: /livez
+              port: web
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mailpit
+  namespace: zipframes
+  labels:
+    app: mailpit
+spec:
+  selector:
+    app: mailpit
+  ports:
+    - name: smtp
+      port: 1025
+      targetPort: smtp
+    - name: web
+      port: 8025
+      targetPort: web

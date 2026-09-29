@@ -1,0 +1,19 @@
+# The RabbitMQ Cluster Operator creates the `rabbitmq` Service (5672, 15672)
+# and the `rabbitmq-default-user` Secret; the bootstrap builds AMQP_URL from it.
+apiVersion: rabbitmq.com/v1beta1
+kind: RabbitmqCluster
+metadata:
+  name: rabbitmq
+  namespace: zipframes
+spec:
+  replicas: 1
+  persistence:
+    storage: 2Gi
+  # The operator default (2 CPU, 2Gi) does not fit a laptop kind node.
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: '1'
+      memory: 1Gi

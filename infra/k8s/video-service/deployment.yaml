@@ -6,7 +6,7 @@ metadata:
   labels:
     app: video-service
 spec:
-  replicas: 1
+  # No replicas: the autoscaler owns it, and Argo CD would reset it otherwise.
   selector:
     matchLabels:
       app: video-service
@@ -19,8 +19,9 @@ spec:
       terminationGracePeriodSeconds: 40
       containers:
         - name: video-service
-          image: zipframes-video-service:local
-          imagePullPolicy: IfNotPresent
+          image: ghcr.io/knzt/zipframes-video-service:main
+          # :main moves on every publish; a restart pulls the newest.
+          imagePullPolicy: Always
           ports:
             - name: http
               containerPort: 3001

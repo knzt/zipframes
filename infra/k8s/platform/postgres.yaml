@@ -1,0 +1,74 @@
+# One CloudNativePG cluster per service, as in the Compose file.
+# Each reaches its service at <name>-rw:5432. The owner and password come
+# from the <name>-credentials Secret (basic-auth) the bootstrap creates.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: auth-db
+  namespace: zipframes
+spec:
+  instances: 1
+  imageName: ghcr.io/cloudnative-pg/postgresql:16
+  storage:
+    size: 1Gi
+  bootstrap:
+    initdb:
+      database: auth_db
+      owner: zipframes
+      secret:
+        name: auth-db-credentials
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: video-db
+  namespace: zipframes
+spec:
+  instances: 1
+  imageName: ghcr.io/cloudnative-pg/postgresql:16
+  storage:
+    size: 1Gi
+  bootstrap:
+    initdb:
+      database: video_db
+      owner: zipframes
+      secret:
+        name: video-db-credentials
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: notification-db
+  namespace: zipframes
+spec:
+  instances: 1
+  imageName: ghcr.io/cloudnative-pg/postgresql:16
+  storage:
+    size: 1Gi
+  bootstrap:
+    initdb:
+      database: notification_db
+      owner: zipframes
+      secret:
+        name: notification-db-credentials
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi

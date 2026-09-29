@@ -1,14 +1,18 @@
+# Databases, broker, cache, storage, mail and their Ingress. The CRDs come
+# from the operators the bootstrap installs before Argo CD.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: notifier-service
+  name: platform
   namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
 spec:
   project: default
   source:
     repoURL: https://github.com/knzt/zipframes.git
     targetRevision: main
-    path: infra/k8s/notifier-service
+    path: infra/k8s/platform
   destination:
     server: https://kubernetes.default.svc
     namespace: zipframes
@@ -16,7 +20,6 @@ spec:
     automated:
       prune: true
       selfHeal: true
-    # The platform Application owns the namespace; until it syncs, retry.
     retry:
       limit: 10
       backoff:
