@@ -47,7 +47,7 @@ describe('DELETE /account against Postgres and RabbitMQ', () => {
     await service.stop();
   });
 
-  it('deletes the caller, publishes user.deleted, and the old token stops working', async () => {
+  it('deletes the caller, publishes user.deleted, and still honours the old token', async () => {
     const created = await fetch(`${service.url}/register`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
