@@ -15,4 +15,4 @@ minimumReleaseAgeExclude:
   - '@zipframes/authenticator@0.1.3 || 0.2.0'
   - '@zipframes/schemas@0.1.3 || 1.3.0'
   - '@zipframes/communication@0.2.0 || 0.3.0'
-  - '@zipframes/value-objects@0.3.0-pr57-20260929151503 || 0.3.0'
+  - '@zipframes/value-objects@0.3.0'
