@@ -113,7 +113,7 @@ stateDiagram-v2
 
 - Eventos que chegam depois de `DONE`, `FAILED`, `EXPIRED` ou `DELETED` são ignorados (ack). É isso que torna o consumo idempotente sem tabela de deduplicação.
 - `video.processed` só é aceito se `resultKey` for exatamente `outputs/{ownerId}/{videoId}.zip`. A chave é derivada, nunca confiada: um evento apontando para outro objeto daria ao dono uma URL para ele.
-- `QUEUED` e `PROCESSING` não podem ser excluídos (409). Se pudessem, o worker leria um original já apagado e publicaria um `video.failed` que o notification-service transformaria num e-mail de falha para um vídeo que o dono excluiu.
+- `QUEUED` e `PROCESSING` não podem ser excluídos (409). Se pudessem, o worker leria um original já apagado e publicaria um `video.failed` que o notifier-service transformaria num e-mail de falha para um vídeo que o dono excluiu.
 
 ## Upload e publicação de `video.uploaded`
 
@@ -150,7 +150,7 @@ flowchart LR
   retry -->|TTL expira<br/>exchange default| main
 ```
 
-A fila de retry devolve a mensagem **direto para a fila principal** pelo exchange default (`''`), e não para `zipframes.events`. Republicar no exchange compartilhado entregaria o `video.failed` de novo a todo assinante (o notification-service) a cada retry.
+A fila de retry devolve a mensagem **direto para a fila principal** pelo exchange default (`''`), e não para `zipframes.events`. Republicar no exchange compartilhado entregaria o `video.failed` de novo a todo assinante (o notifier-service) a cada retry.
 
 | Caso                                  | Settle                          |
 | ------------------------------------- | ------------------------------- |

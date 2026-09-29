@@ -290,15 +290,15 @@ services:
     networks: [zipframes]
 
   # ─── Notificações ───────────────────────────────────────────
-  notification-service:
+  notifier-service:
     profiles: [apps]
     build:
       context: ../..
-      dockerfile: services/notification-service/Dockerfile
+      dockerfile: services/notifier-service/Dockerfile
       secrets:
         - node_auth_token
-    image: zipframes-notification-service
-    container_name: zipframes-notification-service
+    image: zipframes-notifier-service
+    container_name: zipframes-notifier-service
     # The broker can report healthy a moment before it accepts AMQP; the
     # process exits on a refused connection, so let Compose start it again.
     restart: on-failure

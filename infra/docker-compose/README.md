@@ -12,19 +12,19 @@ O atalho é `docker compose -f infra/docker-compose/docker-compose.yml up -d`. O
 
 ## O que sobe com `infra:up`
 
-| Serviço            | Porta no host | Para quê                                                                                          |
-| ------------------ | ------------- | ------------------------------------------------------------------------------------------------- |
-| auth-db            | 5432          | Postgres do auth. `postgres://zipframes:zipframes@localhost:5432/auth_db`                         |
-| video-db           | 5433          | Postgres do video-service. `postgres://zipframes:zipframes@localhost:5433/video_db`               |
-| notification-db    | 5434          | Postgres do notification-service. `postgres://zipframes:zipframes@localhost:5434/notification_db` |
-| RabbitMQ (AMQP)    | 5672          | `amqp://zipframes:zipframes@localhost:5672`                                                       |
-| RabbitMQ (painel)  | 15672         | http://localhost:15672                                                                            |
-| Redis              | 6379          | Cache da listagem do video-service                                                                |
-| SeaweedFS (S3)     | 8333          | `http://localhost:8333`, bucket `videos`                                                          |
-| SeaweedFS (master) | 9333          | http://localhost:9333/cluster/healthz                                                             |
-| SeaweedFS (filer)  | 8888          | http://localhost:8888                                                                             |
-| Mailpit (SMTP)     | 1025          | SMTP do notification-service                                                                      |
-| Mailpit (web)      | 8025          | http://localhost:8025                                                                             |
+| Serviço            | Porta no host | Para quê                                                                                      |
+| ------------------ | ------------- | --------------------------------------------------------------------------------------------- |
+| auth-db            | 5432          | Postgres do auth. `postgres://zipframes:zipframes@localhost:5432/auth_db`                     |
+| video-db           | 5433          | Postgres do video-service. `postgres://zipframes:zipframes@localhost:5433/video_db`           |
+| notification-db    | 5434          | Postgres do notifier-service. `postgres://zipframes:zipframes@localhost:5434/notification_db` |
+| RabbitMQ (AMQP)    | 5672          | `amqp://zipframes:zipframes@localhost:5672`                                                   |
+| RabbitMQ (painel)  | 15672         | http://localhost:15672                                                                        |
+| Redis              | 6379          | Cache da listagem do video-service                                                            |
+| SeaweedFS (S3)     | 8333          | `http://localhost:8333`, bucket `videos`                                                      |
+| SeaweedFS (master) | 9333          | http://localhost:9333/cluster/healthz                                                         |
+| SeaweedFS (filer)  | 8888          | http://localhost:8888                                                                         |
+| Mailpit (SMTP)     | 1025          | SMTP do notifier-service                                                                      |
+| Mailpit (web)      | 8025          | http://localhost:8025                                                                         |
 
 O `storage-init` cria o bucket `videos` e termina. `Exited (0)` é o estado esperado. As credenciais que ele usa estão em [`seaweedfs/s3.json`](seaweedfs/s3.json) (`zipframes` / `zipframes-local-secret`). Esse JSON não interpola o `.env`.
 

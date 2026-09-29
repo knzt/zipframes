@@ -1,6 +1,6 @@
 # ZipFrames
 
-Quatro processos neste repositório. O `auth-service` cadastra usuários e emite JWT RS256. O `video-service` recebe o vídeo por upload multipart, grava no storage, publica `video.uploaded`, acompanha o processamento, lista os vídeos do usuário e entrega o zip por uma URL de download de curta duração. O `processor-worker` consome `video.uploaded`, extrai um frame por segundo com `ffmpeg` e grava um zip no storage. O `notification-service` consome identidade e resultado de processamento e envia e-mail. Não há cliente web aqui.
+Quatro processos neste repositório. O `auth-service` cadastra usuários e emite JWT RS256. O `video-service` recebe o vídeo por upload multipart, grava no storage, publica `video.uploaded`, acompanha o processamento, lista os vídeos do usuário e entrega o zip por uma URL de download de curta duração. O `processor-worker` consome `video.uploaded`, extrai um frame por segundo com `ffmpeg` e grava um zip no storage. O `notifier-service` consome identidade e resultado de processamento e envia e-mail. Não há cliente web aqui.
 
 ## Organização
 
@@ -9,7 +9,7 @@ zipframes/
 ├── services/auth-service/       # identidade, Postgres e publicação de eventos
 ├── services/video-service/      # ciclo de vida do vídeo, upload, download, Postgres e Redis
 ├── services/processor-worker/   # frames e zip, sem banco
-├── services/notification-service/ # e-mails de resultado e de falha, Postgres
+├── services/notifier-service/ # e-mails de resultado e de falha, Postgres
 ├── infra/docker-compose/        # Postgres, RabbitMQ, SeaweedFS, Mailpit e o resto da máquina
 ├── infra/k8s/                   # manifests dos quatro processos; não inclui a infra
 └── docs/                        # arquitetura e contratos
@@ -37,7 +37,7 @@ flowchart LR
   auth[auth-service :3000]
   video[video-service :3001]
   worker[processor-worker]
-  notif[notification-service]
+  notif[notifier-service]
   storage[(SeaweedFS :8333)]
   broker[[RabbitMQ<br/>zipframes.events]]
   mail[Mailpit :8025]
@@ -57,7 +57,7 @@ flowchart LR
   notif -- "SMTP" --> mail
 ```
 
-O auth grava o usuário e publica `user.registered` no exchange `zipframes.events`. O video-service valida o token contra o JWKS do auth, grava o arquivo no storage e o vídeo como `QUEUED` e publica `video.uploaded`. O worker escuta a fila `processor.video.uploaded`, processa e publica `video.processing.started`, `video.processed` ou `video.failed`, que o video-service consome pela fila `video-service.processing-status` para mover o status. O notification-service escuta `notification-service.contacts` (identidade) e `notification-service.emails` (resultado) e envia e-mail. O vídeo entra pelo video-service, em stream para o storage; o zip sai direto do storage, por uma URL assinada de curta duração.
+O auth grava o usuário e publica `user.registered` no exchange `zipframes.events`. O video-service valida o token contra o JWKS do auth, grava o arquivo no storage e o vídeo como `QUEUED` e publica `video.uploaded`. O worker escuta a fila `processor.video.uploaded`, processa e publica `video.processing.started`, `video.processed` ou `video.failed`, que o video-service consome pela fila `video-service.processing-status` para mover o status. O notifier-service escuta `notifier.contacts` (identidade) e `notifier.emails` (resultado) e envia e-mail. O vídeo entra pelo video-service, em stream para o storage; o zip sai direto do storage, por uma URL assinada de curta duração.
 
 Nenhum processo chama outro na subida. O video-service só busca o JWKS no primeiro token que valida. A ordem entre os quatro não importa.
 
@@ -67,7 +67,7 @@ Nenhum processo chama outro na subida. O video-service só busca o JWKS no prime
 - Fastify, Zod, Prisma (auth, video e notification)
 - RabbitMQ (`amqplib`), SeaweedFS pela API S3 (`@aws-sdk/client-s3`, `@aws-sdk/lib-storage` e `@aws-sdk/s3-request-presigner`) e Redis (`ioredis`, cache da listagem)
 - JWT RS256 (`jose`) e senha com bcrypt
-- Nodemailer no notification-service (Mailpit no Compose)
+- Nodemailer no notifier-service (Mailpit no Compose)
 - Vitest. A integração sobe Postgres, broker, storage, Redis e Mailpit com `@zipframes/test-toolkit` e precisa de Docker
 - `GET /metrics` em texto Prometheus (`prom-client`)
 
@@ -100,13 +100,13 @@ Exporte `NODE_AUTH_TOKEN` no shell antes de `pnpm install` dentro de cada servi�
 
 Copie o exemplo para `.env` ao lado. O processo não lê o `.example`.
 
-| Arquivo                                      | Quem lê                                                                                               |
-| -------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `infra/docker-compose/.env.example`          | O Compose, em `infra/docker-compose/.env`. Os defaults do YAML repetem o exemplo; a cópia é opcional. |
-| `services/auth-service/.env.example`         | `pnpm dev` e `pnpm start` do auth, via `--env-file=.env` no diretório do serviço.                     |
-| `services/video-service/.env.example`        | O mesmo, no video-service.                                                                            |
-| `services/processor-worker/.env.example`     | O mesmo, no worker.                                                                                   |
-| `services/notification-service/.env.example` | O mesmo, no notification-service.                                                                     |
+| Arquivo                                  | Quem lê                                                                                               |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `infra/docker-compose/.env.example`      | O Compose, em `infra/docker-compose/.env`. Os defaults do YAML repetem o exemplo; a cópia é opcional. |
+| `services/auth-service/.env.example`     | `pnpm dev` e `pnpm start` do auth, via `--env-file=.env` no diretório do serviço.                     |
+| `services/video-service/.env.example`    | O mesmo, no video-service.                                                                            |
+| `services/processor-worker/.env.example` | O mesmo, no worker.                                                                                   |
+| `services/notifier-service/.env.example` | O mesmo, no notifier-service.                                                                         |
 
 A chave de desenvolvimento está em `infra/docker-compose/auth/jwt-dev.pem`. O `.env` do auth aponta para ela com caminho relativo ao diretório do serviço. Use `pnpm --dir` a partir da raiz.
 
@@ -117,7 +117,7 @@ pnpm deps:auth pkgname@3.1
 pnpm deps:auth -D pkgname@3.1
 pnpm deps:video pkgname@3.1
 pnpm deps:worker pkgname@3.1
-pnpm deps:notification pkgname@3.1
+pnpm deps:notifier pkgname@3.1
 ```
 
 Credenciais locais, iguais no exemplo e em `infra/docker-compose/seaweedfs/s3.json`:
@@ -135,13 +135,13 @@ Credenciais locais, iguais no exemplo e em `infra/docker-compose/seaweedfs/s3.js
 cp services/auth-service/.env.example services/auth-service/.env
 cp services/video-service/.env.example services/video-service/.env
 cp services/processor-worker/.env.example services/processor-worker/.env
-cp services/notification-service/.env.example services/notification-service/.env
+cp services/notifier-service/.env.example services/notifier-service/.env
 
 pnpm install
 pnpm --dir services/auth-service install
 pnpm --dir services/video-service install
 pnpm --dir services/processor-worker install
-pnpm --dir services/notification-service install
+pnpm --dir services/notifier-service install
 
 pnpm infra:up
 
@@ -163,9 +163,9 @@ pnpm --dir services/processor-worker dev
 ```
 
 ```bash
-pnpm --dir services/notification-service db:generate
-pnpm --dir services/notification-service db:deploy
-pnpm --dir services/notification-service dev
+pnpm --dir services/notifier-service db:generate
+pnpm --dir services/notifier-service db:deploy
+pnpm --dir services/notifier-service dev
 ```
 
 `pnpm infra:up` sobe só a infra. Não constrói imagem de serviço. `db:deploy` aplica as migrations que já existem. `db:migrate` é `prisma migrate dev`, para mudar o schema, não para a primeira subida.
@@ -205,7 +205,7 @@ Na raiz: `pnpm format`, `pnpm lint` e `pnpm check:layers`. Em cada serviço, `pn
 pnpm --dir services/auth-service test:unit
 pnpm --dir services/video-service test:unit
 pnpm --dir services/processor-worker test:unit
-pnpm --dir services/notification-service test:unit
+pnpm --dir services/notifier-service test:unit
 ```
 
 ## Build
@@ -216,13 +216,13 @@ Os pacotes `@zipframes/*` não são buildados neste repositório. Cada serviço:
 pnpm --dir services/auth-service build
 pnpm --dir services/video-service build
 pnpm --dir services/processor-worker build
-pnpm --dir services/notification-service build
+pnpm --dir services/notifier-service build
 ```
 
 A imagem do worker não baixa dependência. Antes dela, `pnpm --dir services/processor-worker stage-runtime` copia os `node_modules` de produção para `.runtime/`. As imagens do auth, do video e do notification instalam o lockfile do serviço durante o build e exigem `NODE_AUTH_TOKEN`.
 
 ## Limitações
 
-- Não há cliente web. O auth não publica `user.updated` nem `user.deleted`; o notification-service já consome esses eventos nos testes.
+- Não há cliente web. O auth não publica `user.updated` nem `user.deleted`; o notifier-service já consome esses eventos nos testes.
 - `infra/k8s/` não declara Postgres, RabbitMQ, Redis, SeaweedFS nem Mailpit. Os Secrets de exemplo não entram no Kustomize. O worker declara um `ScaledObject` do KEDA. Sem cluster, CRDs e imagens já carregadas, esses manifests não sobem o sistema.
 - As imagens ficam locais. Os manifests do Argo CD apontam para `infra/k8s/` e não são um ambiente local pronto.

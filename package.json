@@ -18,7 +18,7 @@
     "deps:auth": "pnpm --dir services/auth-service add",
     "deps:worker": "pnpm --dir services/processor-worker add",
     "deps:video": "pnpm --dir services/video-service add",
-    "deps:notification": "pnpm --dir services/notification-service add"
+    "deps:notifier": "pnpm --dir services/notifier-service add"
   },
   "devDependencies": {
     "@commitlint/cli": "^19.8.1",

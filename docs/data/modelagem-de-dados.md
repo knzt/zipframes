@@ -325,7 +325,7 @@ CREATE INDEX idx_notifications_pendentes ON notifications (created_at) WHERE sta
 CREATE INDEX idx_notifications_user ON notifications (user_id, created_at DESC);
 ```
 
-O schema está em `services/notification-service/src/infrastructure/repositories/prisma/` (`schema.prisma` e a migration `20260928000000_init`, que acrescenta à mão o índice parcial e as `CHECK`).
+O schema está em `services/notifier-service/src/infrastructure/repositories/prisma/` (`schema.prisma` e a migration `20260928000000_init`, que acrescenta à mão o índice parcial e as `CHECK`).
 
 ## Retenção e eliminação
 

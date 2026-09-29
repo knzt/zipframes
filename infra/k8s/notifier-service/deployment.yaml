@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notifier-service
+  namespace: zipframes
+  labels:
+    app: notifier-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notifier-service
+  template:
+    metadata:
+      labels:
+        app: notifier-service
+    spec:
+      terminationGracePeriodSeconds: 40
+      containers:
+        - name: notifier-service
+          image: zipframes-notifier-service:local
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: notifier-service
+            - secretRef:
+                name: notifier-service
+          readinessProbe:
+            exec:
+              command: ['sh', '-c', 'kill -0 1']
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: ['sh', '-c', 'kill -0 1']
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi

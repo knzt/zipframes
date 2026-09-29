@@ -39,12 +39,12 @@ Os termos abaixo são usados igualmente no código, nos eventos, na API e nesta 
 
 Cada bounded context corresponde a um microsserviço, com modelo e banco de dados próprios.
 
-| Contexto         | Serviço                | Responsabilidade                                                           |
-| ---------------- | ---------------------- | -------------------------------------------------------------------------- |
-| Identidade       | `auth-service`         | Cadastro, autenticação e emissão de tokens                                 |
-| Gestão de Vídeos | `video-service`        | Ciclo de vida do vídeo: recebimento, status, listagem, download e retenção |
-| Processamento    | `processor-worker`     | Extração de frames e geração do pacote                                     |
-| Notificação      | `notification-service` | Contatos e envio de notificações                                           |
+| Contexto         | Serviço            | Responsabilidade                                                           |
+| ---------------- | ------------------ | -------------------------------------------------------------------------- |
+| Identidade       | `auth-service`     | Cadastro, autenticação e emissão de tokens                                 |
+| Gestão de Vídeos | `video-service`    | Ciclo de vida do vídeo: recebimento, status, listagem, download e retenção |
+| Processamento    | `processor-worker` | Extração de frames e geração do pacote                                     |
+| Notificação      | `notifier-service` | Contatos e envio de notificações                                           |
 
 ### Mapa de contextos
 
@@ -53,7 +53,7 @@ flowchart LR
   ID["Identidade<br/>(auth-service)"]
   GV["Gestão de Vídeos<br/>(video-service)"]
   PR["Processamento<br/>(processor-worker)"]
-  NO["Notificação<br/>(notification-service)"]
+  NO["Notificação<br/>(notifier-service)"]
 
   ID -- "OHS: JWKS para validar tokens" --> GV
   ID -- "PL: user.registered" --> NO
@@ -207,15 +207,15 @@ Todos os eventos são publicados no exchange `zipframes.events` com o mesmo enve
 }
 ```
 
-| Evento                     | Publicado por    | Consumido por                       | Payload                                                                                   |
-| -------------------------- | ---------------- | ----------------------------------- | ----------------------------------------------------------------------------------------- |
-| `user.registered`          | auth-service     | notification-service                | `userId`, `name`, `email`                                                                 |
-| `video.uploaded`           | video-service    | processor-worker                    | `videoId`, `ownerId`, `sourceKey`, `originalFileName`, `sizeBytes`                        |
-| `video.processing.started` | processor-worker | video-service                       | `videoId`, `attempt`                                                                      |
-| `video.processed`          | processor-worker | video-service, notification-service | `videoId`, `resultKey`, `frameCount`, `durationMs`, `ownerId`, `originalFileName`         |
-| `video.failed`             | processor-worker | video-service, notification-service | `videoId`, `ownerId`, `errorCode`, `reason`, `attempts`, `originalFileName`, `uploadedAt` |
-| `user.updated`             | auth-service     | notification-service                | `userId`, `name`, `email`                                                                 |
-| `user.deleted`             | auth-service     | video-service, notification-service | `userId`                                                                                  |
+| Evento                     | Publicado por    | Consumido por                   | Payload                                                                                   |
+| -------------------------- | ---------------- | ------------------------------- | ----------------------------------------------------------------------------------------- |
+| `user.registered`          | auth-service     | notifier-service                | `userId`, `name`, `email`                                                                 |
+| `video.uploaded`           | video-service    | processor-worker                | `videoId`, `ownerId`, `sourceKey`, `originalFileName`, `sizeBytes`                        |
+| `video.processing.started` | processor-worker | video-service                   | `videoId`, `attempt`                                                                      |
+| `video.processed`          | processor-worker | video-service, notifier-service | `videoId`, `resultKey`, `frameCount`, `durationMs`, `ownerId`, `originalFileName`         |
+| `video.failed`             | processor-worker | video-service, notifier-service | `videoId`, `ownerId`, `errorCode`, `reason`, `attempts`, `originalFileName`, `uploadedAt` |
+| `user.updated`             | auth-service     | notifier-service                | `userId`, `name`, `email`                                                                 |
+| `user.deleted`             | auth-service     | video-service, notifier-service | `userId`                                                                                  |
 
 Regras dos contratos:
 
