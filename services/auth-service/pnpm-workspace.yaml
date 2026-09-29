@@ -9,8 +9,9 @@ allowBuilds:
   protobufjs: true
   ssh2: true
 minimumReleaseAgeExclude:
-  - '@zipframes/core@0.4.0'
+  - '@zipframes/core@0.4.0 || 0.5.0-pr50-20260928112543 || 0.5.0'
   - '@zipframes/test-toolkit@0.2.1'
   - '@zipframes/http@0.2.0'
   - '@zipframes/authenticator@0.1.3'
-  - '@zipframes/schemas@0.1.3'
+  - '@zipframes/schemas@0.1.3 || 1.0.0-pr50-20260928112543 || 1.1.0-pr50-20260928212711 || 1.1.0-pr50-20260928213734 || 1.1.0-pr50-20260928222430'
+  - '@zipframes/communication@0.3.0-pr50-20260928112543 || 0.3.0-pr50-20260928212711 || 0.3.0-pr50-20260928213734 || 0.3.0-pr50-20260928222430'

@@ -1,0 +1,74 @@
+// Matches docs/data/modelagem-de-dados.md exactly: this file (and the
+// generated migration SQL) is the script of record for the notification-db schema.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("NOTIFICATION_DATABASE_URL")
+}
+
+enum NotificationType {
+  VIDEO_PROCESSED
+  VIDEO_FAILED
+
+  @@map("notification_type")
+}
+
+enum NotificationChannel {
+  EMAIL
+
+  @@map("notification_channel")
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+
+  @@map("notification_status")
+}
+
+model Contact {
+  userId    String   @id @map("user_id") @db.Uuid
+  name      String   @db.VarChar(120)
+  email     String   @db.VarChar(255)
+  updatedAt DateTime @map("updated_at") @db.Timestamptz
+
+  @@map("contacts")
+}
+
+model Notification {
+  id               String                @id @db.Uuid
+  userId           String                @map("user_id") @db.Uuid
+  videoId          String                @map("video_id") @db.Uuid
+  type             NotificationType
+  channel          NotificationChannel   @default(EMAIL)
+  status           NotificationStatus    @default(PENDING)
+  target           String?               @db.VarChar(255)
+  originalFileName String                @map("original_file_name") @db.VarChar(255)
+  resultKey        String?               @map("result_key") @db.VarChar(512)
+  frameCount       Int?                  @map("frame_count")
+  uploadedAt       DateTime?             @map("uploaded_at") @db.Timestamptz
+  createdAt        DateTime              @default(now()) @map("created_at") @db.Timestamptz
+  sentAt           DateTime?             @map("sent_at") @db.Timestamptz
+  attempts         NotificationAttempt[]
+
+  @@unique([videoId, type], map: "uq_notifications_video_tipo")
+  @@index([userId, createdAt(sort: Desc)], map: "idx_notifications_user")
+  @@map("notifications")
+}
+
+model NotificationAttempt {
+  id             String       @id @db.Uuid
+  notificationId String       @map("notification_id") @db.Uuid
+  attempt        Int          @db.SmallInt
+  target         String       @db.VarChar(255)
+  error          String       @db.Text
+  attemptedAt    DateTime     @default(now()) @map("attempted_at") @db.Timestamptz
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+
+  @@unique([notificationId, attempt], map: "uq_attempts_notificacao")
+  @@map("notification_attempts")
+}

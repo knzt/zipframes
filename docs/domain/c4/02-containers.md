@@ -13,7 +13,7 @@ flowchart TB
     auth["<b>auth-service</b><br/><i>[Container: Node.js, Fastify]</i><br/>Cadastro, login e JWT"]
     video["<b>video-service</b><br/><i>[Container: Node.js, Fastify]</i><br/>Recebe os vídeos, status,<br/>listagem, download e retenção"]
     worker["<b>processor-worker</b><br/><i>[Container: Node.js, ffmpeg]</i><br/>Extrai os frames e gera o zip"]
-    notif["<b>notification-service</b><br/><i>[Container: Node.js]</i><br/>Envia notificações de falha"]
+    notif["<b>notifier-service</b><br/><i>[Container: Node.js]</i><br/>Envia e-mails de resultado e de falha"]
     broker[["<b>RabbitMQ</b><br/><i>[Container: message broker]</i><br/>Exchange zipframes.events"]]
     authdb[("<b>auth-db</b><br/><i>[PostgreSQL]</i><br/>Usuários")]
     videodb[("<b>video-db</b><br/><i>[PostgreSQL]</i><br/>Vídeos")]
@@ -40,7 +40,7 @@ flowchart TB
   video <-- "Publica video.uploaded e consome<br/>started, processed e failed [AMQP]" --> broker
   broker -- "Entrega video.uploaded<br/>[AMQP]" --> worker
   worker -- "Publica started,<br/>processed e failed [AMQP]" --> broker
-  broker -- "Entrega user.registered<br/>e video.failed [AMQP]" --> notif
+  broker -- "Entrega user.registered, user.updated,<br/>user.deleted, video.processed e video.failed [AMQP]" --> notif
   notif -- "Envia e-mail<br/>[SMTP]" --> smtp
 
   classDef person fill:#08427b,stroke:#052e56,color:#ffffff
@@ -64,7 +64,7 @@ A interface roda no navegador do usuário, então as chamadas à API e ao storag
 | auth-service                       | Node.js, TypeScript, Fastify, Prisma    | Identidade e emissão de tokens                                | HPA por CPU                       |
 | video-service                      | Node.js, TypeScript, Fastify, Prisma    | Gestão de vídeos                                              | HPA por CPU                       |
 | processor-worker                   | Node.js, TypeScript, ffmpeg             | Processamento                                                 | KEDA pelo tamanho da fila         |
-| notification-service               | Node.js, TypeScript, Nodemailer, Prisma | Notificações                                                  | Réplicas fixas                    |
+| notifier-service                   | Node.js, TypeScript, Nodemailer, Prisma | Notificações                                                  | Réplicas fixas                    |
 | RabbitMQ                           | RabbitMQ Cluster Operator               | Transporte dos eventos                                        | Cluster do operator               |
 | auth-db, video-db, notification-db | PostgreSQL com CloudNativePG            | Persistência de cada serviço                                  | Instância por serviço             |
 | Redis                              | Redis                                   | Cache da listagem                                             | Instância única                   |

@@ -1,0 +1,38 @@
+# Checks for the notifier-service.
+#
+# Pull requests targeting main always run this suite so every synchronize
+# is covered. Pushes to main still filter by path so an untouched service
+# is skipped on merge.
+name: notifier-service
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+    paths:
+      - 'services/notifier-service/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.npmrc'
+      - 'tsconfig.base.json'
+      - 'eslint.config.mjs'
+      - '.dependency-cruiser.mjs'
+      - '.github/workflows/notifier-service.yml'
+      - '.github/workflows/service-ci.yml'
+
+concurrency:
+  group: notifier-service-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    uses: ./.github/workflows/service-ci.yml
+    with:
+      service: notifier-service
+      image: zipframes-notifier-service:local
+      prisma: true
+      coverage: true
+      docker_secret: true
+    secrets:
+      NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}

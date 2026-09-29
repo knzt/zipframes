@@ -1,0 +1,56 @@
+{
+  "name": "@zipframes/notifier-service",
+  "version": "0.1.0",
+  "private": true,
+  "description": "E-mails de resultado e de falha do ZipFrames",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "pnpm test:unit && pnpm test:integration",
+    "test:unit": "vitest run --config vitest.unit.config.ts",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:watch": "vitest --config vitest.unit.config.ts",
+    "test:coverage": "vitest run --config vitest.unit.config.ts --coverage",
+    "lint": "eslint .",
+    "dev": "node --env-file=.env --import tsx --watch src/main/index.ts",
+    "start": "node --env-file=.env dist/main/index.js",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.787.0",
+    "@aws-sdk/s3-request-presigner": "^3.787.0",
+    "@prisma/client": "^6.2.1",
+    "@zipframes/communication": "0.3.0-pr50-20260929001757",
+    "@zipframes/core": "^0.4.0",
+    "@zipframes/logger": "^0.1.0",
+    "@zipframes/schemas": "1.1.0-pr50-20260929001757",
+    "@zipframes/telemetry": "^0.1.0",
+    "amqplib": "^0.10.8",
+    "nodemailer": "^6.10.1",
+    "prisma": "^6.2.1",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/amqplib": "^0.10.7",
+    "@types/node": "^26.0.0",
+    "@types/nodemailer": "^6.4.17",
+    "@vitest/coverage-v8": "^3.2.4",
+    "@zipframes/test-toolkit": "^0.2.1",
+    "testcontainers": "^11.5.1",
+    "tsx": "^4.19.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  },
+  "engines": {
+    "node": ">=26.0.0",
+    "pnpm": ">=12.0.0"
+  },
+  "packageManager": "pnpm@12.6.0",
+  "prisma": {
+    "schema": "src/infrastructure/repositories/prisma/schema.prisma"
+  }
+}

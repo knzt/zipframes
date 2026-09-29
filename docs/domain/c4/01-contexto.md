@@ -6,10 +6,10 @@ Mostra o sistema como uma caixa única, quem o usa e com quais sistemas externos
 flowchart TB
   user["<b>Usuário</b><br/><i>[Pessoa]</i><br/>Envia vídeos e baixa<br/>os frames extraídos"]
   system["<b>ZipFrames</b><br/><i>[Sistema de software]</i><br/>Recebe vídeos, extrai um frame por segundo<br/>e entrega os frames em um arquivo zip"]
-  smtp["<b>Servidor de e-mail</b><br/><i>[Sistema externo]</i><br/>Entrega as notificações de falha<br/>(Mailpit no ambiente local)"]
+  smtp["<b>Servidor de e-mail</b><br/><i>[Sistema externo]</i><br/>Entrega as notificações de resultado e de falha<br/>(Mailpit no ambiente local)"]
 
   user -- "Cadastra-se, envia vídeos,<br/>acompanha o status e baixa os zips<br/>[HTTPS]" --> system
-  system -- "Envia notificações de falha<br/>[SMTP]" --> smtp
+  system -- "Envia notificações de resultado e de falha<br/>[SMTP]" --> smtp
   smtp -- "Entrega o e-mail" --> user
 
   classDef person fill:#08427b,stroke:#052e56,color:#ffffff

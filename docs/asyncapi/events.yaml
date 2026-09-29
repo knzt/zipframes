@@ -105,7 +105,7 @@ operations:
   subscribeUserRegisteredForContacts:
     action: receive
     channel: { $ref: '#/channels/userRegistered' }
-    summary: notification-service projeta o contato
+    summary: notifier-service projeta o contato
 
   publishUserUpdated:
     action: send
@@ -114,7 +114,7 @@ operations:
   subscribeUserUpdatedForContacts:
     action: receive
     channel: { $ref: '#/channels/userUpdated' }
-    summary: notification-service atualiza o contato projetado
+    summary: notifier-service atualiza o contato projetado
 
   publishUserDeleted:
     action: send
@@ -127,7 +127,7 @@ operations:
   subscribeUserDeletedForContacts:
     action: receive
     channel: { $ref: '#/channels/userDeleted' }
-    summary: notification-service apaga o contato e o histórico
+    summary: notifier-service apaga o contato e o histórico
 
   publishVideoUploaded:
     action: send
@@ -155,6 +155,10 @@ operations:
     action: receive
     channel: { $ref: '#/channels/videoProcessed' }
     summary: video-service marca o vídeo como DONE e invalida o cache da listagem
+  subscribeVideoProcessedForNotification:
+    action: receive
+    channel: { $ref: '#/channels/videoProcessed' }
+    summary: notifier-service envia o e-mail de zip pronto
 
   publishVideoFailed:
     action: send
@@ -167,7 +171,7 @@ operations:
   subscribeVideoFailedForNotification:
     action: receive
     channel: { $ref: '#/channels/videoFailed' }
-    summary: notification-service envia o e-mail de falha
+    summary: notifier-service envia o e-mail de falha
 
 components:
   messages:
@@ -365,6 +369,12 @@ components:
                 videoId:
                   type: string
                   format: uuid
+                ownerId:
+                  type: string
+                  description: Identificador do dono; o worker sempre envia.
+                originalFileName:
+                  type: string
+                  description: Nome do arquivo original; o worker sempre envia.
                 resultKey:
                   type: string
                   description: Chave no storage, no formato `outputs/{ownerId}/{videoId}.zip`.
@@ -394,12 +404,21 @@ components:
                 ownerId:
                   type: string
                   format: uuid
+                originalFileName:
+                  type: string
+                  description: Nome do arquivo original; o worker sempre envia.
+                uploadedAt:
+                  type: string
+                  format: date-time
+                  description: >
+                    Instantâneo de `video.uploaded.occurredAt` (quando o job entrou na fila).
+                    O worker sempre envia.
                 errorCode:
                   type: string
                   example: UNSUPPORTED_FORMAT
                 reason:
                   type: string
-                  description: Motivo legível, exibido ao usuário e usado no e-mail.
+                  description: Motivo técnico interno. Não entra no e-mail.
                 attempts:
                   type: integer
                   minimum: 1

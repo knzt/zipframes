@@ -7,5 +7,6 @@ Documentos de arquitetura interna de cada microsserviço. A Clean Architecture �
 | `auth-service`     | [auth-service.md](./auth-service.md)         | Postgres (`auth-db`)                  |
 | `video-service`    | [video-service.md](./video-service.md)       | Postgres (`video-db`) e Redis (cache) |
 | `processor-worker` | [processor-worker.md](./processor-worker.md) | Nenhuma (stateless)                   |
+| `notifier-service` | [notifier-service.md](./notifier-service.md) | Postgres (`notification-db`)          |
 
-Demais serviços (`notification-service`, `web-client`) entram nesta pasta à medida que forem implementados.
+Demais serviços (`web-client`) entram nesta pasta à medida que forem implementados.

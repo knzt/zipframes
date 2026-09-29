@@ -2,7 +2,7 @@
 
 ## Visão geral
 
-Um usuário cadastrado envia um vídeo e recebe, de forma assíncrona, um arquivo zip com um frame por segundo do vídeo. Ele acompanha o andamento de cada envio e é avisado por e-mail quando algo dá errado.
+Um usuário cadastrado envia um vídeo e recebe, de forma assíncrona, um arquivo zip com um frame por segundo do vídeo. Ele acompanha o andamento de cada envio e é avisado por e-mail quando o zip fica pronto ou quando o processamento falha.
 
 ## Linguagem ubíqua
 
@@ -22,7 +22,7 @@ Os termos abaixo são usados igualmente no código, nos eventos, na API e nesta 
 | Falha de processamento | Término do processamento sem gerar o pacote                                          | `video.failed`                |
 | Falha transitória      | Erro que pode desaparecer em nova tentativa, como storage indisponível               | `TransientProcessingError`    |
 | Falha permanente       | Erro que se repetiria em qualquer tentativa, como arquivo inválido                   | `PermanentProcessingError`    |
-| Notificação            | Mensagem enviada ao usuário sobre uma falha                                          | `Notification`                |
+| Notificação            | Mensagem enviada ao usuário sobre o resultado ou a falha                             | `Notification`                |
 | Expiração              | Fim do prazo em que o pacote fica disponível, seguido do apagamento do arquivo       | `VideoStatus.EXPIRED`         |
 | Eliminação             | Apagamento definitivo de um arquivo do storage, por expiração ou a pedido do titular | `purge`                       |
 
@@ -39,12 +39,12 @@ Os termos abaixo são usados igualmente no código, nos eventos, na API e nesta 
 
 Cada bounded context corresponde a um microsserviço, com modelo e banco de dados próprios.
 
-| Contexto         | Serviço                | Responsabilidade                                                           |
-| ---------------- | ---------------------- | -------------------------------------------------------------------------- |
-| Identidade       | `auth-service`         | Cadastro, autenticação e emissão de tokens                                 |
-| Gestão de Vídeos | `video-service`        | Ciclo de vida do vídeo: recebimento, status, listagem, download e retenção |
-| Processamento    | `processor-worker`     | Extração de frames e geração do pacote                                     |
-| Notificação      | `notification-service` | Contatos e envio de notificações                                           |
+| Contexto         | Serviço            | Responsabilidade                                                           |
+| ---------------- | ------------------ | -------------------------------------------------------------------------- |
+| Identidade       | `auth-service`     | Cadastro, autenticação e emissão de tokens                                 |
+| Gestão de Vídeos | `video-service`    | Ciclo de vida do vídeo: recebimento, status, listagem, download e retenção |
+| Processamento    | `processor-worker` | Extração de frames e geração do pacote                                     |
+| Notificação      | `notifier-service` | Contatos e envio de notificações                                           |
 
 ### Mapa de contextos
 
@@ -53,7 +53,7 @@ flowchart LR
   ID["Identidade<br/>(auth-service)"]
   GV["Gestão de Vídeos<br/>(video-service)"]
   PR["Processamento<br/>(processor-worker)"]
-  NO["Notificação<br/>(notification-service)"]
+  NO["Notificação<br/>(notifier-service)"]
 
   ID -- "OHS: JWKS para validar tokens" --> GV
   ID -- "PL: user.registered" --> NO
@@ -154,7 +154,7 @@ O contexto de Processamento não persiste estado próprio: cada mensagem carrega
 
 **Conceitos**
 
-- **`ProcessingJob`**: a unidade de trabalho criada a partir de `video.uploaded`, com `videoId`, `ownerId`, `sourceKey` e o número da tentativa.
+- **`ProcessingJob`**: a unidade de trabalho criada a partir de `video.uploaded`, com `videoId`, `ownerId`, `sourceKey`, o número da tentativa e `uploadedAt` (`video.uploaded.occurredAt`, quando o job entrou na fila).
 - **`FrameExtractionPolicy`**: um frame por segundo, em PNG, nomeados `frame_0001.png` em diante.
 - **`FramesPackage`**: o zip resultante, gravado sem recompressão (os PNGs já são comprimidos).
   Regras:
@@ -174,18 +174,19 @@ O contexto de Processamento não persiste estado próprio: cada mensagem carrega
 
 A projeção é mantida por _event-carried state transfer_: o contexto de Identidade publica os eventos de cadastro, alteração e exclusão, e o de Notificação mantém sua própria cópia. Não existe consulta ao auth-service nem acesso ao banco dele. A gravação é um upsert por `userId`, e o `updatedAt` descarta eventos que chegarem fora de ordem.
 
-**Agregado `Notification`**: `id`, `userId`, `videoId`, `type` (`VIDEO_FAILED`), `channel` (`EMAIL`), `status` (`PENDING`, `SENT`, `FAILED`), `target`, `createdAt`, `sentAt`, e a coleção de tentativas que falharam (`NotificationAttempt`: número da tentativa, destino, erro e data).
+**Agregado `Notification`**: `id`, `userId`, `videoId`, `type` (`VIDEO_PROCESSED` ou `VIDEO_FAILED`), `channel` (`EMAIL`), `status` (`PENDING`, `SENT`, `FAILED`), `target`, `originalFileName`, `uploadedAt` (quando o vídeo entrou na fila), `createdAt`, `sentAt`, e a coleção de tentativas SMTP que falharam (`NotificationAttempt`: número da tentativa, destino, erro e data). `FAILED` na linha principal é o esgotamento das tentativas de envio, não o motivo do processamento.
 
 O `target` registra o endereço usado no envio, que é copiado do contato no momento em que a mensagem sai. O contato guarda o estado atual, e a notificação guarda o fato histórico.
 
 Regras:
 
-- **No máximo uma notificação por vídeo e tipo.** Reentregas de `video.failed` não geram e-mails duplicados.
-- **Contato ausente não perde a notificação:** se `video.failed` chegar antes de `user.registered`, a notificação fica `PENDING` e é enviada quando o contato for projetado.
-- **Cada tentativa que falha é registrada**, com destino, erro e data. O envio bem-sucedido não vira tentativa: ele fica na própria notificação, como `SENT`, com destino e data de envio.
+- **No máximo uma notificação por vídeo e tipo.** Reentregas de `video.processed` / `video.failed` não geram e-mails duplicados.
+- **Contato ausente não perde a notificação:** se o resultado chegar antes de `user.registered`, a notificação fica `PENDING` e é enviada quando o contato for projetado.
+- **Cada tentativa SMTP que falha é registrada** em `notification_attempts`, com destino, erro e data. O envio bem-sucedido não vira tentativa: ele fica na própria notificação, como `SENT`, com destino e data de envio. O motivo técnico do processamento não entra nessa tabela nem na linha de `notifications`.
 - **No máximo três tentativas.** Ao esgotá-las, a notificação fica `FAILED` e para de ser reenfileirada. O limite é configurável.
 - **Falha no envio do e-mail** é transitória e segue a mesma política de retry das mensagens.
-- **O e-mail não repete dado pessoal desnecessário.** Ele traz o nome do arquivo enviado e o motivo da falha, sem anexos e sem link para o conteúdo.
+- **O e-mail de zip pronto** traz o nome do arquivo, a quantidade de frames, a URL GET assinada e o fallback `{APP_PUBLIC_URL}/videos/{videoId}/download`. Depois do link: "Se ele falhar, gere um novo em:" e "O arquivo expira em 24 horas." Sem JWT Bearer e sem dizer que o link assinado vale 24 horas.
+- **O e-mail de falha** diz que o processamento falhou, traz o nome do arquivo, a data do envio e `{APP_PUBLIC_URL}/videos` para enviar de novo. Sem `error`, `reason` ou `errorCode` no corpo. Sem anexos e sem link para o conteúdo.
 - **A exclusão da conta apaga o contato e o histórico de notificações** do usuário, ao consumir `user.deleted`.
 - **Mudanças de nome ou e-mail chegam por `user.updated`.** Sem esse evento, a projeção envelheceria e as notificações seguiriam para um endereço antigo.
 
@@ -206,15 +207,15 @@ Todos os eventos são publicados no exchange `zipframes.events` com o mesmo enve
 }
 ```
 
-| Evento                     | Publicado por    | Consumido por                       | Payload                                                            |
-| -------------------------- | ---------------- | ----------------------------------- | ------------------------------------------------------------------ |
-| `user.registered`          | auth-service     | notification-service                | `userId`, `name`, `email`                                          |
-| `video.uploaded`           | video-service    | processor-worker                    | `videoId`, `ownerId`, `sourceKey`, `originalFileName`, `sizeBytes` |
-| `video.processing.started` | processor-worker | video-service                       | `videoId`, `attempt`                                               |
-| `video.processed`          | processor-worker | video-service                       | `videoId`, `resultKey`, `frameCount`, `durationMs`                 |
-| `video.failed`             | processor-worker | video-service, notification-service | `videoId`, `ownerId`, `errorCode`, `reason`, `attempts`            |
-| `user.updated`             | auth-service     | notification-service                | `userId`, `name`, `email`                                          |
-| `user.deleted`             | auth-service     | video-service, notification-service | `userId`                                                           |
+| Evento                     | Publicado por    | Consumido por                   | Payload                                                                                   |
+| -------------------------- | ---------------- | ------------------------------- | ----------------------------------------------------------------------------------------- |
+| `user.registered`          | auth-service     | notifier-service                | `userId`, `name`, `email`                                                                 |
+| `video.uploaded`           | video-service    | processor-worker                | `videoId`, `ownerId`, `sourceKey`, `originalFileName`, `sizeBytes`                        |
+| `video.processing.started` | processor-worker | video-service                   | `videoId`, `attempt`                                                                      |
+| `video.processed`          | processor-worker | video-service, notifier-service | `videoId`, `resultKey`, `frameCount`, `durationMs`, `ownerId`, `originalFileName`         |
+| `video.failed`             | processor-worker | video-service, notifier-service | `videoId`, `ownerId`, `errorCode`, `reason`, `attempts`, `originalFileName`, `uploadedAt` |
+| `user.updated`             | auth-service     | notifier-service                | `userId`, `name`, `email`                                                                 |
+| `user.deleted`             | auth-service     | video-service, notifier-service | `userId`                                                                                  |
 
 Regras dos contratos:
 
@@ -235,7 +236,7 @@ Um vídeo pode conter rosto, voz e outros dados pessoais de quem aparece nele, e
 | Pacote de frames (zip)               | Object storage    | 24 horas após a conclusão            | É o resultado entregue. A janela cobre quem não baixa na hora, sem virar um arquivo permanente        |
 | Frames soltos e arquivos temporários | Disco do worker   | Durante a tentativa                  | Removidos ao fim do trabalho, com sucesso ou falha                                                    |
 | Metadados do vídeo                   | `video-db`        | Enquanto a conta existir             | Sustentam a listagem e o histórico sem guardar conteúdo pessoal                                       |
-| Contato                              | `notification-db` | Enquanto a conta existir             | Necessário para notificar falhas                                                                      |
+| Contato                              | `notification-db` | Enquanto a conta existir             | Necessário para notificar resultado e falha                                                           |
 | Histórico de notificações            | `notification-db` | Enquanto a conta existir             | Comprova o aviso enviado ao usuário                                                                   |
 
 O prazo de 24 horas é configurável, e o mesmo valor alimenta o `expiresAt` do agregado e a rotina de expiração.

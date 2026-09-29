@@ -26,6 +26,7 @@ const job = {
   sizeBytes: 1024,
   attempt: 1,
   correlationId,
+  uploadedAt: '2026-09-22T12:00:00.000Z',
 };
 
 const eventsDouble = (): EventPublisher & { readonly publish: ReturnType<typeof vi.fn> } => {
@@ -111,6 +112,13 @@ describe('ProcessUploadedVideoUseCase', () => {
     expect(deleteObject).toHaveBeenCalledWith(job.sourceKey);
     expect(removeDir).toHaveBeenCalledWith('/tmp/job');
     expect(publishedTypes(eventPublisher)).toEqual(['video.processing.started', 'video.processed']);
+    expect(eventPublisher.publish.mock.calls[1]?.[0]).toMatchObject({
+      payload: {
+        ownerId,
+        originalFileName: 'demo.mp4',
+        resultKey: `outputs/${ownerId}/${videoId}.zip`,
+      },
+    });
   });
 
   it('publishes video.failed on unprocessable media and returns media_rejected', async () => {
@@ -247,7 +255,12 @@ describe('ProcessUploadedVideoUseCase', () => {
     expect(deleteObject).toHaveBeenCalledWith(job.sourceKey);
     expect(publishedTypes(eventPublisher)).toEqual(['video.processing.started', 'video.failed']);
     const failed = eventPublisher.publish.mock.calls[1]?.[0] as EventPublisherInput;
-    expect(failed.payload).toMatchObject({ errorCode: 'NO_FRAMES' });
+    expect(failed.payload).toMatchObject({
+      errorCode: 'NO_FRAMES',
+      originalFileName: 'demo.mp4',
+      ownerId,
+      uploadedAt: '2026-09-22T12:00:00.000Z',
+    });
   });
 
   it('stores an extensionless upload as original.bin', async () => {
