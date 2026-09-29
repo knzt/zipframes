@@ -2,7 +2,8 @@
 # Callers on push to main may filter by path. Pull requests targeting
 # main always invoke this. With `publish`, the image that passed both
 # jobs is pushed to GHCR as :<sha> and :main, and :<sha> is written to
-# infra/k8s/<service>/kustomization.yaml on main for Argo CD to roll out.
+# infra/k8s/<service>/kustomization.yaml in a pull request that a person
+# merges. Merging it is the deploy: Argo CD applies infra/ from main.
 name: service-ci
 
 on:
@@ -48,6 +49,14 @@ on:
       NODE_AUTH_TOKEN:
         required: true
       SONAR_TOKEN:
+        required: false
+      DEPLOY_APP_ID:
+        description: |
+          GitHub App that opens the deploy pull request. Not required: a
+          pull request run never publishes, and the publish job below
+          fails with a clear message when the app is missing.
+        required: false
+      DEPLOY_APP_PRIVATE_KEY:
         required: false
 
 permissions:
@@ -222,13 +231,35 @@ jobs:
     needs: [verify, integration]
     runs-on: ubuntu-latest
     permissions:
-      # contents: write commits the new tag to the manifests.
-      contents: write
+      # The GHCR push is all GITHUB_TOKEN still does here. The deploy branch
+      # and the pull request come from a GitHub App token: Actions creates the
+      # runs for a pull request opened with GITHUB_TOKEN but never starts
+      # them, so that pull request can never be reviewed and its runs are
+      # closed as an approval that expired.
+      contents: read
       packages: write
-      # pull-requests: write opens and merges the deploy PR below.
-      pull-requests: write
     steps:
+      - name: Require the deploy app
+        env:
+          APP_ID: ${{ secrets.DEPLOY_APP_ID }}
+        run: |
+          if [ -z "$APP_ID" ]; then
+            echo "DEPLOY_APP_ID and DEPLOY_APP_PRIVATE_KEY are required to open the deploy pull request." >&2
+            exit 1
+          fi
+
+      - name: Mint a token for the deploy pull request
+        id: deploy_token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.DEPLOY_APP_ID }}
+          private-key: ${{ secrets.DEPLOY_APP_PRIVATE_KEY }}
+
+      # The app token, not GITHUB_TOKEN, so the branch and the pull request
+      # below belong to the app.
       - uses: actions/checkout@v5
+        with:
+          token: ${{ steps.deploy_token.outputs.token }}
 
       - uses: actions/download-artifact@v8
         with:
@@ -252,14 +283,12 @@ jobs:
           done
           echo "Pushed \`${repo}:${GITHUB_SHA}\` and \`:main\`" >> "$GITHUB_STEP_SUMMARY"
 
-      # This is the deploy: Argo CD watches infra/ on main and rolls out the
-      # new tag. main takes changes only through a pull request and enforces
-      # admins, so the tag goes through a PR opened and merged here. A PR
-      # created with GITHUB_TOKEN does not start workflows, so this neither
-      # runs CI again nor recurses into another deploy.
-      - name: Pin the tag in the manifests
+      # This is the deploy request. main takes changes only through a pull
+      # request, so the rollout happens when this one is merged: Argo CD
+      # watches infra/ on main. Until then the pull request simply stays open.
+      - name: Open the deploy pull request
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.deploy_token.outputs.token }}
           KUSTOMIZATION: infra/k8s/${{ inputs.service }}/kustomization.yaml
         run: |
           yq -i '.images[0].newTag = strenv(GITHUB_SHA)' "$KUSTOMIZATION"
@@ -272,28 +301,19 @@ jobs:
           branch="deploy/${{ inputs.service }}-${short}"
           title="chore(deploy): ${{ inputs.service }} ${short}"
 
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -b "$branch"
-          git add "$KUSTOMIZATION"
-          git commit -m "$title"
-          git push origin "$branch"
+          git config user.name "${{ steps.deploy_token.outputs.app-slug }}[bot]"
+          git config user.email "${{ steps.deploy_token.outputs.app-slug }}[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git commit -am "$title"
+          # The branch names one commit of this repository and belongs to this
+          # job alone, so re-running the same commit may rewrite it.
+          git push --force origin "$branch"
 
-          gh pr create --base main --head "$branch" --title "$title" \
-            --body "Rolls ${{ inputs.service }} out to \`${short}\`, published to GHCR by [this run](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}). Opened and merged by the pipeline; Argo CD applies it from main."
+          url="$(gh pr list --head "$branch" --state open --json url --jq '.[0].url // empty')"
+          if [ -z "$url" ]; then
+            url="$(gh pr create --base main --head "$branch" --title "$title" \
+              --body "Rolls ${{ inputs.service }} out to \`${short}\`, published to GHCR by [this run](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}).
 
-          # The four services can publish at once. Each touches its own file,
-          # so they never conflict, but one merge does move main out from
-          # under the others: rebase and try again.
-          for attempt in 1 2 3 4 5; do
-            if gh pr merge "$branch" --squash --delete-branch; then
-              echo "Manifests now run \`${short}\`" >> "$GITHUB_STEP_SUMMARY"
-              exit 0
-            fi
-            sleep $((attempt * 3))
-            git fetch origin main
-            git rebase origin/main && git push --force-with-lease origin "$branch"
-          done
-
-          echo "Could not merge the deploy pull request for ${short}" >&2
-          exit 1
+          Merging this is the deploy: Argo CD applies \`main\` within about three minutes.")"
+          fi
+          echo "Deploy pull request: $url" >> "$GITHUB_STEP_SUMMARY"
