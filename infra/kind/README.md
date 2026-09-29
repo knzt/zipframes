@@ -96,7 +96,7 @@ O merge no `main` roda o workflow do serviço. Com testes e integração verdes,
 
 Em seguida, o mesmo job grava o SHA em `newTag` no `infra/k8s/<serviço>/kustomization.yaml` e leva essa mudança para o `main` (`chore(deploy): <serviço> <sha>`). Como o `main` é protegido e só aceita pull request — com `enforce_admins` ligado, ninguém empurra direto —, o commit vai num PR que o próprio workflow abre e mergeia, na branch `deploy/<serviço>-<sha>`. O Argo CD percebe a mudança em até 3 minutos e faz o rolling update. Nenhum passo manual entre o merge e o cluster.
 
-Esse PR nasce mergeável porque o `main` não exige aprovação nem status check obrigatório. Se um dos dois passar a ser exigido, o passo `Pin the tag in the manifests` é onde a esteira vai travar: um PR aberto com o `GITHUB_TOKEN` não dispara workflows, então um check obrigatório nunca ficaria verde sozinho.
+Isso exige **_Allow GitHub Actions to create and approve pull requests_** ligado em _Settings › Actions › General_. Sem essa opção, o passo falha com `GitHub Actions is not permitted to create or approve pull requests`.
 
 Como cada imagem tem uma tag que nunca se repete, o histórico do Git é o histórico de deploys: `git log -- infra/k8s/video-service/kustomization.yaml` mostra o que rodou e quando. Para voltar a uma versão, reverta o commit de deploy (`git revert <commit>`) e o Argo CD aplica a tag anterior.
 
