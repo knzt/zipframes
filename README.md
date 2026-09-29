@@ -184,12 +184,12 @@ O mesmo relatório de cobertura vai para o SonarQube Cloud, um projeto por servi
 PR ou merge no main
   └─ workflow do serviço: typecheck, lint, regras de camadas, testes, cobertura, build da imagem
        └─ só no main: publica a imagem testada no GHCR (ghcr.io/knzt/zipframes-<serviço>)
-            └─ grava a tag da imagem em infra/k8s/<serviço> e abre um PR de deploy,
-               que o próprio workflow mergeia no main
-                 └─ Argo CD aplica a mudança no cluster
+            └─ grava a tag da imagem em infra/k8s/<serviço> e abre um PR de deploy
+                 └─ você mergeia o PR quando quiser publicar
+                      └─ Argo CD aplica a mudança no cluster
 ```
 
-Cada serviço tem o próprio workflow em [.github/workflows](.github/workflows), que só roda quando algo daquele serviço muda. A imagem publicada é exatamente a que passou nos testes. O deploy é GitOps: o cluster roda o que está em `infra/` no `main`, e o histórico do Git é o histórico de deploys. O fluxo completo está em [infra/kind/README.md](infra/kind/README.md#entrega-contínua).
+Cada serviço tem o próprio workflow em [.github/workflows](.github/workflows), que só roda quando algo daquele serviço muda. A imagem publicada é exatamente a que passou nos testes. O deploy é GitOps: o cluster roda o que está em `infra/` no `main`, e o histórico do Git é o histórico de deploys. Publicar a imagem e publicar o deploy são passos separados — o PR de deploy fica aberto até você mergear. O fluxo completo está em [infra/kind/README.md](infra/kind/README.md#entrega-contínua).
 
 ## Banco e recursos
 
@@ -259,6 +259,6 @@ pnpm --dir services/processor-worker dev
 pnpm --dir services/notifier-service db:generate && pnpm --dir services/notifier-service db:deploy && pnpm --dir services/notifier-service dev
 ```
 
-`db:generate` gera o client do Prisma, `db:deploy` aplica as migrations existentes e `db:migrate` cria uma nova. A chave JWT de desenvolvimento está em `infra/docker-compose/auth/jwt-dev.pem`, e as credenciais locais (todas `zipframes`) estão em [infra/docker-compose/README.md](infra/docker-compose/README.md).
+`db:generate` gera o client do Prisma, `db:deploy` aplica as migrations existentes e `db:migrate` cria uma nova. A chave JWT de desenvolvimento é gerada em `infra/docker-compose/auth/jwt-dev.pem` no primeiro `pnpm infra:up` (ou com `pnpm dev:keygen`) e não é versionada, e as credenciais locais (todas `zipframes`) estão em [infra/docker-compose/README.md](infra/docker-compose/README.md).
 
 Para adicionar uma dependência a um serviço a partir da raiz: `pnpm deps:auth <pacote>`, `pnpm deps:video`, `pnpm deps:worker` ou `pnpm deps:notifier`.

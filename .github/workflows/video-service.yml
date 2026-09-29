@@ -29,12 +29,14 @@ concurrency:
 
 jobs:
   verify:
-    # publish pushes the image and commits the new tag; the reusable
-    # workflow cannot raise permissions above these.
+    # A deploy pull request only bumps a tag under infra/k8s. The suite has
+    # nothing to add to that, and ci.yml still checks the file it rewrote.
+    if: ${{ !startsWith(github.head_ref, 'deploy/') }}
+    # publish pushes the image and opens the deploy pull request; the
+    # reusable workflow cannot raise permissions above these.
     permissions:
-      contents: write
+      contents: read
       packages: write
-      pull-requests: write
     uses: ./.github/workflows/service-ci.yml
     with:
       service: video-service
@@ -47,3 +49,5 @@ jobs:
     secrets:
       NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      DEPLOY_APP_ID: ${{ secrets.DEPLOY_APP_ID }}
+      DEPLOY_APP_PRIVATE_KEY: ${{ secrets.DEPLOY_APP_PRIVATE_KEY }}

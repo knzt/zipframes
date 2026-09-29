@@ -94,9 +94,11 @@ Os alertas disparados chegam por e-mail no Mailpit (http://mail.zipframes.localh
 
 O merge no `main` roda o workflow do serviço. Com testes e integração verdes, o job `Publish to GHCR` envia a imagem testada como `:<sha>` e `:main`. O `workflow_dispatch` de cada workflow publica o `main` atual sem mudança de código (por exemplo, a primeira imagem).
 
-Em seguida, o mesmo job grava o SHA em `newTag` no `infra/k8s/<serviço>/kustomization.yaml` e leva essa mudança para o `main` (`chore(deploy): <serviço> <sha>`). Como o `main` é protegido e só aceita pull request — com `enforce_admins` ligado, ninguém empurra direto —, o commit vai num PR que o próprio workflow abre e mergeia, na branch `deploy/<serviço>-<sha>`. O Argo CD percebe a mudança em até 3 minutos e faz o rolling update. Nenhum passo manual entre o merge e o cluster.
+Em seguida, o mesmo job grava o SHA em `newTag` no `infra/k8s/<serviço>/kustomization.yaml` e abre um PR com essa mudança (`chore(deploy): <serviço> <sha>`), na branch `deploy/<serviço>-<sha>`. Como o `main` é protegido e só aceita pull request — com `enforce_admins` ligado, ninguém empurra direto —, publicar a imagem e publicar o deploy são passos separados: **o PR fica aberto até você mergear**. Ao mergear, o Argo CD percebe a mudança em até 3 minutos e faz o rolling update.
 
-Isso exige **_Allow GitHub Actions to create and approve pull requests_** ligado em _Settings › Actions › General_. Sem essa opção, o passo falha com `GitHub Actions is not permitted to create or approve pull requests`.
+Esse PR é aberto por um **GitHub App** (`DEPLOY_APP_ID` e `DEPLOY_APP_PRIVATE_KEY`, secrets do repositório), e não pelo `GITHUB_TOKEN`. O motivo não é permissão, é que o Actions **cria** as runs de um PR aberto pelo `GITHUB_TOKEN` mas nunca as inicia: elas ficam aguardando uma aprovação que nada concede e são encerradas como `This workflow run required approval but was not approved before it expired`. Um PR nessas condições nunca fica revisável. Vindo do App, as runs rodam de verdade — o `ci` valida o YAML que o `yq` acabou de escrever — e o PR espera indefinidamente pela sua aprovação.
+
+Por isso a opção **_Allow GitHub Actions to create and approve pull requests_** não é necessária: quem abre o PR não é o `GITHUB_TOKEN`. O App precisa de `Contents: write` e `Pull requests: write`, e empurra apenas a branch `deploy/*`, que não é protegida — nada na proteção do `main` foi afrouxado.
 
 Como cada imagem tem uma tag que nunca se repete, o histórico do Git é o histórico de deploys: `git log -- infra/k8s/video-service/kustomization.yaml` mostra o que rodou e quando. Para voltar a uma versão, reverta o commit de deploy (`git revert <commit>`) e o Argo CD aplica a tag anterior.
 

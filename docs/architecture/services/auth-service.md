@@ -30,7 +30,7 @@ O login responde o mesmo 401 (`INVALID_CREDENTIALS`) para e-mail desconhecido, s
 
 O token é um JWT RS256 com `sub` (o id do usuário), `iss`, `aud` e validade de 15 minutos. Só o auth-service tem a chave privada. Os outros serviços validam com a chave pública do JWKS, sem chamar o auth-service a cada requisição.
 
-No Compose, a chave de desenvolvimento está em `infra/docker-compose/auth/jwt-dev.pem`. No cluster, o bootstrap gera uma chave nova e a entrega pelo Secret `auth-service` (`JWT_PRIVATE_KEY_PEM`). Trocar a chave invalida os tokens emitidos com a anterior.
+No Compose, a chave de desenvolvimento é gerada em `infra/docker-compose/auth/jwt-dev.pem` na primeira subida (`pnpm dev:keygen`) e não é versionada. No cluster, o bootstrap gera uma chave nova e a entrega pelo Secret `auth-service` (`JWT_PRIVATE_KEY_PEM`). Trocar a chave invalida os tokens emitidos com a anterior.
 
 ## Exclusão de conta
 

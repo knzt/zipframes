@@ -12,6 +12,9 @@ dist
 .env.*
 !.env.example
 
+# chave JWT de desenvolvimento, gerada por dev-keygen.sh
+infra/docker-compose/auth/jwt-dev.pem
+
 # testes e cobertura
 coverage
 
