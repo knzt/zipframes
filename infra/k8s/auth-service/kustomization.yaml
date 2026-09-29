@@ -10,4 +10,4 @@ resources:
 # the commit SHA of each tested image; Argo CD rolls out that change.
 images:
   - name: ghcr.io/knzt/zipframes-auth-service
-    newTag: 25f5536b02e7a13f14af76cec7b252c28c020206
+    newTag: ffd1730ffceb036877b1f8fb20eec844dfd4a28d
