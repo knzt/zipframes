@@ -83,7 +83,7 @@ spec:
           args:
             - --entrypoints.web.address=:80
             - --entrypoints.websecure.address=:443
-            # A 500 MB upload goes through the video-service, not a presigned URL.
+            # A 100 MB upload goes through the video-service, not a presigned URL.
             - --entrypoints.web.transport.respondingTimeouts.readTimeout=600s
             - --providers.kubernetesingress
             - --providers.kubernetesingress.ingressclass=traefik

@@ -131,7 +131,7 @@ Regras:
 
 - **Extensões aceitas:** `mp4`, `avi`, `mov`, `mkv`, `wmv`, `flv` e `webm`, as mesmas do projeto base.
 - **Nome e tipo são validados antes de qualquer byte ser recebido.** Um arquivo que não é vídeo é recusado sem ocupar o storage.
-- **Tamanho máximo configurável** (500 MB por padrão), medido nos bytes que chegam, não num valor declarado pelo cliente. Um arquivo vazio ou acima do limite é recusado e o que já tinha sido gravado é apagado.
+- **Tamanho máximo configurável** (100 MB por padrão), medido nos bytes que chegam, não num valor declarado pelo cliente. Um arquivo vazio ou acima do limite é recusado e o que já tinha sido gravado é apagado.
 - **O vídeo nasce `QUEUED`**: só existe depois que o arquivo inteiro está no storage, então não há um estado de "aguardando envio".
 - **Transições inválidas são rejeitadas pela entidade.** Por exemplo, um vídeo `DONE` nunca volta para `PROCESSING`.
 - **`DONE` e `FAILED` encerram o processamento.** Eventos de processamento que chegarem depois deles (ou de `EXPIRED` e `DELETED`) são ignorados, o que torna o agregado tolerante a mensagens duplicadas ou fora de ordem. As únicas transições posteriores são a expiração e a exclusão a pedido, que não vêm de eventos do worker.

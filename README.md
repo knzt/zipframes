@@ -133,7 +133,7 @@ curl -fsS "$API/videos/$VIDEO_ID/download" -H "authorization: Bearer $TOKEN" \
   | jq -r .downloadUrl | xargs curl -fsS -o frames.zip
 ```
 
-Qualquer vídeo curto serve como `aula.mp4`. Aceitos: mp4, avi, mov, mkv, wmv, flv e webm, até 500 MB. A senha precisa ter letra e dígito e pelo menos 8 caracteres.
+Qualquer vídeo curto serve como `aula.mp4`. Aceitos: mp4, avi, mov, mkv, wmv, flv e webm, até 100 MB. A senha precisa ter letra e dígito e pelo menos 8 caracteres.
 
 Depois do processamento, o e-mail "Seu zip está pronto" aparece no Mailpit. Para ver o caminho de falha, envie um arquivo com extensão de vídeo que não seja vídeo de verdade: o status vira `FAILED` e chega o e-mail de falha.
 

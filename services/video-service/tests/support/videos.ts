@@ -7,7 +7,7 @@ export const OTHER_OWNER_ID = '0194f3a0-0000-7000-8000-00000000b002';
 export const VIDEO_ID = '0194f3a0-0000-7000-8000-00000000c003';
 export const CORRELATION_ID = '0194f3a0-0000-7000-8000-00000000d004';
 export const CREATED_AT = new Date('2026-09-27T10:00:00.000Z');
-export const MAX_UPLOAD_BYTES = 500 * 1024 * 1024;
+export const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
 export const RETENTION_MS = 24 * 60 * 60 * 1000;
 
 /** Columns a video has in each status, so the builder only yields valid rows. */

@@ -52,7 +52,7 @@ O vídeo chega numa única chamada, `POST /videos` com `multipart/form-data`. O 
 
 1. Nome, extensão (mp4, avi, mov, mkv, wmv, flv, webm) e tipo são validados antes de ler qualquer byte.
 2. O arquivo vai em stream para `uploads/{ownerId}/{videoId}`, em partes de 5 MB. A memória usada por envio fica limitada às partes em trânsito, qualquer que seja o tamanho do vídeo.
-3. O tamanho recebido é validado. O limite padrão é 500 MB (`MAX_UPLOAD_BYTES`); acima dele, o objeto parcial é apagado e a resposta é 413.
+3. O tamanho recebido é validado. O limite padrão é 100 MB (`MAX_UPLOAD_BYTES`); acima dele, o objeto parcial é apagado e a resposta é 413.
 4. O vídeo é gravado como `QUEUED`.
 5. `video.uploaded` é publicado com confirmação do broker, e a resposta é 201.
 

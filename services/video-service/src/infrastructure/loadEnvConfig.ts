@@ -82,7 +82,7 @@ export const formatZodError = (error: z.ZodError): Error => {
 
 /**
  * Reads the process configuration. Business windows (download URL lifetime,
- * 24h retention, 500 MB limit) default to the values in
+ * 24h retention, 100 MB limit) default to the values in
  * docs/domain/dominio.md and can be tuned per environment.
  */
 export const loadConfig = (env: NodeJS.ProcessEnv = process.env): Config => {
@@ -107,7 +107,7 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): Config => {
       jwksUrl: read('JWT_JWKS_URL'),
       jwtIssuer: read('JWT_ISSUER'),
       jwtAudience: read('JWT_AUDIENCE'),
-      maxUploadBytes: read('MAX_UPLOAD_BYTES', String(500 * 1024 * 1024)),
+      maxUploadBytes: read('MAX_UPLOAD_BYTES', String(100 * 1024 * 1024)),
       downloadUrlTtlSeconds: read('DOWNLOAD_URL_TTL_SECONDS', '300'),
       resultRetentionSeconds: read('RESULT_RETENTION_SECONDS', String(24 * 60 * 60)),
       listCacheTtlSeconds: read('LIST_CACHE_TTL_SECONDS', '60'),
