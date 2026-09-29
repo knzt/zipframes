@@ -70,6 +70,12 @@ O download devolve uma URL assinada do storage, válida por 5 minutos (`DOWNLOAD
 
 O zip fica disponível por 24 horas (`RESULT_RETENTION_SECONDS`). Uma varredura roda a cada minuto, apaga os zips vencidos (e um original que tenha sobrado) e move os vídeos para `EXPIRED`. O registro do vídeo continua na listagem.
 
+## Exclusão de conta
+
+O serviço consome `user.deleted`, publicado pelo auth-service quando o dono exclui a própria conta. `DeleteAccountVideosUseCase` busca todos os vídeos do dono, em qualquer status, apaga cada objeto que ainda exista no storage e depois apaga as linhas — ao contrário da exclusão a pedido do dono, aqui não sobra histórico, porque não há mais conta para consultá-lo. Um vídeo `QUEUED` ou `PROCESSING` é apagado do mesmo jeito: se o worker publicar um evento depois, `ApplyProcessingEventUseCase` não encontra o vídeo e apenas confirma a mensagem.
+
+A operação é idempotente por conta própria: apagar um objeto ou uma linha que já não existe não é erro, então um `user.deleted` reduplicado não tem efeito.
+
 ## Eventos do worker
 
 O serviço consome `video.processing.started`, `video.processed` e `video.failed` pela fila `video-service.processing-status`, com retry e DLQ como descrito na [visão geral](../README.md#entrega-e-falhas).
@@ -95,23 +101,22 @@ O Redis nunca é a fonte da verdade. Se ele cair, a leitura vai ao Postgres e a 
 
 ## Operação
 
-| Item      | Valor                                                         |
-| --------- | ------------------------------------------------------------- |
-| Banco     | `video-db` (Postgres), tabela `videos`                        |
-| Cache     | Redis                                                         |
-| Storage   | Originais em `uploads/`, zips em `outputs/`, bucket `videos`  |
-| Publica   | `video.uploaded`                                              |
-| Consome   | `video.processing.started`, `video.processed`, `video.failed` |
-| Readiness | Postgres, RabbitMQ e o bucket                                 |
-| Escala    | HPA por CPU, de 1 a 3 réplicas, alvo de 70%                   |
-| Manifests | [`infra/k8s/video-service`](../../../infra/k8s/video-service) |
+| Item      | Valor                                                                         |
+| --------- | ----------------------------------------------------------------------------- |
+| Banco     | `video-db` (Postgres), tabela `videos`                                        |
+| Cache     | Redis                                                                         |
+| Storage   | Originais em `uploads/`, zips em `outputs/`, bucket `videos`                  |
+| Publica   | `video.uploaded`                                                              |
+| Consome   | `video.processing.started`, `video.processed`, `video.failed`, `user.deleted` |
+| Readiness | Postgres, RabbitMQ e o bucket                                                 |
+| Escala    | HPA por CPU, de 1 a 3 réplicas, alvo de 70%                                   |
+| Manifests | [`infra/k8s/video-service`](../../../infra/k8s/video-service)                 |
 
 ## Testes
 
-Os testes de unidade cobrem a máquina de estados, os casos de uso (com repositório falso que respeita a trava de versão), o servidor HTTP inteiro com multipart e o consumo dos eventos. O teste de integração sobe o processo de verdade contra Postgres, RabbitMQ, SeaweedFS e Redis em containers, com um JWKS servido por HTTP, e passa pelo upload, pelos eventos do worker, pelo download, pela exclusão, pelo 413, pelo 401 e pela expiração. A cobertura mínima é de 95% das linhas e 90% dos branches.
+Os testes de unidade cobrem a máquina de estados, os casos de uso (com repositório falso que respeita a trava de versão), o servidor HTTP inteiro com multipart e o consumo dos eventos, inclusive `user.deleted`. O teste de integração sobe o processo de verdade contra Postgres, RabbitMQ, SeaweedFS e Redis em containers, com um JWKS servido por HTTP, e passa pelo upload, pelos eventos do worker, pelo download, pela exclusão, pelo 413, pelo 401 e pela expiração. A cobertura mínima é de 95% das linhas e 90% dos branches.
 
 ## Limitações
 
-- `user.deleted` ainda não é consumido: quando o auth-service publicar o evento, os vídeos e arquivos daquele usuário precisarão ser apagados aqui.
-- Um vídeo `FAILED` cujo original o worker não conseguiu apagar fica com o arquivo no storage. Em `DONE`, a expiração apaga o que sobrou.
+- Um vídeo `FAILED` cujo original o worker não conseguiu apagar fica com o arquivo no storage até o dono excluir o vídeo ou a conta. Em `DONE`, a expiração apaga o que sobrou.
 - Não há detecção de vídeos parados em `QUEUED` ou `PROCESSING` por muito tempo. O índice `idx_videos_em_andamento` já existe para essa consulta.

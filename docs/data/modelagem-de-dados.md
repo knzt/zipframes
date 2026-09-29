@@ -57,7 +57,7 @@ erDiagram
 
 O índice único de `email` atende tanto à regra de unicidade quanto à busca do login, que consulta o valor já normalizado pelo value object.
 
-O `auth-db` só tem `users`. Depois do `INSERT`, o auth-service publica `user.registered` pelo `EventPublisher`. Dual-write é decisão explícita: se o processo cair entre o commit e o ack do Rabbit, o usuário existe e o evento não sai.
+O `auth-db` só tem `users`. Depois do `INSERT`, o auth-service publica `user.registered` pelo `EventPublisher`. Dual-write é decisão explícita: se o processo cair entre o commit e o ack do Rabbit, o usuário existe e o evento não sai. `DELETE /account` segue o mesmo padrão na saída: apaga a linha (`DELETE ... WHERE id = $1`, que não erra se o id já não existir) e publica `user.deleted` depois.
 
 ### DDL
 
@@ -331,12 +331,12 @@ O schema está em `services/notifier-service/src/infrastructure/repositories/pri
 
 Os arquivos ficam no storage apenas enquanto são necessários (ver a seção de retenção em `docs/domain/dominio.md`). O banco guarda somente metadados; o `status` diz se o pacote ainda existe.
 
-| Dado                      | Prazo                           | Efeito no banco                                                                      |
-| ------------------------- | ------------------------------- | ------------------------------------------------------------------------------------ |
-| Vídeo original            | Apagado ao fim do processamento | Nenhum: a chave é derivada e apagar de novo é inofensivo                             |
-| Pacote de frames          | 24 horas após a conclusão       | `result_key` nulo, `status` em `EXPIRED`                                             |
-| Exclusão a pedido do dono | Imediata                        | Arquivos apagados, `status` em `DELETED`                                             |
-| Exclusão da conta         | Ao consumir `user.deleted`      | Planejada: hoje só o notifier consome o evento, e o auth-service ainda não o publica |
+| Dado                      | Prazo                           | Efeito no banco                                          |
+| ------------------------- | ------------------------------- | -------------------------------------------------------- |
+| Vídeo original            | Apagado ao fim do processamento | Nenhum: a chave é derivada e apagar de novo é inofensivo |
+| Pacote de frames          | 24 horas após a conclusão       | `result_key` nulo, `status` em `EXPIRED`                 |
+| Exclusão a pedido do dono | Imediata                        | Arquivos apagados, `status` em `DELETED`                 |
+| Exclusão da conta         | Ao consumir `user.deleted`      | Linha apagada de vez, em qualquer status                 |
 
 A rotina de expiração busca o que venceu usando o índice parcial `idx_videos_a_expirar`:
 

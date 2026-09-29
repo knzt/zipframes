@@ -236,6 +236,7 @@ Um vídeo pode conter rosto, voz e outros dados pessoais de quem aparece nele, e
 | Pacote de frames (zip)               | Object storage    | 24 horas após a conclusão            | É o resultado entregue. A janela cobre quem não baixa na hora, sem virar um arquivo permanente        |
 | Frames soltos e arquivos temporários | Disco do worker   | Durante a tentativa                  | Removidos ao fim do trabalho, com sucesso ou falha                                                    |
 | Metadados do vídeo                   | `video-db`        | Enquanto a conta existir             | Sustentam a listagem e o histórico sem guardar conteúdo pessoal                                       |
+| Conta                                | `auth-db`         | Enquanto o titular não a exclui      | Nome, e-mail e senha (hash), necessários para autenticar                                              |
 | Contato                              | `notification-db` | Enquanto a conta existir             | Necessário para notificar resultado e falha                                                           |
 | Histórico de notificações            | `notification-db` | Enquanto a conta existir             | Comprova o aviso enviado ao usuário                                                                   |
 
@@ -243,10 +244,10 @@ O prazo de 24 horas é configurável, e o mesmo valor alimenta o `expiresAt` do 
 
 ### Como a eliminação acontece
 
-- **Do original:** o próprio worker apaga o arquivo ao terminar, logo após publicar o resultado. Se esse apagamento falhar num vídeo `DONE`, a rotina de expiração remove o original junto com o pacote. Num vídeo `FAILED`, o arquivo fica até o dono excluir o vídeo.
-- **Do pacote:** uma rotina periódica no video-service busca os vídeos `DONE` com `expiresAt` vencido, apaga o objeto, limpa a `resultKey` e muda o status para `EXPIRED`. A mesma rotina apaga o original de um vídeo `DONE` que o worker não tenha conseguido remover.
+- **Do original:** o próprio worker apaga o arquivo ao terminar, com sucesso ou com falha, logo após publicar o resultado. Se esse apagamento falhar num vídeo `DONE`, a rotina de expiração remove o original junto com o pacote. Num vídeo `FAILED`, o arquivo fica até o dono excluir o vídeo ou a conta.
+- **Do pacote:** uma rotina periódica no video-service busca os vídeos `DONE` com `expiresAt` vencido, apaga o objeto, limpa a `resultKey` e muda o status para `EXPIRED`.
 - **A pedido do titular:** o dono exclui um vídeo e os arquivos que ainda existirem são apagados na hora, com o vídeo indo para `DELETED`.
-- **Na exclusão da conta (planejada):** o auth-service publicará `user.deleted`, e cada contexto apagará o que é seu: Gestão de Vídeos, os objetos e os metadados dos vídeos daquele dono; Notificação, o contato e o histórico. Hoje só o notifier-service consome o evento. O auth-service ainda não tem a rota de exclusão nem publica o evento.
+- **Na exclusão da conta:** o auth-service apaga o usuário e publica `user.deleted`. O contexto de Gestão de Vídeos remove os objetos e os metadados de todos os vídeos daquele dono, em qualquer status; o de Notificação apaga o contato e o histórico.
 
 ### Minimização no dia a dia
 
