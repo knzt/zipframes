@@ -38,16 +38,15 @@ on:
         default: false
       sonar:
         description: |
-          Send the analysis to SonarQube Cloud. Needs `coverage: true`, a
-          SONAR_TOKEN for this service's project, and
+          Send the analysis to SonarQube Cloud and fail the job on a red
+          quality gate. Needs `coverage: true`, a SONAR_TOKEN that can both
+          analyse and read this service's project, and
           services/<service>/sonar-project.properties.
         type: boolean
         default: false
     secrets:
       NODE_AUTH_TOKEN:
         required: true
-      # One project per service on the free tier means one token per
-      # service. The caller passes its own.
       SONAR_TOKEN:
         required: false
 
@@ -129,6 +128,13 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
           projectBaseDir: services/${{ inputs.service }}
+      - name: SonarQube quality gate
+        if: ${{ inputs.sonar }}
+        uses: SonarSource/sonarqube-quality-gate-action@v1.2.1
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          scanMetadataReportFile: services/${{ inputs.service }}/.scannerwork/report-task.txt
 
       - name: Build
         working-directory: services/${{ inputs.service }}
