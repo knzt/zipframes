@@ -40,6 +40,21 @@ describe('ListUserVideosUseCase', () => {
     ]);
   });
 
+  it('keeps only the videos in the requested status', async () => {
+    const result = await listUserVideos.execute({ ownerId: OWNER_ID, limit: 10, status: 'DONE' });
+
+    expect(idsOf(result)).toEqual(['00000000-0000-4000-8000-000000000001']);
+  });
+
+  it('caches a filtered first page apart from the unfiltered one', async () => {
+    await listUserVideos.execute({ ownerId: OWNER_ID, limit: 10, status: 'FAILED' });
+
+    const all = await listUserVideos.execute({ ownerId: OWNER_ID, limit: 10 });
+
+    expect(idsOf(all)).toHaveLength(3);
+    expect(cache.pages.size).toBe(2);
+  });
+
   it('pages with `before` set to the last createdAt seen', async () => {
     const first = await listUserVideos.execute({ ownerId: OWNER_ID, limit: 2 });
     const second = await listUserVideos.execute({ ownerId: OWNER_ID, limit: 2, before: at(2) });

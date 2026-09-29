@@ -10,7 +10,7 @@ export const getVideoRoute = (controller: GetVideoController): HttpRouteDefiniti
   path: '/videos/:videoId',
   openApi: {
     tags: VIDEO_TAGS,
-    summary: 'Status de um vídeo',
+    summary: 'Um vídeo do usuário: status, frames extraídos, motivo da falha e validade do zip',
     security: BEARER_SECURITY,
     params: videoIdParams,
     response: {

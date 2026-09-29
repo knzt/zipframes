@@ -40,7 +40,7 @@ export class PrismaVideoRepository implements VideoRepository {
     const rows = await this.prisma.video.findMany({
       where: {
         ownerId,
-        status: { not: 'DELETED' },
+        status: query.status ?? { not: 'DELETED' },
         ...(query.before !== undefined ? { createdAt: { lt: query.before } } : {}),
       },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],

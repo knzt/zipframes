@@ -38,13 +38,13 @@ As regras de dependência entre as pastas de `src/` estão em [`docs/architectur
 
 ## Rotas
 
-| Método e path                    | O que faz                                                  |
-| -------------------------------- | ---------------------------------------------------------- |
-| `POST /videos`                   | Recebe o arquivo (multipart, campo `file`) e o põe na fila |
-| `GET /videos?limit&before`       | Vídeos do usuário, mais recentes primeiro                  |
-| `GET /videos/{videoId}`          | Status de um vídeo                                         |
-| `GET /videos/{videoId}/download` | URL do zip (5 min); 409 se não está pronto, 410 se expirou |
-| `DELETE /videos/{videoId}`       | Apaga os arquivos e mantém o histórico mínimo              |
+| Método e path                     | O que faz                                                                 |
+| --------------------------------- | ------------------------------------------------------------------------- |
+| `POST /videos`                    | Recebe o arquivo (multipart, campo `file`) e o põe na fila                |
+| `GET /videos?limit&before&status` | Vídeos do usuário, mais recentes primeiro, com filtro opcional por status |
+| `GET /videos/{videoId}`           | Um vídeo: status, frames extraídos, motivo da falha e validade do zip     |
+| `GET /videos/{videoId}/download`  | URL do zip (5 min); 409 se não está pronto, 410 se expirou                |
+| `DELETE /videos/{videoId}`        | Apaga os arquivos e mantém o histórico mínimo                             |
 
 Todas exigem `Authorization: Bearer <token>` de `POST /login` no auth-service.
 

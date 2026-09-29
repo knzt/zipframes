@@ -70,34 +70,44 @@ describe('RedisVideoListCacheGateway', () => {
     const { redis, hashes, expirations } = fakeRedis();
     const cache = new RedisVideoListCacheGateway(redis, 60);
 
-    await cache.set(OWNER_ID, 20, [item]);
+    await cache.set(OWNER_ID, { limit: 20 }, [item]);
 
     expect(hashes.get(listCacheKeyOf(OWNER_ID))?.get('20')).toBe(JSON.stringify([item.toJSON()]));
     expect(expirations.get(listCacheKeyOf(OWNER_ID))).toBe(60);
-    expect((await cache.get(OWNER_ID, 20))?.map((video) => video.toJSON())).toEqual([
+    expect((await cache.get(OWNER_ID, { limit: 20 }))?.map((video) => video.toJSON())).toEqual([
       item.toJSON(),
     ]);
-    expect(await cache.get(OWNER_ID, 50)).toBeNull();
+    expect(await cache.get(OWNER_ID, { limit: 50 })).toBeNull();
+  });
+
+  it('keeps a filtered page apart from the unfiltered one', async () => {
+    const { redis, hashes } = fakeRedis();
+    const cache = new RedisVideoListCacheGateway(redis, 60);
+
+    await cache.set(OWNER_ID, { limit: 20, status: 'FAILED' }, [item]);
+
+    expect(hashes.get(listCacheKeyOf(OWNER_ID))?.has('20:FAILED')).toBe(true);
+    expect(await cache.get(OWNER_ID, { limit: 20 })).toBeNull();
   });
 
   it('drops every page size of the owner at once', async () => {
     const { redis } = fakeRedis();
     const cache = new RedisVideoListCacheGateway(redis, 60);
-    await cache.set(OWNER_ID, 20, [item]);
-    await cache.set(OWNER_ID, 50, [item]);
+    await cache.set(OWNER_ID, { limit: 20 }, [item]);
+    await cache.set(OWNER_ID, { limit: 50 }, [item]);
 
     await cache.invalidate(OWNER_ID);
 
-    expect(await cache.get(OWNER_ID, 20)).toBeNull();
-    expect(await cache.get(OWNER_ID, 50)).toBeNull();
+    expect(await cache.get(OWNER_ID, { limit: 20 })).toBeNull();
+    expect(await cache.get(OWNER_ID, { limit: 50 })).toBeNull();
   });
 
   it('degrades to a miss and no-ops when Redis fails, reporting each failure', async () => {
     const onError = vi.fn();
     const cache = new RedisVideoListCacheGateway(brokenRedis, 60, onError);
 
-    expect(await cache.get(OWNER_ID, 20)).toBeNull();
-    await expect(cache.set(OWNER_ID, 20, [item])).resolves.toBeUndefined();
+    expect(await cache.get(OWNER_ID, { limit: 20 })).toBeNull();
+    await expect(cache.set(OWNER_ID, { limit: 20 }, [item])).resolves.toBeUndefined();
     await expect(cache.invalidate(OWNER_ID)).resolves.toBeUndefined();
     expect(onError.mock.calls.map(([operation]) => operation as string)).toEqual([
       'get',
@@ -109,6 +119,6 @@ describe('RedisVideoListCacheGateway', () => {
   it('works without an error callback', async () => {
     const cache = new RedisVideoListCacheGateway(brokenRedis, 60);
 
-    expect(await cache.get(OWNER_ID, 20)).toBeNull();
+    expect(await cache.get(OWNER_ID, { limit: 20 })).toBeNull();
   });
 });

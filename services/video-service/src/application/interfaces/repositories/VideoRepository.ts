@@ -1,4 +1,5 @@
 import type { Video } from '../../../domain/entities/video.js';
+import type { ListableVideoStatus } from '../../../domain/valueObjects/videoStatus.js';
 
 /**
  * Code of the `ConflictError` that `save` throws when the same video was
@@ -12,6 +13,8 @@ export interface ListByOwnerQuery {
   readonly limit: number;
   /** Keyset cursor: only videos created strictly before this instant. */
   readonly before?: Date;
+  /** Only videos in this status. */
+  readonly status?: ListableVideoStatus;
 }
 
 export interface VideoRepository {

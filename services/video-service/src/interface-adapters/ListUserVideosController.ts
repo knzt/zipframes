@@ -9,7 +9,8 @@ import { toVideoListItem } from './videoPresenter.js';
 
 /**
  * `GET /videos`: the caller's videos, newest first. The next page is asked
- * with `before` set to the `createdAt` of the last item received.
+ * with `before` set to the `createdAt` of the last item received, and
+ * `status` keeps only the videos in that status.
  */
 export class ListUserVideosController {
   private readonly handler: (request: HttpRequest) => Promise<HttpReply>;
@@ -23,12 +24,13 @@ export class ListUserVideosController {
       outputSchema: videoService.listVideosResponseSchema,
       successStatus: 200,
       authenticator,
-      handler: async ({ limit, before }, ctx) =>
+      handler: async ({ limit, before, status }, ctx) =>
         map(
           await this.listUserVideosUseCase.execute({
             ownerId: ctx.claims.sub,
             limit,
             ...(before !== undefined ? { before: new Date(before) } : {}),
+            ...(status !== undefined ? { status } : {}),
           }),
           ({ items }) => ({ items: items.map(toVideoListItem) }),
         ),
