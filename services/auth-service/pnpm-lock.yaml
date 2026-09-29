@@ -200,8 +200,8 @@ importers:
         specifier: ^0.1.0
         version: 0.1.1
       '@zipframes/value-objects':
-        specifier: ^0.2.0
-        version: 0.2.1
+        specifier: 0.3.0-pr57-20260929151503
+        version: 0.3.0-pr57-20260929151503
       amqplib:
         specifier: ^0.10.5
         version: 0.10.9
@@ -935,8 +935,8 @@ packages:
   '@zipframes/test-toolkit@0.2.1':
     resolution: {integrity: sha512-q6ecTbII6GdO1cM24ZLctPSU79gGne6EJ8wZ/JJMqXommQT1yCPFddDLT+2ruQ3oDXwS59yJ7/d5GxkAf7GDug==, tarball: https://npm.pkg.github.com/download/@zipframes/test-toolkit/0.2.1/5f81887cf79f8a3d5c135ebcee4bbba07dbd7f3f}
 
-  '@zipframes/value-objects@0.2.1':
-    resolution: {integrity: sha512-fkrWiLkKDrPceUc0F8QzpRjyT3lEnRAgMhZjm7qHAd7O/duWoAlx+JGLtfwbetFz4LWbXxxd0nqVLwA3v8ht6g==, tarball: https://npm.pkg.github.com/download/@zipframes/value-objects/0.2.1/e9190ad1e5ec567255c6c238e41536658aa1be85}
+  '@zipframes/value-objects@0.3.0-pr57-20260929151503':
+    resolution: {integrity: sha512-H8wphBpzXpy/qCSt0zSSpp70ctevakBSVUNi0ztIUTPBUTfrz2zgPWd6D53ECSN80UWU7H0YtA/2zRYbhoms4w==, tarball: https://npm.pkg.github.com/download/@zipframes/value-objects/0.3.0-pr57-20260929151503/2189ead67152d27e8f54d1dabc75529c05d7c84c}
 
   abort-controller@3.0.0:
     resolution: {integrity: sha512-h8lQ8tacZYnR3vNQTgibj+tODHI5/+l06Au2Pcriv/Gmet0eaj4TwWH41sO9wnHDiQsEj19q0drzdWdeAHtweg==}
@@ -2713,9 +2713,9 @@ snapshots:
       - react-native-b4a
       - supports-color
 
-  '@zipframes/value-objects@0.2.1':
+  '@zipframes/value-objects@0.3.0-pr57-20260929151503':
     dependencies:
-      '@zipframes/core': 0.2.0
+      '@zipframes/core': 0.5.0
 
   abort-controller@3.0.0:
     dependencies:

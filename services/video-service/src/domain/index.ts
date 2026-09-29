@@ -20,13 +20,11 @@ export { videoQueuedFrom, type VideoQueued } from './events/videoQueued.js';
 
 export { framesPackageKeyFor, sourceKeyFor } from './policies/storageKeys.js';
 
-export {
-  ACCEPTED_VIDEO_EXTENSIONS,
-  asFileName,
-  createFileName,
-  type FileName,
-} from './valueObjects/fileName.js';
-export { createVideoFile, type VideoFile } from './valueObjects/videoFile.js';
+// The file name and the file itself are not re-exported here: they come
+// from @zipframes/value-objects, the single source of the system's value
+// objects, and whoever needs them imports them from there. What stays is
+// the status machine, which is this aggregate's vocabulary rather than a
+// validated value.
 export {
   DELETABLE,
   PROCESSING_FINISHED,

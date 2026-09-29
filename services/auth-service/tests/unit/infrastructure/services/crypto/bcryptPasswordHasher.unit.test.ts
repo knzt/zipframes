@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { createPassword } from '../../../../../src/domain/valueObjects/password.js';
-import type { Password } from '../../../../../src/domain/valueObjects/password.js';
+import { Password } from '@zipframes/value-objects';
+
 import { BcryptPasswordHasher } from '../../../../../src/infrastructure/services/crypto/bcryptPasswordHasher.js';
 
 const hasher = new BcryptPasswordHasher();
 
 const password = (raw: string): Password => {
-  const result = createPassword(raw);
+  const result = Password.create(raw);
   if (!result.ok) throw new Error('expected a valid password');
   return result.value;
 };

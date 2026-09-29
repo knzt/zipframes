@@ -1,9 +1,9 @@
 import { ConflictError, ValidationError, err, ok } from '@zipframes/core';
 import type { Result } from '@zipframes/core';
+import { Password } from '@zipframes/value-objects';
 
 import { userRegisteredFrom } from '../../../domain/events/userRegistered.js';
 import { User } from '../../../domain/entities/user.js';
-import { createPassword } from '../../../domain/valueObjects/password.js';
 import type { EventPublisher } from '../../interfaces/gateways/EventPublisher.js';
 import type { UserRepository } from '../../interfaces/repositories/UserRepository.js';
 import type { PasswordHasher } from '../../interfaces/services/PasswordHasher.js';
@@ -27,7 +27,7 @@ export class RegisterUserUseCase {
   async execute(
     registration: RegisterUserUseCaseInput,
   ): Promise<Result<RegisterUserUseCaseOutput, RegisterUserUseCaseError>> {
-    const password = createPassword(registration.password);
+    const password = Password.create(registration.password);
     if (!password.ok) {
       return err(new ValidationError(password.error.code, password.error.message));
     }

@@ -5,12 +5,12 @@ import {
   Video,
   type ProcessingEvent,
 } from '../../../../src/domain/entities/video.js';
-import { asFileName } from '../../../../src/domain/valueObjects/fileName.js';
 import { InvalidVideoTransitionError } from '../../../../src/domain/errors/videoErrors.js';
 import { framesPackageKeyFor } from '../../../../src/domain/policies/storageKeys.js';
 import type { VideoStatus } from '../../../../src/domain/valueObjects/videoStatus.js';
 import {
   aVideo,
+  aVideoFile,
   CREATED_AT,
   MAX_UPLOAD_BYTES,
   OTHER_OWNER_ID,
@@ -25,7 +25,7 @@ const LATER = new Date('2026-09-27T12:05:00.000Z');
 const received = {
   id: brandVideoId(VIDEO_ID),
   ownerId: OWNER_ID,
-  file: { name: asFileName('aula.mp4'), contentType: 'video/mp4' },
+  file: aVideoFile(),
   sizeBytes: 2048,
   maxSizeBytes: MAX_UPLOAD_BYTES,
   now: NOW,

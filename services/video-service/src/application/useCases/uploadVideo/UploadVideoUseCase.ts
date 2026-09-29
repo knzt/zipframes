@@ -1,10 +1,10 @@
-import { ApplicationError, UnavailableError, err, ok } from '@zipframes/core';
-import type { Result, ValidationError } from '@zipframes/core';
+import { ApplicationError, UnavailableError, ValidationError, err, ok } from '@zipframes/core';
+import type { Result } from '@zipframes/core';
+import { VideoFile } from '@zipframes/value-objects';
 
 import { newVideoId, Video } from '../../../domain/entities/video.js';
 import { videoQueuedFrom } from '../../../domain/events/videoQueued.js';
 import { sourceKeyFor } from '../../../domain/policies/storageKeys.js';
-import { createVideoFile } from '../../../domain/valueObjects/videoFile.js';
 import type { EventPublisher } from '../../interfaces/gateways/EventPublisher.js';
 import type { ObjectStorage } from '../../interfaces/gateways/ObjectStorage.js';
 import type { VideoListCache } from '../../interfaces/gateways/VideoListCache.js';
@@ -44,9 +44,15 @@ export class UploadVideoUseCase {
   async execute(
     upload: UploadVideoUseCaseInput,
   ): Promise<Result<UploadVideoUseCaseOutput, UploadVideoUseCaseError>> {
-    const file = createVideoFile(upload.originalFileName, upload.contentType);
+    const file = VideoFile.create({
+      name: upload.originalFileName,
+      contentType: upload.contentType,
+    });
     if (!file.ok) {
-      return err(file.error);
+      // The package reports a plain `{ valueObject, code, message }`. This
+      // service's error contract is built on the core error classes, and
+      // the HTTP layer maps a ValidationError to a 400.
+      return err(new ValidationError(file.error.code, file.error.message));
     }
 
     const videoId = newVideoId();

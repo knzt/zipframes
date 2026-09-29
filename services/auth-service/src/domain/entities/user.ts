@@ -4,8 +4,8 @@ import { err, ok, ValidationError } from '@zipframes/core';
 import type { Brand, Result } from '@zipframes/core';
 import { Email, Name } from '@zipframes/value-objects';
 
-import { asPasswordHash } from '../valueObjects/password.js';
-import type { PasswordHash } from '../valueObjects/password.js';
+import { asPasswordHash } from '../valueObjects/passwordHash.js';
+import type { PasswordHash } from '../valueObjects/passwordHash.js';
 
 export type UserId = Brand<string, 'UserId'>;
 
