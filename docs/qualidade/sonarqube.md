@@ -23,7 +23,15 @@ Não há limite de linhas nesse tier, mas também não existe o recurso de _mono
 
 3. **Desligar a análise automática** em cada projeto: _Administration › Analysis Method_, desmarque **Automatic Analysis**. Ela é ligada por padrão e é incompatível com a análise via CI; enquanto estiver ativa, o scanner do workflow é rejeitado. É também a razão de fazer isso: só a análise via CI recebe o relatório de cobertura.
 
-4. **Gerar um token** em _My Account › Security_. Um **token de usuário** vale para todos os projetos da organização, que é o que os quatro workflows assumem. Um token de projeto só valeria para um deles e exigiria quatro secrets diferentes.
+4. **Gerar um token** no avatar do canto superior direito › _My Account_ › aba _Security_. O campo _Generate Tokens_ oferece três tipos; escolha **Global Analysis Token**:
+
+   | Tipo                      | Alcance                                               |
+   | ------------------------- | ----------------------------------------------------- |
+   | **Global Analysis Token** | Analisa qualquer projeto da organização, e só isso    |
+   | User Token                | Tudo o que a sua conta pode fazer, não só analisar    |
+   | Project Analysis Token    | Um único projeto — exigiria quatro secrets diferentes |
+
+   Os quatro workflows assumem um token que vale para os quatro projetos, e o Global Analysis Token é o mais restrito que atende a isso: se vazar, serve só para enviar análises. Dê um nome (`zipframes-ci`, por exemplo) e um prazo de expiração. **O valor aparece uma única vez** — se fechar a página sem copiar, gere outro.
 
 5. **Guardar o token no GitHub** como `SONAR_TOKEN`. Os jobs rodam no environment `Actions` (é de lá que sai o `NODE_AUTH_TOKEN`), então cadastre em _Settings › Environments › Actions › Environment secrets_ — um secret de repositório não é visto por um job com `environment:`.
 

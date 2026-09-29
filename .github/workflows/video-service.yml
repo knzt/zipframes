@@ -45,6 +45,6 @@ jobs:
       sonar: true
     secrets:
       NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
-      # One user token covers every project in the organization, so the four
-      # services share this secret.
+      # A global analysis token covers every project in the organization, so
+      # the four services share this secret.
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
