@@ -243,14 +243,14 @@ O prazo de 24 horas é configurável, e o mesmo valor alimenta o `expiresAt` do 
 
 ### Como a eliminação acontece
 
-- **Do original:** o próprio worker apaga o arquivo ao terminar, logo após publicar o resultado. Uma rotina de limpeza varre os originais que sobraram por falha no apagamento.
+- **Do original:** o próprio worker apaga o arquivo ao terminar, logo após publicar o resultado. Se esse apagamento falhar num vídeo `DONE`, a rotina de expiração remove o original junto com o pacote. Num vídeo `FAILED`, o arquivo fica até o dono excluir o vídeo.
 - **Do pacote:** uma rotina periódica no video-service busca os vídeos `DONE` com `expiresAt` vencido, apaga o objeto, limpa a `resultKey` e muda o status para `EXPIRED`. A mesma rotina apaga o original de um vídeo `DONE` que o worker não tenha conseguido remover.
 - **A pedido do titular:** o dono exclui um vídeo e os arquivos que ainda existirem são apagados na hora, com o vídeo indo para `DELETED`.
-- **Na exclusão da conta:** o auth-service publica `user.deleted`, e cada contexto apaga o que é seu. O contexto de Gestão de Vídeos remove os objetos e os metadados dos vídeos daquele dono, e o de Notificação apaga o contato e o histórico.
+- **Na exclusão da conta (planejada):** o auth-service publicará `user.deleted`, e cada contexto apagará o que é seu: Gestão de Vídeos, os objetos e os metadados dos vídeos daquele dono; Notificação, o contato e o histórico. Hoje só o notifier-service consome o evento. O auth-service ainda não tem a rota de exclusão nem publica o evento.
 
 ### Minimização no dia a dia
 
-- **Logs registram identificadores**, como `videoId`, `ownerId` e `correlationId`, nunca e-mail, nome do arquivo original ou conteúdo.
+- **Logs registram identificadores**, como `videoId`, `ownerId` e `correlationId`, nunca e-mail ou conteúdo. A exceção é o processor-worker, que registra o nome original do arquivo quando termina ou recusa um vídeo.
 - **Mensagens carregam chaves de storage**, nunca o arquivo.
 - **O download é sempre por URL pré-assinada de curta duração**, restrita a um único objeto, e nunca por um endereço público e estável. O envio passa pelo video-service, que valida o dono antes de gravar.
 - **Cada vídeo é visível apenas para o dono**, e para os demais ele não existe.

@@ -331,12 +331,12 @@ O schema está em `services/notifier-service/src/infrastructure/repositories/pri
 
 Os arquivos ficam no storage apenas enquanto são necessários (ver a seção de retenção em `docs/domain/dominio.md`). O banco guarda somente metadados; o `status` diz se o pacote ainda existe.
 
-| Dado                      | Prazo                           | Efeito no banco                                          |
-| ------------------------- | ------------------------------- | -------------------------------------------------------- |
-| Vídeo original            | Apagado ao fim do processamento | Nenhum: a chave é derivada e apagar de novo é inofensivo |
-| Pacote de frames          | 24 horas após a conclusão       | `result_key` nulo, `status` em `EXPIRED`                 |
-| Exclusão a pedido do dono | Imediata                        | Arquivos apagados, `status` em `DELETED`                 |
-| Exclusão da conta         | Ao consumir `user.deleted`      | Vídeos e contato do usuário removidos                    |
+| Dado                      | Prazo                           | Efeito no banco                                                                      |
+| ------------------------- | ------------------------------- | ------------------------------------------------------------------------------------ |
+| Vídeo original            | Apagado ao fim do processamento | Nenhum: a chave é derivada e apagar de novo é inofensivo                             |
+| Pacote de frames          | 24 horas após a conclusão       | `result_key` nulo, `status` em `EXPIRED`                                             |
+| Exclusão a pedido do dono | Imediata                        | Arquivos apagados, `status` em `DELETED`                                             |
+| Exclusão da conta         | Ao consumir `user.deleted`      | Planejada: hoje só o notifier consome o evento, e o auth-service ainda não o publica |
 
 A rotina de expiração busca o que venceu usando o índice parcial `idx_videos_a_expirar`:
 

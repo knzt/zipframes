@@ -11,12 +11,14 @@ Todas exigem `Authorization: Bearer <token>`. O dono do vídeo é sempre o `sub`
 | Rota                               | Sucesso | Falhas                                                       |
 | ---------------------------------- | ------- | ------------------------------------------------------------ |
 | `POST /videos` (multipart, `file`) | 201     | 400 arquivo inválido ou vazio, 401, 413 acima do limite, 503 |
-| `GET /videos?limit&before`         | 200     | 400, 401                                                     |
+| `GET /videos?limit&before&status`  | 200     | 400, 401                                                     |
 | `GET /videos/{videoId}`            | 200     | 401, 404                                                     |
 | `GET /videos/{videoId}/download`   | 200     | 401, 404, 409 ainda não pronto, 410 expirado ou excluído     |
 | `DELETE /videos/{videoId}`         | 204     | 401, 404, 409 na fila ou em processamento                    |
 
-A listagem é paginada por keyset: a próxima página usa `before` com o `createdAt` do último item recebido. Ela mostra o histórico, inclusive vídeos que falharam ou expiraram, com o status e o motivo da falha.
+A listagem é paginada por keyset: a próxima página usa `before` com o `createdAt` do último item recebido. Ela mostra o histórico, inclusive vídeos que falharam ou expiraram, com o status e o motivo da falha. `status` mostra só os vídeos em um status (`QUEUED`, `PROCESSING`, `DONE`, `FAILED` ou `EXPIRED`); vídeos excluídos nunca aparecem.
+
+`GET /videos/{videoId}` devolve um vídeo com os mesmos campos de um item da listagem: nome do arquivo, status, quantidade de frames, motivo da falha, validade do zip e datas. O link do zip vem de `/download`.
 
 As rotas de operação (`/health/*`, `/metrics`, `/docs`) estão na [visão geral](../README.md#http). A porta padrão é 3001.
 
@@ -87,7 +89,7 @@ Dois usuários enviando o mesmo arquivo nunca se chocam, porque cada upload é u
 
 ## Cache da listagem
 
-A primeira página da listagem de cada usuário fica no Redis por 60 segundos (`LIST_CACHE_TTL_SECONDS`). Qualquer mudança nos vídeos do usuário apaga a entrada.
+A primeira página da listagem de cada usuário fica no Redis por 60 segundos (`LIST_CACHE_TTL_SECONDS`), uma entrada por tamanho de página e por filtro de status. Qualquer mudança nos vídeos do usuário apaga todas elas de uma vez.
 
 O Redis nunca é a fonte da verdade. Se ele cair, a leitura vai ao Postgres e a queda aparece uma vez no log; por isso a readiness não depende dele. Uma leitura que corre junto com uma gravação pode repor no cache o estado anterior, e o TTL curto limita quanto tempo isso dura.
 
