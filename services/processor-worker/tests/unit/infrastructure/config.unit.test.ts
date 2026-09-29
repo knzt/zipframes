@@ -19,9 +19,11 @@ describe('loadConfig', () => {
       RETRY_MAX_DELAY_MS: '1000',
       LOG_LEVEL: 'info',
       SERVICE_VERSION: '0.0.0',
+      OPERATIONS_PORT: '9100',
     });
 
     expect(config.s3Bucket).toBe('videos');
+    expect(config.operationsPort).toBe(9100);
     expect(config.maxAttempts).toBe(3);
     expect(config.s3ForcePathStyle).toBe(true);
   });
@@ -40,6 +42,7 @@ describe('loadConfig', () => {
     expect(config.s3ForcePathStyle).toBe(false);
     expect(config.maxAttempts).toBe(5);
     expect(config.logLevel).toBe('info');
+    expect(config.operationsPort).toBe(9464);
   });
 
   it('rejects a missing required variable', () => {

@@ -44,7 +44,7 @@ pnpm infra:up
 pnpm --dir services/processor-worker dev
 ```
 
-O processo não escuta HTTP. O Compose e o Kubernetes usam probe exec (`kill -0 1`).
+O processor não tem rotas de negócio. Ele responde só `/health/live`, `/health/ready` (RabbitMQ e storage) e `/metrics` na porta de operação (`OPERATIONS_PORT`, padrão 9464), usada pelas probes e pelo Prometheus.
 
 Para a imagem, o contexto precisa de `dist/` e de `.runtime/node_modules` antes do build:
 

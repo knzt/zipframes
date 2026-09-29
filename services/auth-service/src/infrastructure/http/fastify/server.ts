@@ -5,6 +5,7 @@ import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from
 import { InternalServerError, isBaseError, problemResponse } from '@zipframes/core';
 import { createCorrelationId, runWithCorrelationId } from '@zipframes/logger';
 import type { Logger } from '@zipframes/logger';
+import type { TechnicalMetrics } from '@zipframes/telemetry';
 
 import { registerOpenApi } from './openapi.js';
 
@@ -17,9 +18,11 @@ declare module 'fastify' {
 export interface HttpServerOptions {
   readonly corsOrigin: string;
   readonly logger: Logger;
+  readonly metrics?: TechnicalMetrics;
 }
 
 const CORRELATION_HEADER = 'x-correlation-id';
+const UNMATCHED_ROUTE = 'unmatched';
 
 const correlationIdOf = (request: FastifyRequest): string => {
   const headerValue = request.headers[CORRELATION_HEADER];
@@ -38,6 +41,20 @@ const sendProblem = async (
 
 const isClientError = (error: FastifyError): error is FastifyError & { statusCode: number } =>
   typeof error.statusCode === 'number' && error.statusCode >= 400 && error.statusCode < 500;
+
+const recordHttpMetrics = (app: FastifyInstance, metrics: TechnicalMetrics): void => {
+  app.addHook('onResponse', (request, reply, done) => {
+    // The route pattern, not the URL, so an unknown path does not open a series.
+    const labels = {
+      method: request.method,
+      route: request.routeOptions.url ?? UNMATCHED_ROUTE,
+      status: String(reply.statusCode),
+    };
+    metrics.httpRequestsTotal.inc(labels);
+    metrics.httpRequestDurationSeconds.observe(labels, reply.elapsedTime / 1000);
+    done();
+  });
+};
 
 export const createHttpServer = async (options: HttpServerOptions): Promise<FastifyInstance> => {
   const app = Fastify({
@@ -62,6 +79,10 @@ export const createHttpServer = async (options: HttpServerOptions): Promise<Fast
       done();
     });
   });
+
+  if (options.metrics !== undefined) {
+    recordHttpMetrics(app, options.metrics);
+  }
 
   app.setErrorHandler((error: FastifyError, request, reply) => {
     const correlationId = request.correlationId;

@@ -5,6 +5,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { Logger } from '@zipframes/logger';
 
+import { createMetrics } from '@zipframes/telemetry';
+
 import { createHttpServer } from '../../../../../src/infrastructure/http/fastify/server.js';
 
 const INTERNAL_MESSAGE = 'database exploded';
@@ -209,6 +211,31 @@ describe('Fastify client errors as problem details', () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ correlationId: 'corr-als' });
     expect(seen).toBe('corr-als');
+    await app.close();
+  });
+});
+
+describe('HTTP metrics', () => {
+  it('counts requests by route pattern, method and status', async () => {
+    const metrics = createMetrics({
+      service: 'auth-service',
+      version: 'test',
+      collectDefaults: false,
+    });
+    const app = await createHttpServer({ corsOrigin: '*', logger: loggerStub(), metrics });
+    app.get('/users/:id', async () => ({ ok: true }));
+
+    await app.inject({ method: 'GET', url: '/users/42' });
+    await app.inject({ method: 'GET', url: '/does-not-exist' });
+    const text = await metrics.registry.metrics();
+
+    expect(text).toMatch(
+      /http_requests_total\{method="GET",route="\/users\/:id",status="200"[^}]*\} 1/,
+    );
+    expect(text).toMatch(
+      /http_requests_total\{method="GET",route="unmatched",status="404"[^}]*\} 1/,
+    );
+    expect(text).toContain('http_request_duration_seconds_bucket');
     await app.close();
   });
 });

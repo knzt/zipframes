@@ -11,20 +11,21 @@ Ele substitui o protótipo apresentado aos investidores, que processava tudo den
 
 ## Requisitos do hackathon
 
-| Requisito                                 | Como é atendido                                                                                                              | Onde ver                                                                                 |
-| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| Processar mais de um vídeo ao mesmo tempo | Workers sem estado consomem uma fila; o KEDA sobe de 1 a 5 réplicas conforme o tamanho dela                                  | [processor-worker](docs/architecture/services/processor-worker.md#concorrência-e-escala) |
-| Não perder requisições em picos           | O upload responde depois de gravar e enfileirar; filas duráveis, confirmação do broker, retry com backoff e DLQ              | [Entrega e falhas](docs/architecture/README.md#entrega-e-falhas)                         |
-| Acesso protegido por usuário e senha      | auth-service com senha em bcrypt e JWT RS256, validado pelo video-service com a chave pública                                | [auth-service](docs/architecture/services/auth-service.md)                               |
-| Listagem de status dos vídeos do usuário  | `GET /videos`, paginado, com o status de cada vídeo e cache no Redis                                                         | [video-service](docs/architecture/services/video-service.md)                             |
-| Notificação em caso de erro               | notifier-service envia e-mail em `video.failed` (e também quando o zip fica pronto)                                          | [notifier-service](docs/architecture/services/notifier-service.md)                       |
-| Persistência dos dados                    | Um Postgres por serviço e um object storage compatível com S3                                                                | [Modelagem de dados](docs/data/modelagem-de-dados.md)                                    |
-| Arquitetura escalável                     | Microsserviços sem estado no Kubernetes, HPA nos serviços HTTP e KEDA no worker                                              | [C4 containers](docs/architecture/c4/02-containers.md)                                   |
-| Versionamento no GitHub                   | Este repositório e o dos [pacotes compartilhados](https://github.com/zipframes/zipframes-packages), com Conventional Commits | Histórico de PRs                                                                         |
-| Testes                                    | Unitários e de integração com Testcontainers em cada serviço, com cobertura mínima no CI                                     | [Testes](#testes)                                                                        |
-| CI/CD                                     | GitHub Actions por serviço, imagens no GHCR e deploy por GitOps com Argo CD                                                  | [CI/CD](#cicd)                                                                           |
-| Documentação da arquitetura               | C4 nos níveis 1, 2 e 3, decisões de cada serviço, AsyncAPI e OpenAPI gerado                                                  | [docs/architecture](docs/architecture/README.md)                                         |
-| Scripts de banco e de recursos            | Migrations do Prisma em cada serviço; manifests do Kubernetes e script que cria o cluster e os recursos                      | [Banco e recursos](#banco-e-recursos)                                                    |
+| Requisito                                 | Como é atendido                                                                                                               | Onde ver                                                                                 |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Processar mais de um vídeo ao mesmo tempo | Workers sem estado consomem uma fila; o KEDA sobe de 1 a 5 réplicas conforme o tamanho dela                                   | [processor-worker](docs/architecture/services/processor-worker.md#concorrência-e-escala) |
+| Não perder requisições em picos           | O upload responde depois de gravar e enfileirar; filas duráveis, confirmação do broker, retry com backoff e DLQ               | [Entrega e falhas](docs/architecture/README.md#entrega-e-falhas)                         |
+| Acesso protegido por usuário e senha      | auth-service com senha em bcrypt e JWT RS256, validado pelo video-service com a chave pública                                 | [auth-service](docs/architecture/services/auth-service.md)                               |
+| Listagem de status dos vídeos do usuário  | `GET /videos`, paginado, com o status de cada vídeo e cache no Redis                                                          | [video-service](docs/architecture/services/video-service.md)                             |
+| Notificação em caso de erro               | notifier-service envia e-mail em `video.failed` (e também quando o zip fica pronto)                                           | [notifier-service](docs/architecture/services/notifier-service.md)                       |
+| Persistência dos dados                    | Um Postgres por serviço e um object storage compatível com S3                                                                 | [Modelagem de dados](docs/data/modelagem-de-dados.md)                                    |
+| Arquitetura escalável                     | Microsserviços sem estado no Kubernetes, HPA nos serviços HTTP e KEDA no worker                                               | [C4 containers](docs/architecture/c4/02-containers.md)                                   |
+| Versionamento no GitHub                   | Este repositório e o dos [pacotes compartilhados](https://github.com/zipframes/zipframes-packages), com Conventional Commits  | Histórico de PRs                                                                         |
+| Testes                                    | Unitários e de integração com Testcontainers em cada serviço, com cobertura mínima no CI                                      | [Testes](#testes)                                                                        |
+| CI/CD                                     | GitHub Actions por serviço, imagens no GHCR e deploy por GitOps com Argo CD                                                   | [CI/CD](#cicd)                                                                           |
+| Observabilidade (além do pedido)          | Logs JSON com correlation ID, Prometheus coletando os quatro serviços e o RabbitMQ, dashboard no Grafana e alertas por e-mail | [Observabilidade](docs/architecture/README.md#observabilidade)                           |
+| Documentação da arquitetura               | C4 nos níveis 1, 2 e 3, decisões de cada serviço, AsyncAPI e OpenAPI gerado                                                   | [docs/architecture](docs/architecture/README.md)                                         |
+| Scripts de banco e de recursos            | Migrations do Prisma em cada serviço; manifests do Kubernetes e script que cria o cluster e os recursos                       | [Banco e recursos](#banco-e-recursos)                                                    |
 
 ## Arquitetura em um minuto
 
@@ -77,12 +78,14 @@ infra/kind/bootstrap.sh
 
 Leva alguns minutos na primeira vez. No fim, o sistema responde em:
 
-| Endereço                            | O que é                            |
-| ----------------------------------- | ---------------------------------- |
-| http://auth.zipframes.localhost     | auth-service (Swagger em `/docs`)  |
-| http://api.zipframes.localhost      | video-service (Swagger em `/docs`) |
-| http://mail.zipframes.localhost     | Caixa de e-mails (Mailpit)         |
-| http://rabbitmq.zipframes.localhost | Painel do RabbitMQ                 |
+| Endereço                              | O que é                                          |
+| ------------------------------------- | ------------------------------------------------ |
+| http://auth.zipframes.localhost       | auth-service (Swagger em `/docs`)                |
+| http://api.zipframes.localhost        | video-service (Swagger em `/docs`)               |
+| http://mail.zipframes.localhost       | Caixa de e-mails (Mailpit)                       |
+| http://rabbitmq.zipframes.localhost   | Painel do RabbitMQ                               |
+| http://grafana.zipframes.localhost    | Dashboard: vídeos, falhas, fila, réplicas e APIs |
+| http://prometheus.zipframes.localhost | Métricas e alertas                               |
 
 Os detalhes (o que é instalado, onde ficam os segredos, como acessar o Argo CD) estão em [infra/kind/README.md](infra/kind/README.md). Para apagar tudo: `kind delete cluster --name zipframes`.
 

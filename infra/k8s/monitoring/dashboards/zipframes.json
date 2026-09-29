@@ -1,0 +1,450 @@
+{
+  "uid": "zipframes-overview",
+  "title": "ZipFrames",
+  "description": "Vídeos processados, falhas, duração, fila, APIs e e-mails.",
+  "tags": ["zipframes"],
+  "timezone": "browser",
+  "schemaVersion": 41,
+  "version": 1,
+  "editable": false,
+  "graphTooltip": 1,
+  "refresh": "30s",
+  "time": { "from": "now-3h", "to": "now" },
+  "templating": { "list": [] },
+  "annotations": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Processamento",
+      "collapsed": false,
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 1 },
+      "panels": []
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Vídeos enviados",
+      "description": "Uploads aceitos (201) no intervalo do painel.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 0, "y": 1, "w": 4, "h": 4 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(http_requests_total{job=\"video-service\",method=\"POST\",route=\"/videos\",status=\"201\"}[$__range]))",
+          "instant": true
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "none", "decimals": 0 }, "overrides": [] },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "none",
+        "graphMode": "none"
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Vídeos processados",
+      "description": "Zips gerados no intervalo do painel.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 4, "y": 1, "w": 4, "h": 4 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(messages_handled_total{job=\"processor-worker\",outcome=\"success\"}[$__range]))",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "color": { "mode": "fixed", "fixedColor": "green" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "value",
+        "graphMode": "none"
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Vídeos com falha",
+      "description": "Arquivos recusados pelo ffmpeg e vídeos que esgotaram as tentativas.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 8, "y": 1, "w": 4, "h": 4 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(messages_handled_total{job=\"processor-worker\",outcome=~\"permanent_failure|exhausted\"}[$__range])) or vector(0)",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "value",
+        "graphMode": "none"
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Na fila agora",
+      "description": "Mensagens prontas em processor.video.uploaded.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 12, "y": 1, "w": 4, "h": 4 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rabbitmq_detailed_queue_messages_ready{queue=\"processor.video.uploaded\"})",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 10 },
+              { "color": "red", "value": 20 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "value",
+        "graphMode": "area"
+      }
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Réplicas do worker",
+      "description": "Pods do processor-worker respondendo. O KEDA escala de 1 a 5 pelo tamanho da fila.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 16, "y": 1, "w": 4, "h": 4 },
+      "targets": [
+        { "refId": "A", "expr": "count(up{job=\"processor-worker\"} == 1)", "instant": true }
+      ],
+      "fieldConfig": { "defaults": { "unit": "none", "decimals": 0 }, "overrides": [] },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "none",
+        "graphMode": "area"
+      }
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Mensagens na DLQ",
+      "description": "Eventos inválidos ou que esgotaram as tentativas, em zipframes.events.dlq.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 20, "y": 1, "w": 4, "h": 4 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rabbitmq_detailed_queue_messages{queue=\"zipframes.events.dlq\"})",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "value",
+        "graphMode": "none"
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Vídeos por minuto, por desfecho",
+      "description": "success: zip gerado. permanent_failure: arquivo recusado. transient_retry: falha passageira que volta para a fila. exhausted: desistiu depois de todas as tentativas.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 0, "y": 5, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (outcome) (rate(messages_handled_total{job=\"processor-worker\",outcome!=\"delete_original_failed\"}[5m])) * 60",
+          "legendFormat": "{{outcome}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": { "drawStyle": "line", "fillOpacity": 10, "stacking": { "mode": "normal" } }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "success" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "permanent_failure" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "exhausted" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }]
+          }
+        ]
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      }
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Duração do processamento",
+      "description": "Do recebimento da mensagem ao zip gravado, só dos vídeos processados com sucesso.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 12, "y": 5, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(message_duration_seconds_bucket{job=\"processor-worker\",outcome=\"success\"}[10m])))",
+          "legendFormat": "mediana"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(message_duration_seconds_bucket{job=\"processor-worker\",outcome=\"success\"}[10m])))",
+          "legendFormat": "p95"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s", "custom": { "drawStyle": "line", "fillOpacity": 0 } },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Fila e réplicas do worker",
+      "description": "Quando a fila cresce, o KEDA sobe réplicas; quando ela esvazia, as réplicas voltam a 1.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 0, "y": 13, "w": 24, "h": 8 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rabbitmq_detailed_queue_messages_ready{queue=\"processor.video.uploaded\"})",
+          "legendFormat": "esperando na fila"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(rabbitmq_detailed_queue_messages_unacked{queue=\"processor.video.uploaded\"})",
+          "legendFormat": "em processamento"
+        },
+        {
+          "refId": "C",
+          "expr": "count(up{job=\"processor-worker\"} == 1)",
+          "legendFormat": "réplicas do worker"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "custom": { "drawStyle": "line", "fillOpacity": 0 }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "réplicas do worker" },
+            "properties": [
+              { "id": "custom.drawStyle", "value": "line" },
+              { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [10, 10] } },
+              { "id": "custom.axisPlacement", "value": "right" }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      }
+    },
+    {
+      "id": 11,
+      "type": "row",
+      "title": "APIs",
+      "collapsed": false,
+      "gridPos": { "x": 0, "y": 21, "w": 24, "h": 1 },
+      "panels": []
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Requisições por segundo",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 0, "y": 22, "w": 8, "h": 8 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (job) (rate(http_requests_total{route!~\"/health.*|/metrics\"}[5m]))",
+          "legendFormat": "{{job}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "custom": { "drawStyle": "line", "fillOpacity": 10 } },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      }
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Respostas com erro (4xx e 5xx)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 8, "y": 22, "w": 8, "h": 8 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (job, status) (rate(http_requests_total{status=~\"4..|5..\",route!~\"/health.*|/metrics\"}[5m]))",
+          "legendFormat": "{{job}} {{status}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "custom": { "drawStyle": "line", "fillOpacity": 0 } },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      }
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "Latência p95 por rota",
+      "description": "O upload inclui o envio do arquivo inteiro, então é naturalmente a rota mais lenta.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 16, "y": 22, "w": 8, "h": 8 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (job, method, route, le) (rate(http_request_duration_seconds_bucket{route!~\"/health.*|/metrics|unmatched\"}[5m])))",
+          "legendFormat": "{{method}} {{route}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s", "custom": { "drawStyle": "line", "fillOpacity": 0 } },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      }
+    },
+    {
+      "id": 15,
+      "type": "row",
+      "title": "Notificações e saúde",
+      "collapsed": false,
+      "gridPos": { "x": 0, "y": 30, "w": 24, "h": 1 },
+      "panels": []
+    },
+    {
+      "id": 16,
+      "type": "timeseries",
+      "title": "Mensagens do notifier-service por minuto",
+      "description": "notifier.emails: e-mails de resultado e de falha. notifier.contacts: cópia dos contatos.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 0, "y": 31, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (destination, outcome) (rate(messages_handled_total{job=\"notifier-service\"}[5m])) * 60",
+          "legendFormat": "{{destination}} {{outcome}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "none", "custom": { "drawStyle": "line", "fillOpacity": 10 } },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      }
+    },
+    {
+      "id": 17,
+      "type": "stat",
+      "title": "Processos respondendo",
+      "description": "1 quando o Prometheus consegue coletar as métricas do processo.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 12, "y": 31, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (job) (up{job=~\"auth-service|video-service|processor-worker|notifier-service|rabbitmq\"})",
+          "legendFormat": "{{job}}",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "orientation": "horizontal"
+      }
+    }
+  ]
+}

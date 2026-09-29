@@ -65,7 +65,7 @@ curl -fsS http://localhost:3000/health/ready
 curl -fsS http://localhost:3001/health/ready
 ```
 
-`GET /health/ready` do auth exige Postgres e RabbitMQ; o do video exige Postgres, RabbitMQ e o bucket. `GET /health/live`, `GET /metrics` e `GET /docs` (OpenAPI) existem nos dois. O worker e o notification usam healthcheck exec (`kill -0 1`).
+`GET /health/ready` do auth exige Postgres e RabbitMQ; o do video exige Postgres, RabbitMQ e o bucket. `GET /health/live`, `GET /metrics` e `GET /docs` (OpenAPI) existem nos dois. O worker e o notifier-service não têm rotas de negócio, mas respondem `/health/live`, `/health/ready` e `/metrics` na porta de operação 9464, que o healthcheck usa.
 
 Não rode o mesmo processo na máquina e no container ao mesmo tempo: os dois usam a mesma porta (3000 no auth, 3001 no video).
 

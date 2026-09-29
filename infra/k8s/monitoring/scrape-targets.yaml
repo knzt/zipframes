@@ -1,0 +1,111 @@
+# What Prometheus scrapes. The HTTP services are found through their
+# Service; the worker and the notifier have no Service, so their pods are
+# scraped directly on the operations port. `job` is set to the service name
+# so every query can filter by it, and honorLabels keeps the `service` and
+# `version` labels each process already puts on its metrics.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: auth-service
+spec:
+  namespaceSelector:
+    matchNames: [zipframes]
+  selector:
+    matchLabels:
+      app: auth-service
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+      honorLabels: true
+      relabelings:
+        - targetLabel: job
+          replacement: auth-service
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: video-service
+spec:
+  namespaceSelector:
+    matchNames: [zipframes]
+  selector:
+    matchLabels:
+      app: video-service
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+      honorLabels: true
+      relabelings:
+        - targetLabel: job
+          replacement: video-service
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: processor-worker
+spec:
+  namespaceSelector:
+    matchNames: [zipframes]
+  selector:
+    matchLabels:
+      app: processor-worker
+  podMetricsEndpoints:
+    - port: operations
+      path: /metrics
+      interval: 15s
+      honorLabels: true
+      relabelings:
+        - targetLabel: job
+          replacement: processor-worker
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: notifier-service
+spec:
+  namespaceSelector:
+    matchNames: [zipframes]
+  selector:
+    matchLabels:
+      app: notifier-service
+  podMetricsEndpoints:
+    - port: operations
+      path: /metrics
+      interval: 15s
+      honorLabels: true
+      relabelings:
+        - targetLabel: job
+          replacement: notifier-service
+---
+# The RabbitMQ Cluster Operator enables the Prometheus plugin on port 15692.
+# /metrics is the node-level view; queue_coarse_metrics adds the size of
+# each queue, which the worker backlog and the DLQ alerts need.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: rabbitmq
+spec:
+  namespaceSelector:
+    matchNames: [zipframes]
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: rabbitmq
+  endpoints:
+    - port: prometheus
+      path: /metrics
+      interval: 15s
+      relabelings:
+        - targetLabel: job
+          replacement: rabbitmq
+    - port: prometheus
+      path: /metrics/detailed
+      params:
+        family: [queue_coarse_metrics]
+      interval: 15s
+      # A job of its own: same host and port as the endpoint above, so the
+      # two targets would otherwise have identical labels.
+      relabelings:
+        - targetLabel: job
+          replacement: rabbitmq-queues

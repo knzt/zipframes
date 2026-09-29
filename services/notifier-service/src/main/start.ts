@@ -1,7 +1,9 @@
 import type { RetryOptions } from '@zipframes/communication';
+import { createReadinessCheck } from '@zipframes/core';
 import { createLogger, runWithCorrelationId } from '@zipframes/logger';
 import { createMetrics } from '@zipframes/telemetry';
 
+import { startOperationsServer } from '../infrastructure/http/operationsServer.js';
 import { loadConfig } from '../infrastructure/loadEnvConfig.js';
 import {
   CONTACTS_QUEUE,
@@ -10,10 +12,11 @@ import {
   EMAILS_QUEUE,
   EMAILS_RETRY_QUEUE,
 } from '../infrastructure/messaging/amqplib/amqpTopology.js';
+import { createAmqpPing } from '../infrastructure/messaging/amqplib/connection.js';
 import { recordNotificationOutcome } from '../infrastructure/observability/notificationOutcome.js';
 import { createAmqplib } from './factories/externals/amqplib.js';
 import { createNodemailer } from './factories/externals/nodemailer.js';
-import { createPrisma } from './factories/externals/prisma.js';
+import { createPrisma, createPrismaPing } from './factories/externals/prisma.js';
 import { createS3 } from './factories/externals/s3.js';
 import { createContactEventsConsumer } from './factories/messaging/contactEventsConsumer.js';
 import { createEmailEventsConsumer } from './factories/messaging/emailEventsConsumer.js';
@@ -99,13 +102,23 @@ export const startNotifierService = async (): Promise<{ stop: () => Promise<void
       waitQueue: EMAILS_RETRY_QUEUE,
     });
 
+    const operations = await startOperationsServer({
+      port: config.operationsPort,
+      isReady: createReadinessCheck([createPrismaPing(prisma), createAmqpPing(amqp)]),
+      renderMetrics: () => technicalMetrics.registry.metrics(),
+      logger,
+    });
+    closers.push(() => operations.close());
+
     logger.info('notifier-service started', {
       contactsQueue: CONTACTS_QUEUE,
       emailsQueue: EMAILS_QUEUE,
+      operationsPort: operations.port,
     });
 
     return {
       stop: async () => {
+        await operations.close();
         await amqp.close();
         await prisma.$disconnect();
         logger.info('notifier-service stopped');

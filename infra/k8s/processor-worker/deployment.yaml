@@ -21,18 +21,24 @@ spec:
           image: ghcr.io/knzt/zipframes-processor-worker:main
           # The tag comes from kustomization.yaml (a commit SHA, never reused).
           imagePullPolicy: IfNotPresent
+          ports:
+            - name: operations
+              containerPort: 9464
           envFrom:
             - configMapRef:
                 name: processor-worker
             - secretRef:
                 name: processor-worker
           readinessProbe:
-            exec:
-              command: ['sh', '-c', 'kill -0 1']
+            httpGet:
+              path: /health/ready
+              port: operations
             periodSeconds: 10
           livenessProbe:
-            exec:
-              command: ['sh', '-c', 'kill -0 1']
+            httpGet:
+              path: /health/live
+              port: operations
+            initialDelaySeconds: 10
             periodSeconds: 20
           resources:
             requests:

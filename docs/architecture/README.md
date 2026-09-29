@@ -168,13 +168,26 @@ O OpenAPI não é escrito à mão: o Fastify gera o documento a partir dos mesmo
 
 Erros seguem o formato Problem Details (RFC 9457), com o `correlationId` da requisição. Uma falha inesperada responde 500 sem a mensagem interna.
 
-O processor-worker e o notifier-service não escutam HTTP. No Kubernetes e no Compose, as probes deles checam se o processo está vivo (`kill -0 1`).
+O processor-worker e o notifier-service não têm rotas de negócio: o trabalho deles chega pela fila. Mesmo assim, cada um abre uma porta de operação (`OPERATIONS_PORT`, padrão 9464) com `/health/live`, `/health/ready` e `/metrics`, nos mesmos formatos acima, porque o Kubernetes precisa saber se o processo está conectado às dependências e o Prometheus coleta métricas chamando o processo. A readiness do worker confere RabbitMQ e storage; a do notifier, Postgres e RabbitMQ.
 
 ## Observabilidade
 
 Os logs são JSON (`@zipframes/logger`) e toda linha leva o `correlationId`. Ele nasce no header `x-correlation-id` da requisição (ou é gerado), segue dentro do envelope de cada evento e é restaurado por quem consome. Com ele, um upload pode ser seguido do video-service até o e-mail. Campos como `password`, `token` e `authorization` saem mascarados.
 
-As métricas vêm de `@zipframes/telemetry`: requisições HTTP por rota e status, e mensagens consumidas por fila e desfecho (processada, ignorada, em retry, esgotada, inválida).
+As métricas vêm de `@zipframes/telemetry`: requisições HTTP por rota e status, e mensagens consumidas por fila e desfecho (processada, ignorada, em retry, esgotada, inválida). No cluster, o Prometheus coleta os quatro serviços e o RabbitMQ a cada 15 segundos, e o Grafana mostra um dashboard com vídeos processados, falhas, duração do processamento, fila, réplicas do worker, APIs e e-mails.
+
+Os alertas ficam no Prometheus e chegam por e-mail pelo Alertmanager:
+
+| Alerta                            | Dispara quando                                                        |
+| --------------------------------- | --------------------------------------------------------------------- |
+| `ZipFramesServiceDown`            | Um dos quatro serviços não responde ao Prometheus por 2 minutos       |
+| `ZipFramesHttpErrors`             | Mais de 5% das requisições de um serviço respondem 5xx por 5 minutos  |
+| `ZipFramesProcessingBacklog`      | Mais de 20 vídeos esperando na fila por 10 minutos                    |
+| `ZipFramesVideoFailures`          | Mais de 20% dos vídeos falhando por 10 minutos                        |
+| `ZipFramesDeadLetters`            | Qualquer mensagem na DLQ por 5 minutos                                |
+| `ZipFramesNotificationsExhausted` | O notifier-service desistiu de alguma mensagem nos últimos 15 minutos |
+
+Os dashboards, as regras e o que é coletado estão versionados em [infra/k8s/monitoring](../../infra/k8s/monitoring).
 
 ## Segurança
 

@@ -49,7 +49,11 @@ export const startAuthService = async (): Promise<RunningAuthService> => {
     closers.push(() => amqp.close());
     await assertAmqpTopology(amqp.channel);
 
-    const app = await createHttpServer({ corsOrigin: config.corsOrigin, logger });
+    const app = await createHttpServer({
+      corsOrigin: config.corsOrigin,
+      logger,
+      metrics: technicalMetrics,
+    });
     bindHttpRoutes(
       app,
       identityRoutes({
