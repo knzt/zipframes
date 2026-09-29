@@ -34,14 +34,14 @@ Uma falha de SMTP é registrada em `notification_attempts` e a mensagem volta pa
 
 ## Operação
 
-| Item      | Valor                                                                                |
-| --------- | ------------------------------------------------------------------------------------ |
-| Banco     | `notification-db` (Postgres): `contacts`, `notifications`, `notification_attempts`   |
-| Consome   | `user.registered`, `user.updated`, `user.deleted`, `video.processed`, `video.failed` |
-| Envia     | SMTP (Mailpit no ambiente local, em http://mail.zipframes.localhost no kind)         |
-| Probes    | Exec `kill -0 1`: o processo não escuta HTTP                                         |
-| Escala    | Uma réplica                                                                          |
-| Manifests | [`infra/k8s/notifier-service`](../../../infra/k8s/notifier-service)                  |
+| Item      | Valor                                                                                  |
+| --------- | -------------------------------------------------------------------------------------- |
+| Banco     | `notification-db` (Postgres): `contacts`, `notifications`, `notification_attempts`     |
+| Consome   | `user.registered`, `user.updated`, `user.deleted`, `video.processed`, `video.failed`   |
+| Envia     | SMTP (Mailpit no ambiente local, em http://mail.zipframes.localhost no kind)           |
+| Probes    | HTTP na porta de operação 9464: `/health/live` e `/health/ready` (Postgres e RabbitMQ) |
+| Escala    | Uma réplica                                                                            |
+| Manifests | [`infra/k8s/notifier-service`](../../../infra/k8s/notifier-service)                    |
 
 ## Testes
 

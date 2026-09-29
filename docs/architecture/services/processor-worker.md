@@ -1,6 +1,6 @@
 # processor-worker
 
-O processor-worker faz o trabalho pesado: para cada `video.uploaded`, baixa o vídeo, extrai um frame por segundo em PNG com o `ffmpeg`, junta os frames num zip, grava o zip no storage e publica o resultado. Não tem banco nem HTTP.
+O processor-worker faz o trabalho pesado: para cada `video.uploaded`, baixa o vídeo, extrai um frame por segundo em PNG com o `ffmpeg`, junta os frames num zip, grava o zip no storage e publica o resultado. Não tem banco nem rotas HTTP de negócio; a porta dele serve só para saúde e métricas.
 
 Os componentes e como eles se ligam estão no [C4 nível 3](../c4/03-componentes-processor-worker.md). A organização de pastas, comum aos quatro serviços, está na [visão geral da arquitetura](../README.md#organização-de-cada-serviço).
 
@@ -51,14 +51,14 @@ Ao receber SIGTERM, o worker para de pegar mensagens novas, termina o vídeo em 
 
 ## Operação
 
-| Item      | Valor                                                               |
-| --------- | ------------------------------------------------------------------- |
-| Consome   | `video.uploaded`                                                    |
-| Publica   | `video.processing.started`, `video.processed`, `video.failed`       |
-| Estado    | Nenhum além do diretório temporário da tentativa                    |
-| Probes    | Exec `kill -0 1`: o processo não escuta HTTP                        |
-| Escala    | KEDA pela fila, de 1 a 5 réplicas                                   |
-| Manifests | [`infra/k8s/processor-worker`](../../../infra/k8s/processor-worker) |
+| Item      | Valor                                                                                 |
+| --------- | ------------------------------------------------------------------------------------- |
+| Consome   | `video.uploaded`                                                                      |
+| Publica   | `video.processing.started`, `video.processed`, `video.failed`                         |
+| Estado    | Nenhum além do diretório temporário da tentativa                                      |
+| Probes    | HTTP na porta de operação 9464: `/health/live` e `/health/ready` (RabbitMQ e storage) |
+| Escala    | KEDA pela fila, de 1 a 5 réplicas                                                     |
+| Manifests | [`infra/k8s/processor-worker`](../../../infra/k8s/processor-worker)                   |
 
 ## Testes
 
