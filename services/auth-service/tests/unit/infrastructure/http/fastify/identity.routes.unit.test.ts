@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import type { HttpReply, HttpRequest } from '@zipframes/http';
 import type { Logger } from '@zipframes/logger';
@@ -78,15 +78,6 @@ const buildApp = async (overrides?: {
 
   return app;
 };
-
-// The first server built in a worker pays for loading Fastify,
-// @fastify/swagger and @fastify/swagger-ui — about a second, and nothing
-// that any test here measures. Paying it in a hook keeps it out of the
-// first test's 5s budget, which it could exceed once coverage
-// instrumentation and parallel workers were competing for the CPU.
-beforeAll(async () => {
-  await buildApp();
-});
 
 describe('identity route binding', () => {
   it('forwards the register body and correlation id, then sends the handler result', async () => {

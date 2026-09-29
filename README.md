@@ -191,6 +191,8 @@ PR ou merge no main
 
 Cada serviço tem o próprio workflow em [.github/workflows](.github/workflows), que só roda quando algo daquele serviço muda. A imagem publicada é exatamente a que passou nos testes. O deploy é GitOps: o cluster roda o que está em `infra/` no `main`, e o histórico do Git é o histórico de deploys. O fluxo completo está em [infra/kind/README.md](infra/kind/README.md#entrega-contínua).
 
+A `main` é protegida e só aceita mudança por pull request, com `enforce_admins` ligado — nem um administrador empurra direto. Por isso o commit de deploy passa por um PR que o próprio workflow abre e mergeia. Ele nasce mergeável porque a `main` não exige aprovação nem check obrigatório; **se algum dia passar a exigir, é nesse passo que a esteira vai travar.**
+
 ## Banco e recursos
 
 | O quê                             | Onde                                                                                                                        |
