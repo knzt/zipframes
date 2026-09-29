@@ -4,7 +4,7 @@ Cadastro, autenticação e emissão de tokens do ZipFrames.
 
 Este serviço não conhece vídeos: sua única responsabilidade é identidade. Os demais serviços validam os tokens localmente contra as chaves publicadas aqui, sem chamar o auth-service a cada requisição.
 
-O contrato HTTP é o documento gerado em `GET /docs` (ver [`docs/architecture/http.md`](../../docs/architecture/http.md)). Os eventos que ele publica estão em [`docs/asyncapi/events.yaml`](../../docs/asyncapi/events.yaml). A arquitetura interna está em [`docs/architecture/services/auth-service.md`](../../docs/architecture/services/auth-service.md).
+O contrato HTTP é o documento gerado em `GET /docs` (as rotas comuns de saúde e documentação estão em [`docs/architecture/README.md`](../../docs/architecture/README.md#http)). Os eventos que ele publica estão em [`docs/asyncapi/events.yaml`](../../docs/asyncapi/events.yaml). A arquitetura interna está em [`docs/architecture/services/auth-service.md`](../../docs/architecture/services/auth-service.md).
 
 ## Camadas
 
@@ -31,7 +31,7 @@ tests/
 └── support/                # fakes das interfaces
 ```
 
-As regras de dependência entre camadas estão em [`docs/architecture/layers.md`](../../docs/architecture/layers.md) e são verificadas no CI pelo dependency-cruiser.
+As regras de dependência entre as pastas de `src/` estão em [`docs/architecture/README.md`](../../docs/architecture/README.md#organização-de-cada-serviço) e são verificadas no CI pelo dependency-cruiser.
 
 ## Desenvolvimento
 

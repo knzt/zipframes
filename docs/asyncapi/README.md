@@ -20,7 +20,7 @@ npx @asyncapi/cli validate docs/asyncapi/events.yaml
 ## Convenções
 
 - **AsyncAPI 3.0.** Uma versão de contrato só muda quando o payload muda de
-  forma incompatível; um campo novo opcional mantém a versão (ver ADR-0008 e
+  forma incompatível; um campo novo opcional mantém a versão (ver
   `docs/domain/dominio.md`).
 - **O nome do canal é a routing key** no RabbitMQ (`video.uploaded`, por
   exemplo), e cada mensagem carrega o envelope completo, nunca só o payload.

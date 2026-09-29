@@ -12,10 +12,10 @@ info:
     Todos são publicados no exchange `zipframes.events`, do tipo topic, com
     a routing key igual ao nome do evento (ex. `video.uploaded`). A entrega
     é "pelo menos uma vez", e cada consumidor é idempotente por uma chave
-    que o próprio domínio já impõe — a máquina de estados do vídeo, o
-    upsert do contato por `userId`, a unicidade de notificação por vídeo e
-    tipo — sem tabela de deduplicação (ver ADR-0008 e
-    `docs/architecture/layers.md`).
+    que o próprio domínio já impõe: a máquina de estados do vídeo, o
+    upsert do contato por `userId` e a unicidade de notificação por vídeo e
+    tipo. Não há tabela de deduplicação (ver
+    `docs/architecture/README.md#entrega-e-falhas`).
   license:
     name: MIT
   externalDocs:

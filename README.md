@@ -63,6 +63,8 @@ O auth grava o usuário e publica `user.registered` no exchange `zipframes.event
 
 Nenhum processo chama outro na subida. O video-service só busca o JWKS no primeiro token que valida. A ordem entre os quatro não importa.
 
+A arquitetura completa, com os diagramas C4 e as decisões de cada serviço, está em [`docs/architecture`](docs/architecture/README.md).
+
 ## Tecnologias presentes no código
 
 - Node.js 26, TypeScript 5, pnpm 12.6.0
