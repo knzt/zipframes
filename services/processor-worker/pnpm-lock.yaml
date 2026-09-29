@@ -170,8 +170,8 @@ importers:
         specifier: ^3.787.0
         version: 3.1140.0
       '@zipframes/communication':
-        specifier: 0.3.0-pr50-20260928222430
-        version: 0.3.0-pr50-20260928222430
+        specifier: 0.3.0-pr50-20260929001757
+        version: 0.3.0-pr50-20260929001757
       '@zipframes/core':
         specifier: ^0.4.0
         version: 0.4.0
@@ -179,8 +179,8 @@ importers:
         specifier: ^0.1.0
         version: 0.1.0
       '@zipframes/schemas':
-        specifier: 1.1.0-pr50-20260928222430
-        version: 1.1.0-pr50-20260928222430
+        specifier: 1.1.0-pr50-20260929001757
+        version: 1.1.0-pr50-20260929001757
       '@zipframes/telemetry':
         specifier: ^0.1.0
         version: 0.1.1
@@ -902,8 +902,8 @@ packages:
   '@vitest/utils@3.2.7':
     resolution: {integrity: sha512-x6BDOd7dyo3PFLY3I9/HJ25X/6OurhGXk2/B9gOZNPF7XDVjeBK4k01lQE5uvDpbuheErh91qYuE1E2OEjK3Rw==}
 
-  '@zipframes/communication@0.3.0-pr50-20260928222430':
-    resolution: {integrity: sha512-Tag6pwCI8nRO2g5OyyCmT5KqSHFN0J02vIWZu0x7KgyjL+8AC/ziDQRhgwHnBZwNEaTYjfS1aXrMw+idPyPH1Q==, tarball: https://npm.pkg.github.com/download/@zipframes/communication/0.3.0-pr50-20260928222430/778072a47e8222d9535ff61c3a36c1d0797755c9}
+  '@zipframes/communication@0.3.0-pr50-20260929001757':
+    resolution: {integrity: sha512-4tD9c63Vy8WzhoB/b1duEwh0nPzv2L3nNdA98xfIsXSi9W1QwsaaiHz68q0blcySpMGa67kwOUC1cHlOaNmn8A==, tarball: https://npm.pkg.github.com/download/@zipframes/communication/0.3.0-pr50-20260929001757/02115af85fe193ae7b08373b741a1876b1d1ee1f}
 
   '@zipframes/core@0.2.0':
     resolution: {integrity: sha512-2TtQlE1Mo4JfSpMs8CTn8K7gaLCYKcGYGg+dhXIlHfsXgjofggU2/ED61LcABgZHoiGtHs60427HOYHnjNy18Q==, tarball: https://npm.pkg.github.com/download/@zipframes/core/0.2.0/821726d1e23a2bbb2305d0d5341dfc4e22e9dea7}
@@ -917,8 +917,8 @@ packages:
   '@zipframes/logger@0.1.0':
     resolution: {integrity: sha512-ulj3BwoFT2zxwy9RB3thW+058JR0Sg+Vd0eJHDe9VLeanR/uIg9hek1MY8jefNrkHIN7wAdlE/Matb1n22qtCQ==, tarball: https://npm.pkg.github.com/download/@zipframes/logger/0.1.0/a8da4034cf604b47a419f954ebde2ef05b816ebd}
 
-  '@zipframes/schemas@1.1.0-pr50-20260928222430':
-    resolution: {integrity: sha512-15ApS9npnnYkHs7QvbG5Em1YpaYJh5gJ4imnLynWHKrw7vRmgzrnFO/dhOVay+tk+wMMp4mLqs9CVgvankOYDg==, tarball: https://npm.pkg.github.com/download/@zipframes/schemas/1.1.0-pr50-20260928222430/0abd996fe45f29f52997a5e34c1c8005e3bbac48}
+  '@zipframes/schemas@1.1.0-pr50-20260929001757':
+    resolution: {integrity: sha512-81EBBai+3kVjoFY9klvyMVp6QguPUYAuSmgQuXwZdpvitQBdGlEQz7awh7+PZhlQPcFTgxTwjmhbt91tLRYPOg==, tarball: https://npm.pkg.github.com/download/@zipframes/schemas/1.1.0-pr50-20260929001757/8b71368f4ca2de7f89dadf73df9142103c6ac557}
 
   '@zipframes/telemetry@0.1.1':
     resolution: {integrity: sha512-AgmBLGu0OVX/0hHHohZOSlS3lWI9Uv0+QD6xo8WzEl4yduQpoCXq1UXTEZMDqoOLNKsSMn9Y1IFrbt7R+KDCxg==, tarball: https://npm.pkg.github.com/download/@zipframes/telemetry/0.1.1/6f5587b747770486af379f79dae7ec4c15d6f863}
@@ -2504,10 +2504,10 @@ snapshots:
       loupe: 3.2.1
       tinyrainbow: 2.0.0
 
-  '@zipframes/communication@0.3.0-pr50-20260928222430':
+  '@zipframes/communication@0.3.0-pr50-20260929001757':
     dependencies:
       '@zipframes/core': 0.5.0
-      '@zipframes/schemas': 1.1.0-pr50-20260928222430
+      '@zipframes/schemas': 1.1.0-pr50-20260929001757
       zod: 4.6.5
 
   '@zipframes/core@0.2.0': {}
@@ -2520,7 +2520,7 @@ snapshots:
     dependencies:
       pino: 9.14.0
 
-  '@zipframes/schemas@1.1.0-pr50-20260928222430':
+  '@zipframes/schemas@1.1.0-pr50-20260929001757':
     dependencies:
       '@zipframes/core': 0.5.0
       zod: 4.6.5

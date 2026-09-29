@@ -31,7 +31,7 @@ describe('AmqpEventPublisherGateway', () => {
     );
   });
 
-  it('publishes video.processed through createNotifier', async () => {
+  it('publishes video.processed through the notifier email helper', async () => {
     const publish = vi.fn(async () => undefined);
     const publisher: Publisher = { publish };
     const events = new AmqpEventPublisherGateway(publisher);
