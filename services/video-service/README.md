@@ -4,7 +4,7 @@ Ciclo de vida dos vídeos do ZipFrames: envio, status, listagem, download, expir
 
 O vídeo chega em um único `POST /videos` (multipart) e vai em stream para o storage; o zip sai direto do storage por uma URL pré-assinada de curta duração. Aqui ficam os metadados e a máquina de estados do vídeo. O dono de cada vídeo é o `sub` do token emitido pelo auth-service, validado localmente contra o JWKS dele. O processamento acontece no processor-worker: este serviço publica `video.uploaded` e consome `video.processing.started`, `video.processed` e `video.failed`.
 
-O contrato HTTP é o documento gerado em `GET /docs` (ver [`docs/architecture/http.md`](../../docs/architecture/http.md)). Os eventos estão em [`docs/asyncapi/events.yaml`](../../docs/asyncapi/events.yaml). A arquitetura interna está em [`docs/architecture/services/video-service.md`](../../docs/architecture/services/video-service.md).
+O contrato HTTP é o documento gerado em `GET /docs` (as rotas comuns de saúde e documentação estão em [`docs/architecture/README.md`](../../docs/architecture/README.md#http)). Os eventos estão em [`docs/asyncapi/events.yaml`](../../docs/asyncapi/events.yaml). A arquitetura interna está em [`docs/architecture/services/video-service.md`](../../docs/architecture/services/video-service.md).
 
 ## Camadas
 
@@ -34,7 +34,7 @@ tests/
 └── support/                # fakes das interfaces e builders de vídeo
 ```
 
-As regras de dependência entre camadas estão em [`docs/architecture/layers.md`](../../docs/architecture/layers.md) e são verificadas no CI pelo dependency-cruiser.
+As regras de dependência entre as pastas de `src/` estão em [`docs/architecture/README.md`](../../docs/architecture/README.md#organização-de-cada-serviço) e são verificadas no CI pelo dependency-cruiser.
 
 ## Rotas
 

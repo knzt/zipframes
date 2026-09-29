@@ -2,7 +2,7 @@
 
 Worker stateless que consome `video.uploaded`, extrai frames com `ffmpeg` e publica o resultado.
 
-Arquitetura: [docs/architecture/services/processor-worker.md](../../docs/architecture/services/processor-worker.md). Quatro anéis em `src/` mais `main/` como composition root.
+Arquitetura: [docs/architecture/services/processor-worker.md](../../docs/architecture/services/processor-worker.md). A organização de `src/`, comum aos quatro serviços, está em [docs/architecture/README.md](../../docs/architecture/README.md#organização-de-cada-serviço).
 
 ## Camadas
 

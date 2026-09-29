@@ -1,6 +1,6 @@
 # C4 nível 3: componentes do video-service
 
-Abre o video-service e mostra o caminho de uma requisição e de um evento. Os nomes das caixas são os nomes das classes no código; o mapa de pastas e o porquê de cada camada estão em [video-service.md](../../architecture/services/video-service.md) e [layers.md](../../architecture/layers.md).
+O video-service por dentro: o caminho de uma requisição HTTP, de um evento do worker e da varredura de retenção. Os nomes nas caixas são os nomes das classes no código. As decisões por trás deste desenho estão em [video-service.md](../services/video-service.md).
 
 ```mermaid
 flowchart TB
@@ -84,7 +84,7 @@ flowchart TB
 
 O diagrama segue o caminho em tempo de execução: entra pelos frameworks (HTTP, fila ou relógio), passa pelos controllers, chega aos casos de uso e às entidades, e sai pelas interfaces que o caso de uso declara até as classes que as implementam. O RabbitMQ aparece duas vezes apenas para separar consumo e publicação. O agendador da expiração chama o caso de uso direto: não há controller, porque não há entrada externa a validar.
 
-Não existe `ProcessedEventStore` nem tabela de eventos processados: a máquina de estados do `Video` já torna o consumo idempotente (ver [modelagem de dados](../../data/modelagem-de-dados.md)). Também não há ports `Clock` e `IdGenerator`: o domínio gera o id (`newVideoId`) e o caso de uso lê `new Date()`, como no auth-service. Os testes controlam o tempo com os fake timers do Vitest.
+A idempotência do consumo vem da máquina de estados do `Video`: um evento repetido ou atrasado encontra o vídeo num estado que não aceita aquela transição e é descartado. Por isso o serviço dispensa uma tabela de eventos processados (detalhes em [modelagem de dados](../../data/modelagem-de-dados.md)). O domínio gera o id do vídeo e o caso de uso lê o relógio direto; os testes controlam o tempo com os fake timers do Vitest.
 
 ## Componentes
 

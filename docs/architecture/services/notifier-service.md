@@ -1,102 +1,53 @@
-# Arquitetura: notifier-service
+# notifier-service
 
-Arquitetura do contexto de **Notificação** do ZipFrames. A Clean Architecture é a base; o mapa de pastas está em [layers.md](../layers.md).
+O notifier-service avisa o usuário por e-mail quando o zip de um vídeo fica pronto e quando o processamento falha. Para isso ele mantém uma cópia própria dos contatos, alimentada pelos eventos de identidade, e não consulta o auth-service.
 
-Referências: [dominio.md — Notificação](../../domain/dominio.md), [AsyncAPI](../../asyncapi/events.yaml), [modelagem de dados](../../data/modelagem-de-dados.md), [regras de camadas](../layers.md).
+Os componentes e como eles se ligam estão no [C4 nível 3](../c4/03-componentes-notifier-service.md). A organização de pastas, comum aos quatro serviços, está na [visão geral da arquitetura](../README.md#organização-de-cada-serviço).
 
-## Objetivo do serviço
+## Dois trabalhos, duas filas
 
-Dois trabalhos distintos. Identidade (`user.registered`, `user.updated`, `user.deleted`) projeta o contato. Resultado de vídeo (`video.processed`, `video.failed`) envia o e-mail. `VIDEO_PROCESSED` avisa que o zip está pronto (nome do arquivo, quantidade de frames, URL GET assinada no endpoint público do S3, fallback `{APP_PUBLIC_URL}/videos/{videoId}/download` se o link falhar, e que o arquivo expira em 24 horas). `VIDEO_FAILED` avisa a falha (nome do arquivo, data do envio e `{APP_PUBLIC_URL}/videos` para enviar de novo). SMTP fica neste processo (Nodemailer). O worker dispara esses e-mails publicando via `createNotifierEmailHelper` de `@zipframes/communication`. O auth publica identidade pelo `EventPublisher`. Sem Fastify, sem anexo zip, sem tabela `processed_events`.
+| Fila                | Eventos                                           | O que faz                                   |
+| ------------------- | ------------------------------------------------- | ------------------------------------------- |
+| `notifier.contacts` | `user.registered`, `user.updated`, `user.deleted` | Grava, atualiza ou apaga a cópia do contato |
+| `notifier.emails`   | `video.processed`, `video.failed`                 | Cria a notificação e envia o e-mail         |
 
-## Camadas
+As filas são separadas para um problema no SMTP não atrasar a atualização dos contatos. Cada uma tem a própria fila de retry, que devolve a mensagem direto para ela. Um evento que chega na fila errada vai para a DLQ.
 
-As dependências apontam para dentro. Os quatro anéis e o composition root estão em [layers.md](../layers.md).
+## Os e-mails
 
-`ContactEventsConsumer.handle` e `EmailEventsConsumer.handle` são os handlers que `amqp.consume` recebe, um por fila. Cada um olha `eventType` só entre os eventos daquela fila e delega a um controller. Cada controller usa `defineMessageHandler` de `@zipframes/communication`, que valida o envelope, faz ack, retry ou dead-letter e manda o poison para a DLQ. O caso de uso chama `ContactRepository`, `NotificationRepository`, `MailGateway` e `ObjectStorage` (`signGetUrl`). `start.ts` abre Prisma, AMQP, Nodemailer e um cliente S3 no endpoint público, chama `createContactEventsConsumer` e `createEmailEventsConsumer` (o mesmo objeto de clientes, `handlerOptions` com `destination` da fila) e dá `amqp.consume` nas duas filas. `handlerOptions` leva `retry`, `runInContext` (correlation id) e `onOutcome` (`recordNotificationOutcome` em `infrastructure/observability/notificationOutcome.ts`). A factory do consumer chama as dos controllers, e cada uma chama a do caso de uso, que instancia repositórios e gateways. Não há `handlers/` HTTP. O caso de uso não importa Prisma, Nodemailer nem o SDK da AWS. `UpsertContactUseCase` ainda drena e-mails PENDING quando o endereço chega — composição de caso de uso, não um evento de identidade tratado como e-mail.
+| Tipo              | Conteúdo                                                                                                            |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `VIDEO_PROCESSED` | Nome do arquivo, número de frames e o link para baixar o zip, válido por 24 horas, mais um link de reserva pela API |
+| `VIDEO_FAILED`    | Nome do arquivo, data do envio e o link para enviar de novo. O motivo técnico da falha não vai para o usuário       |
 
-```
-main  →  interface-adapters / infrastructure  →  application  →  domain
-```
+O link de download é uma URL assinada do storage, calculada pelo próprio serviço com o endpoint público. O zip não vai anexado: um vídeo longo gera um arquivo grande demais para e-mail.
 
-| Pasta                     | Neste projeto        | Conteúdo                                                             |
-| ------------------------- | -------------------- | -------------------------------------------------------------------- |
-| `src/domain/`             | Entidades            | `Contact`, `Notification`, `NotificationAttempt`, policies de e-mail |
-| `src/application/`        | Casos de uso e ports | Envio de e-mail, upsert/delete de contato, notify processed/failed   |
-| `src/interface-adapters/` | Controllers          | `contacts/` e `emails/`, um controller AMQP por evento               |
-| `src/infrastructure/`     | Drivers              | Prisma, Nodemailer, S3 (só assinar GET), AMQP, dois consumers        |
-| `src/main/`               | Composition root     | `index.ts`, `start.ts`, `factories/`                                 |
+## Garantias
 
-### Gateway
+Existe no máximo uma notificação por vídeo e tipo (restrição única no banco). Uma mensagem entregue de novo encontra a notificação já `SENT` ou `FAILED` e não faz nada, então o usuário não recebe o mesmo e-mail duas vezes.
 
-| Categoria       | Neste serviço                                 |
-| --------------- | --------------------------------------------- |
-| `gateways/`     | `MailGateway`, `ObjectStorage` (`signGetUrl`) |
-| `repositories/` | `ContactRepository`, `NotificationRepository` |
+Se o evento do vídeo chega antes do contato (o `user.registered` se atrasou ou se perdeu), a notificação fica `PENDING`. Quando o contato chega, o serviço envia tudo o que estava esperando por ele.
 
-Probes de Compose e Kubernetes são exec (`kill -0 1`), não HTTP.
+Uma falha de SMTP é registrada em `notification_attempts` e a mensagem volta para a fila de retry. Na terceira falha, a notificação vira `FAILED` e a mensagem é confirmada.
 
-## Mapa de pastas
+`user.deleted` apaga o contato e o histórico de notificações daquele usuário.
 
-```
-notifier-service/src/
-├── domain/
-│   ├── entities/{contact,notification,notificationAttempt}.ts
-│   ├── policies/notificationMail.ts
-│   └── index.ts
-├── application/
-│   ├── useCases/{sendNotificationEmail,upsertContact,deleteContact,notifyVideoProcessed,notifyVideoFailed}/
-│   └── interfaces/{repositories,gateways}/
-├── interface-adapters/
-│   ├── contacts/{UserRegistered,UserUpdated,UserDeleted}Controller.ts
-│   └── emails/{VideoProcessed,VideoFailed}Controller.ts
-├── infrastructure/
-│   ├── repositories/prisma/
-│   ├── gateways/{mail,storage}/
-│   ├── messaging/amqplib/{connection,amqpTopology,contactEventsConsumer,emailEventsConsumer,amqpSettle}.ts
-│   ├── observability/notificationOutcome.ts
-│   └── loadEnvConfig.ts
-└── main/
-    ├── index.ts
-    ├── start.ts
-    └── factories/{externals,repositories,gateways,use-cases,controllers/{contacts,emails},messaging}/
-```
+## Operação
 
-`amqpTopology.ts` declara as duas filas, o retry por TTL de cada uma (sem republicar em `zipframes.events`) e a DLX compartilhada, no mesmo padrão do processor-worker. `@zipframes/communication` só entra com `createNotifierEmailHelper` (publicação tipada de `video.processed` / `video.failed`) e `defineMessageHandler`.
-
-## Casos de uso
-
-| Caso de uso                    | Orquestra                                                                           |
-| ------------------------------ | ----------------------------------------------------------------------------------- |
-| `NotifyVideoProcessedUseCase`  | Cria `VIDEO_PROCESSED` (única por vídeo) e envia o e-mail PENDING                   |
-| `NotifyVideoFailedUseCase`     | Cria `VIDEO_FAILED` (única por vídeo) e envia o e-mail PENDING                      |
-| `SendNotificationEmailUseCase` | PENDING se o contato falta; SMTP; até 3 tentativas só em falha SMTP; SENT ou FAILED |
-| `UpsertContactUseCase`         | Grava o contato e drena notificações PENDING                                        |
-| `DeleteContactUseCase`         | Apaga contato e histórico                                                           |
-
-`ownerId` ausente em `video.processed` é ignorado. Tentativas SMTP entram em `notification_attempts`. Reentrega de um evento já `SENT`/`FAILED` é no-op.
-
-## Mensageria
-
-Filas próprias `notifier.contacts` + `.contacts.retry` e `notifier.emails` + `.emails.retry`. Retry devolve a mensagem **direto para a fila daquele trabalho** pelo exchange default (`''`), e não para `zipframes.events`. Republicar no exchange compartilhado entregaria `video.failed` / identidade de novo a todo assinante a cada retry. Falha permanente usa o DLX compartilhado `zipframes.events.dlx` / `zipframes.events.dlq`.
-
-Bindings: contacts → `user.registered`, `user.updated`, `user.deleted`. emails → `video.processed`, `video.failed`.
-
-## Persistência
-
-Postgres (`notification-db`). Schema em `src/infrastructure/repositories/prisma/`. Unique `(video_id, type)`. Sem `processed_events`. Falhas SMTP ficam só em `notification_attempts`; `status = FAILED` na linha principal é o esgotamento dessas tentativas. O motivo do processamento não é persistido.
+| Item      | Valor                                                                                |
+| --------- | ------------------------------------------------------------------------------------ |
+| Banco     | `notification-db` (Postgres): `contacts`, `notifications`, `notification_attempts`   |
+| Consome   | `user.registered`, `user.updated`, `user.deleted`, `video.processed`, `video.failed` |
+| Envia     | SMTP (Mailpit no ambiente local, em http://mail.zipframes.localhost no kind)         |
+| Probes    | Exec `kill -0 1`: o processo não escuta HTTP                                         |
+| Escala    | Uma réplica                                                                          |
+| Manifests | [`infra/k8s/notifier-service`](../../../infra/k8s/notifier-service)                  |
 
 ## Testes
 
-| Pasta               | O que prova                                                                          |
-| ------------------- | ------------------------------------------------------------------------------------ |
-| `tests/unit`        | Unicidade por tipo, PENDING, drain, 3 tentativas, corpo do e-mail com URL e fallback |
-| `tests/integration` | Fluxo contra RabbitMQ, Postgres, Mailpit e SeaweedFS; retry sem fan-out              |
+Os testes de unidade cobrem a unicidade por tipo, o `PENDING` à espera do contato, o envio pendente quando o contato chega, o limite de tentativas e o texto de cada e-mail. Os de integração rodam contra RabbitMQ, Postgres, Mailpit e SeaweedFS em containers e conferem, entre outras coisas, que um retry não chega aos outros assinantes do evento.
 
-Cobertura mínima no `src/` executável: 80%.
+## Limitações
 
-## Fora de escopo deste serviço
-
-- HTTP de negócio / JWT / health HTTP
-- PATCH/DELETE no auth-service
-- Anexo zip no e-mail
-- Cliente web
+- O auth-service ainda não publica `user.updated` nem `user.deleted`. O consumo existe e é testado, mas hoje só `user.registered` chega em produção.
+- Não há outro canal além de e-mail.

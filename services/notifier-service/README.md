@@ -2,7 +2,7 @@
 
 Processo que consome eventos de identidade e de resultado de processamento e envia e-mail. Sem HTTP de negócio.
 
-Arquitetura: [docs/architecture/services/notifier-service.md](../../docs/architecture/services/notifier-service.md). Quatro anéis em `src/` mais `main/` como composition root.
+Arquitetura: [docs/architecture/services/notifier-service.md](../../docs/architecture/services/notifier-service.md). A organização de `src/`, comum aos quatro serviços, está em [docs/architecture/README.md](../../docs/architecture/README.md#organização-de-cada-serviço).
 
 ## Camadas
 

@@ -1,104 +1,51 @@
-# Arquitetura: auth-service
+# auth-service
 
-Arquitetura do contexto de **Identidade** do ZipFrames. A Clean Architecture é a base; o mapa de pastas está em [layers.md](../layers.md).
+O auth-service cuida da identidade: cadastra usuários, confere e-mail e senha e emite o token que os outros serviços aceitam. Ele não sabe nada de vídeos.
 
-Referências: [dominio.md — Identidade](../../domain/dominio.md), [HTTP e OpenAPI gerado](../http.md), [AsyncAPI](../../asyncapi/events.yaml), [modelagem de dados](../../data/modelagem-de-dados.md), [regras de camadas](../layers.md).
+Os componentes e como eles se ligam estão no [C4 nível 3](../c4/03-componentes-auth-service.md). A organização de pastas, comum aos quatro serviços, está na [visão geral da arquitetura](../README.md#organização-de-cada-serviço).
 
-## Objetivo do serviço
+## Rotas
 
-Cadastrar usuário, autenticar e emitir JWT RS256. Depois de gravar o usuário, publicar `user.registered` no exchange `zipframes.events` via `EventPublisher`. Os outros serviços validam o token contra o JWKS publicado aqui. Este serviço não conhece vídeo, fila de processamento nem object storage.
+| Rota                         | O que faz                                             |
+| ---------------------------- | ----------------------------------------------------- |
+| `POST /register`             | Cadastra um usuário (201) e publica `user.registered` |
+| `POST /login`                | Devolve um JWT de 15 minutos                          |
+| `GET /.well-known/jwks.json` | Publica a chave pública que valida os tokens          |
 
-## Camadas
+Além dessas, as rotas de operação comuns aos serviços HTTP (`/health/*`, `/metrics`, `/docs`), descritas na [visão geral](../README.md#http). A porta padrão é 3000.
 
-As dependências apontam para dentro. Os quatro anéis e o composition root estão em [layers.md](../layers.md).
+## Cadastro
 
-Neste serviço, Fastify fica em `infrastructure/http/fastify/` (`server.ts`, `bindHttpRoutes`, adapter, health, plugins). `bindHttpRoutes` é o único `app.route`. O correlation id é calculado no `onRequest` de `server.ts`. `HttpRouteDefinition`, `jsonSchemaOf` e o schema de problem+json ficam em `infrastructure/http/`, fora da pasta do driver. O controller em `interface-adapters/` usa `defineHandler` de `@zipframes/http`: valida o pedido, chama `RegisterUserUseCase` ou `LoginUseCase` e traduz o `Result` em `HttpReply`. As rotas em `infrastructure/http/routes/` são só catálogo (`method`/`path`/`openApi`, `handle` delega ao controller); `identityRoutes.ts` junta as três. O JWKS responde direto da rota, sem controller. Cadastro usa o `errorHelper` padrão (`statusCode` + `message`). Login passa um `errorHelper` que sempre responde 401. O caso de uso só enxerga as interfaces que declara. `start.ts` abre Prisma/AMQP, deriva o `tokenIssuer` para o JWKS, chama as factories de controller e dá `listen`. `createRegisterUserController({ prisma, amqp, logger })` chama `createRegisterUserUseCase`, que instancia repositório, hasher e publisher. O controller não importa Fastify, Prisma nem bcrypt. `@zipframes/authenticator` continua só em teste — o auth emite JWT, não verifica nas rotas de register/login.
+1. O nome e o e-mail são validados pelos value objects de `@zipframes/value-objects`. O e-mail é guardado em minúsculas, então duas contas não podem diferir só pela caixa.
+2. A senha precisa ter pelo menos 8 caracteres, uma letra e um dígito, e no máximo 72 bytes. Esse teto é o do bcrypt, que ignora o que passa dele; aceitar mais daria a impressão de que o resto da senha conta.
+3. Um e-mail já cadastrado responde 409 (`EMAIL_TAKEN`). A checagem é feita antes do hash, para não gastar bcrypt com um pedido que vai ser recusado.
+4. O usuário é gravado e o evento `user.registered` é publicado com confirmação do broker. O notifier-service usa esse evento para guardar o contato.
 
-```
-main  →  interface-adapters / infrastructure  →  application  →  domain
-```
+Se a publicação falhar depois de o usuário ser gravado, o cadastro ainda responde 201 e a falha vai para o log. Responder erro nesse ponto levaria o cliente a tentar de novo e receber `EMAIL_TAKEN` para uma conta que existe. O custo é o notifier-service não conhecer esse contato até um próximo evento de identidade; enquanto isso, os e-mails desse usuário ficam pendentes.
 
-| Pasta                     | Neste projeto        | O que há aqui                                                                                                                   |
-| ------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `src/domain/`             | Entidades            | `User`, `Password`, `UserRegistered`, erros de domínio                                                                          |
-| `src/application/`        | Casos de uso e ports | `RegisterUserUseCase`, `LoginUseCase`, tipos e interfaces (`UserRepository`, `EventPublisher`, `PasswordHasher`, `TokenIssuer`) |
-| `src/interface-adapters/` | Controllers          | `RegisterUserController`, `LoginController` (validação, chamada do caso de uso, `Result` → `HttpReply`)                         |
-| `src/infrastructure/`     | Drivers              | Prisma, bcrypt, RS256, Fastify, conexão AMQP e o gateway que publica o evento                                                   |
-| `src/main/`               | Composition root     | `index.ts` trata sinal; `start.ts` sobe e para; `factories/` dá `new`                                                           |
+## Login e token
 
-## Mapa de pastas
+O login responde o mesmo 401 (`INVALID_CREDENTIALS`) para e-mail desconhecido, senha errada e corpo inválido, para não revelar quais e-mails têm conta.
 
-```
-auth-service/src/
-├── domain/
-│   ├── entities/user.ts
-│   ├── valueObjects/password.ts
-│   ├── events/userRegistered.ts
-│   ├── errors/userErrors.ts
-│   └── index.ts
-├── application/
-│   ├── useCases/
-│   │   ├── registerUser/{RegisterUserUseCase.ts, registerUser.dto.ts}
-│   │   └── login/{LoginUseCase.ts, login.dto.ts}
-│   └── interfaces/
-│       ├── repositories/UserRepository.ts
-│       ├── gateways/EventPublisher.ts
-│       └── services/{PasswordHasher,TokenIssuer}.ts
-├── interface-adapters/{RegisterUserController.ts, LoginController.ts}
-├── infrastructure/
-│   ├── http/{httpRoute.ts,openapi.ts,problemDetails.schema.ts,routes/{registerUser.ts,login.ts,jwks.ts,identityRoutes.ts},fastify/{server.ts,bindHttpRoutes.ts,fastifyAdapter.ts,health.routes.ts,openapi.ts}}
-│   ├── repositories/prisma/{schema.prisma,migrations/,user.repository.ts}
-│   ├── gateways/amqpEventPublisherGateway.ts
-│   ├── services/crypto/{bcryptPasswordHasher,rs256TokenIssuer,rsaKeys}.ts
-│   ├── messaging/amqplib/{connection.ts,amqpTopology.ts}
-│   └── loadEnvConfig.ts
-└── main/
-    ├── index.ts
-    ├── start.ts
-    └── factories/{externals,repositories,gateways,services,use-cases,controllers}/
-```
+O token é um JWT RS256 com `sub` (o id do usuário), `iss`, `aud` e validade de 15 minutos. Só o auth-service tem a chave privada. Os outros serviços validam com a chave pública do JWKS, sem chamar o auth-service a cada requisição.
 
-A persistência é repository: `UserRepository` em `application/interfaces/repositories/` e `PrismaUserRepository` em `infrastructure/repositories/prisma/`. A publicação AMQP é gateway: `EventPublisher` em `application/interfaces/gateways/` e `AmqpEventPublisherGateway` em `infrastructure/gateways/`. `messaging/amqplib` só tem a conexão e a declaração de topologia (`amqpTopology.ts` lista o exchange de eventos que o auth afirma ao subir). Quem o caso de uso chama é `EventPublisher`. Prisma só tem `users`.
+No Compose, a chave de desenvolvimento está em `infra/docker-compose/auth/jwt-dev.pem`. No cluster, o bootstrap gera uma chave nova e a entrega pelo Secret `auth-service` (`JWT_PRIVATE_KEY_PEM`). Trocar a chave invalida os tokens emitidos com a anterior.
 
-## Casos de uso
+## Operação
 
-| Caso de uso           | O que faz                                                                                                                                                                                                                                                                                                 |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `RegisterUserUseCase` | Valida a senha, monta o `User` (`User.create` valida nome e e-mail e gera o id), verifica o e-mail com `findByEmail`, pede o hash, grava com `UserRepository.create(user.attachPasswordHash(hash))` e publica `UserRegistered` pelo `EventPublisher`. Não faz bcrypt antes da validação nem da unicidade. |
-| `LoginUseCase`        | Normaliza o e-mail, busca o usuário e compara a senha. E-mail desconhecido responde `INVALID_CREDENTIALS` sem comparar hash. Emite o token. Não publica evento.                                                                                                                                           |
-
-Falha de login é sempre `INVALID_CREDENTIALS`. Erros de aplicação usam `Result` de `@zipframes/core`. Erros HTTP usam Problem Details (RFC 9457) via `@zipframes/core`.
-
-## Publicação de `user.registered`
-
-O cadastro não usa outbox. Depois do `INSERT` em `users`, o caso de uso chama `eventPublisher.publish(...)`. O gateway AMQP monta o envelope (`eventId`, `version`, `occurredAt`) e publica no exchange `EVENT_EXCHANGE` (`zipframes.events`) com routing key `user.registered`.
-
-Furo consciente (dual-write): se o processo morrer **depois** do commit e **antes** do ack do Rabbit, o usuário existe e o evento não sai. `/health/ready` já exige AMQP. O consumidor continua idempotente. Se o publish falhar com o usuário já gravado, o HTTP ainda responde sucesso do cadastro — um retry do cliente cairia em e-mail duplicado (`EMAIL_TAKEN`); o erro de publish vai para o log.
-
-## HTTP
-
-| Método e path                | Papel                                                              |
-| ---------------------------- | ------------------------------------------------------------------ |
-| `POST /register`             | Cadastro                                                           |
-| `POST /login`                | Token                                                              |
-| `GET /.well-known/jwks.json` | Chave pública                                                      |
-| `GET /health/live`           | Processo de pé (`{ status: "ok" }`)                                |
-| `GET /health/ready`          | 200 com Postgres e AMQP; 503 com `{ status: "not_ready", reason }` |
-| `GET /metrics`               | Texto Prometheus                                                   |
-| `GET /docs`                  | Swagger UI gerada das schemas das rotas                            |
-| `GET /docs/json`             | Documento OpenAPI 3.1 gerado                                       |
-
-Tudo na porta `PORT` (padrão 3000), no Fastify. Readiness usa `Pingable` + `createReadinessCheck`. O contrato está em [http.md](../http.md).
-
-## Onde o processo sobe
-
-Na máquina, o Compose sobe o serviço na rede `zipframes`, depois de `auth-db` e RabbitMQ saudáveis, aplica as migrations e usa a chave de desenvolvimento em `infra/docker-compose/auth/jwt-dev.pem`.
-
-No cluster, o Argo CD aplica [`infra/k8s/auth-service`](../../../infra/k8s/auth-service) pela Application [`infra/argocd/auth-service.yaml`](../../../infra/argocd/auth-service.yaml). A escala é HPA por CPU (mínimo 1, máximo 3, alvo 70%). O Secret fica de fora desse apply.
+| Item      | Valor                                                       |
+| --------- | ----------------------------------------------------------- |
+| Banco     | `auth-db` (Postgres), tabela `users`                        |
+| Publica   | `user.registered` em `zipframes.events`                     |
+| Readiness | Postgres e RabbitMQ                                         |
+| Escala    | HPA por CPU, de 1 a 3 réplicas, alvo de 70%                 |
+| Manifests | [`infra/k8s/auth-service`](../../../infra/k8s/auth-service) |
 
 ## Testes
 
-| Pasta               | O que prova                                                                                       |
-| ------------------- | ------------------------------------------------------------------------------------------------- |
-| `tests/unit`        | Domínio, casos de uso, HTTP, crypto, config, gateway AMQP — com fakes, inclusive `EventPublisher` |
-| `tests/integration` | HTTP de register e login contra Postgres; register publica `user.registered` no RabbitMQ real     |
+Os testes de unidade cobrem domínio, casos de uso, controllers, criptografia e o gateway de eventos, com implementações falsas das interfaces. Os de integração sobem o serviço de verdade contra Postgres e RabbitMQ em containers e conferem o cadastro, o login e a mensagem publicada no broker.
+
+## Limitações
+
+- Não há alteração nem exclusão de conta, então `user.updated` e `user.deleted` ainda não são publicados.
+- Não há refresh token. Depois de 15 minutos, o usuário faz login de novo.

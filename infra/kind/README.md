@@ -17,7 +17,7 @@
 | `infra/kind/bootstrap.sh --local`               | `kubectl apply` desta cópia de trabalho, sem Argo CD          | Testar mudança de manifest antes do merge |
 | `infra/kind/bootstrap.sh --local --load-images` | O mesmo, com as imagens construídas aqui e carregadas no kind | Testar mudança de código antes do merge   |
 
-O modo Argo CD lê um repositório privado. Exporte `GITHUB_TOKEN` com leitura do repositório (um token fine-grained com `Contents: read` basta). As imagens vêm de `ghcr.io/knzt/zipframes-<serviço>:main`, que precisam estar públicas no GHCR.
+No modo Argo CD, o Argo lê este repositório (público) sem credencial. As imagens vêm de `ghcr.io/knzt/zipframes-<serviço>`, públicas no GHCR, na tag que o CI gravou em cada `kustomization.yaml`.
 
 `--load-images` constrói pelo Compose e precisa de `NODE_AUTH_TOKEN` e do `pnpm install` feito em `services/processor-worker`. Os Deployments passam a usar `imagePullPolicy: Never`, então o kind não tenta o GHCR.
 

@@ -7,6 +7,6 @@ A fonte da verdade da API HTTP é a schema da rota no serviço que a implementa.
 | `auth-service`  | `GET /docs` e `GET /docs/json` na porta 3000 |
 | `video-service` | `GET /docs` e `GET /docs/json` na porta 3001 |
 
-O padrão de rotas, o corpo de saúde e os probes estão em [`docs/architecture/http.md`](../architecture/http.md).
+As rotas de saúde, métricas e documentação comuns aos dois serviços estão na [visão geral da arquitetura](../architecture/README.md#http).
 
 Onde a rota valida com Zod (`@zipframes/schemas`), a schema publicada é `z.toJSONSchema` dessa mesma schema. O handler continua validando com ela, para o status HTTP continuar sendo decisão do caso de uso.

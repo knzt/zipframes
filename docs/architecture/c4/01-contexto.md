@@ -8,7 +8,7 @@ flowchart TB
   system["<b>ZipFrames</b><br/><i>[Sistema de software]</i><br/>Recebe vídeos, extrai um frame por segundo<br/>e entrega os frames em um arquivo zip"]
   smtp["<b>Servidor de e-mail</b><br/><i>[Sistema externo]</i><br/>Entrega as notificações de resultado e de falha<br/>(Mailpit no ambiente local)"]
 
-  user -- "Cadastra-se, envia vídeos,<br/>acompanha o status e baixa os zips<br/>[HTTPS]" --> system
+  user -- "Cadastra-se, envia vídeos,<br/>acompanha o status e baixa os zips<br/>[HTTP]" --> system
   system -- "Envia notificações de resultado e de falha<br/>[SMTP]" --> smtp
   smtp -- "Entrega o e-mail" --> user
 
