@@ -1,232 +1,234 @@
 # ZipFrames
 
-Quatro processos neste repositório. O `auth-service` cadastra usuários e emite JWT RS256. O `video-service` recebe o vídeo por upload multipart, grava no storage, publica `video.uploaded`, acompanha o processamento, lista os vídeos do usuário e entrega o zip por uma URL de download de curta duração. O `processor-worker` consome `video.uploaded`, extrai um frame por segundo com `ffmpeg` e grava um zip no storage. O `notifier-service` consome identidade e resultado de processamento e envia e-mail. Não há cliente web aqui.
+[![auth-service](https://github.com/knzt/zipframes/actions/workflows/auth-service.yml/badge.svg)](https://github.com/knzt/zipframes/actions/workflows/auth-service.yml)
+[![video-service](https://github.com/knzt/zipframes/actions/workflows/video-service.yml/badge.svg)](https://github.com/knzt/zipframes/actions/workflows/video-service.yml)
+[![processor-worker](https://github.com/knzt/zipframes/actions/workflows/processor-worker.yml/badge.svg)](https://github.com/knzt/zipframes/actions/workflows/processor-worker.yml)
+[![notifier-service](https://github.com/knzt/zipframes/actions/workflows/notifier-service.yml/badge.svg)](https://github.com/knzt/zipframes/actions/workflows/notifier-service.yml)
 
-## Organização
+Sistema de processamento de vídeos da FIAP X. O usuário se cadastra, envia um vídeo e recebe um arquivo zip com um frame por segundo em PNG. O processamento é assíncrono, escala pelo tamanho da fila e avisa por e-mail quando o zip fica pronto ou quando algo dá errado.
 
-```
-zipframes/
-├── services/auth-service/       # identidade, Postgres e publicação de eventos
-├── services/video-service/      # ciclo de vida do vídeo, upload, download, Postgres e Redis
-├── services/processor-worker/   # frames e zip, sem banco
-├── services/notifier-service/ # e-mails de resultado e de falha, Postgres
-├── infra/docker-compose/        # Postgres, RabbitMQ, SeaweedFS, Mailpit e o resto da máquina
-├── infra/k8s/                   # Kustomize dos quatro processos e da plataforma (bancos, broker, storage)
-├── infra/kind/                  # cluster local, Traefik e o bootstrap
-├── infra/argocd/                # Applications do Argo CD (app of apps)
-└── docs/                        # arquitetura e contratos
-```
+Ele substitui o protótipo apresentado aos investidores, que processava tudo dentro da requisição HTTP. A [análise do projeto base](docs/review-projeto-base.md) mostra os problemas encontrados e como cada um foi resolvido.
 
-Cada serviço tem o próprio `package.json` e `pnpm-lock.yaml`. A raiz só instala lint, format e hooks. Nenhum serviço importa código do outro. `@zipframes/*` vem do GitHub Packages, na versão declarada no `package.json` do serviço.
+## Requisitos do hackathon
 
-| Pacote                     | Uso neste repositório                                          |
-| -------------------------- | -------------------------------------------------------------- |
-| `@zipframes/core`          | `Result`, erros e readiness                                    |
-| `@zipframes/http`          | `defineHandler` no auth, `defineAuthenticatedHandler` no video |
-| `@zipframes/schemas`       | contratos HTTP e de evento                                     |
-| `@zipframes/value-objects` | e-mail e nome no cadastro                                      |
-| `@zipframes/communication` | publicar e consumir no RabbitMQ                                |
-| `@zipframes/logger`        | log e correlation id                                           |
-| `@zipframes/telemetry`     | métricas Prometheus                                            |
-| `@zipframes/authenticator` | validação do JWT no video-service; testes do auth              |
-| `@zipframes/test-toolkit`  | testes de integração                                           |
+| Requisito                                 | Como é atendido                                                                                                              | Onde ver                                                                                 |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Processar mais de um vídeo ao mesmo tempo | Workers sem estado consomem uma fila; o KEDA sobe de 1 a 5 réplicas conforme o tamanho dela                                  | [processor-worker](docs/architecture/services/processor-worker.md#concorrência-e-escala) |
+| Não perder requisições em picos           | O upload responde depois de gravar e enfileirar; filas duráveis, confirmação do broker, retry com backoff e DLQ              | [Entrega e falhas](docs/architecture/README.md#entrega-e-falhas)                         |
+| Acesso protegido por usuário e senha      | auth-service com senha em bcrypt e JWT RS256, validado pelo video-service com a chave pública                                | [auth-service](docs/architecture/services/auth-service.md)                               |
+| Listagem de status dos vídeos do usuário  | `GET /videos`, paginado, com o status de cada vídeo e cache no Redis                                                         | [video-service](docs/architecture/services/video-service.md)                             |
+| Notificação em caso de erro               | notifier-service envia e-mail em `video.failed` (e também quando o zip fica pronto)                                          | [notifier-service](docs/architecture/services/notifier-service.md)                       |
+| Persistência dos dados                    | Um Postgres por serviço e um object storage compatível com S3                                                                | [Modelagem de dados](docs/data/modelagem-de-dados.md)                                    |
+| Arquitetura escalável                     | Microsserviços sem estado no Kubernetes, HPA nos serviços HTTP e KEDA no worker                                              | [C4 containers](docs/architecture/c4/02-containers.md)                                   |
+| Versionamento no GitHub                   | Este repositório e o dos [pacotes compartilhados](https://github.com/zipframes/zipframes-packages), com Conventional Commits | Histórico de PRs                                                                         |
+| Testes                                    | Unitários e de integração com Testcontainers em cada serviço, com cobertura mínima no CI                                     | [Testes](#testes)                                                                        |
+| CI/CD                                     | GitHub Actions por serviço, imagens no GHCR e deploy por GitOps com Argo CD                                                  | [CI/CD](#cicd)                                                                           |
+| Documentação da arquitetura               | C4 nos níveis 1, 2 e 3, decisões de cada serviço, AsyncAPI e OpenAPI gerado                                                  | [docs/architecture](docs/architecture/README.md)                                         |
+| Scripts de banco e de recursos            | Migrations do Prisma em cada serviço; manifests do Kubernetes e script que cria o cluster e os recursos                      | [Banco e recursos](#banco-e-recursos)                                                    |
 
-## Como os processos se relacionam
+## Arquitetura em um minuto
 
 ```mermaid
 flowchart LR
   client[Cliente]
-  auth[auth-service :3000]
-  video[video-service :3001]
+  auth[auth-service]
+  video[video-service]
   worker[processor-worker]
   notif[notifier-service]
-  storage[(SeaweedFS :8333)]
-  broker[[RabbitMQ<br/>zipframes.events]]
-  mail[Mailpit :8025]
+  storage[(Storage S3)]
+  broker[[RabbitMQ]]
+  mail[E-mail]
 
-  client -- "register / login" --> auth
-  client -- "Bearer JWT" --> video
-  video -. "JWKS" .-> auth
-  client -- "GET pré-assinado (zip)" --> storage
-  video -- "grava o vídeo, apaga no fim" --> storage
+  client -- "cadastro e login" --> auth
+  client -- "upload, status, download (JWT)" --> video
+  video -. "chave pública (JWKS)" .-> auth
+  client -- "baixa o zip (URL assinada)" --> storage
+  video -- "grava o vídeo" --> storage
   video -- "video.uploaded" --> broker
-  broker -- "video.uploaded" --> worker
-  worker -- "baixa o vídeo, grava o zip" --> storage
-  worker -- "started, processed, failed" --> broker
-  broker -- "started, processed, failed" --> video
+  broker --> worker
+  worker -- "lê o vídeo, grava o zip" --> storage
+  worker -- "processed / failed" --> broker
+  broker -- "status" --> video
   auth -- "user.registered" --> broker
-  broker -- "registered, processed, failed" --> notif
+  broker -- "contatos e resultados" --> notif
   notif -- "SMTP" --> mail
 ```
 
-O auth grava o usuário e publica `user.registered` no exchange `zipframes.events`. O video-service valida o token contra o JWKS do auth, grava o arquivo no storage e o vídeo como `QUEUED` e publica `video.uploaded`. O worker escuta a fila `processor.video.uploaded`, processa e publica `video.processing.started`, `video.processed` ou `video.failed`, que o video-service consome pela fila `video-service.processing-status` para mover o status. O notifier-service escuta `notifier.contacts` (identidade) e `notifier.emails` (resultado) e envia e-mail. O vídeo entra pelo video-service, em stream para o storage; o zip sai direto do storage, por uma URL assinada de curta duração.
+| Serviço                                       | Faz                                                                 | Guarda                             |
+| --------------------------------------------- | ------------------------------------------------------------------- | ---------------------------------- |
+| [auth-service](services/auth-service)         | Cadastro, login e emissão do JWT                                    | Usuários (Postgres)                |
+| [video-service](services/video-service)       | Upload em stream, status, listagem, download e retenção de 24 horas | Vídeos (Postgres), cache (Redis)   |
+| [processor-worker](services/processor-worker) | Extrai um frame por segundo com `ffmpeg` e monta o zip              | Nada                               |
+| [notifier-service](services/notifier-service) | E-mails de resultado e de falha                                     | Contatos e notificações (Postgres) |
 
-Nenhum processo chama outro na subida. O video-service só busca o JWKS no primeiro token que valida. A ordem entre os quatro não importa.
+Os serviços não compartilham banco nem código. O que atravessa a fronteira é um evento, e o que é comum e técnico vem dos pacotes versionados [`@zipframes/*`](https://github.com/zipframes/zipframes-packages). A visão completa, com os diagramas C4, está em [docs/architecture](docs/architecture/README.md).
 
-A arquitetura completa, com os diagramas C4 e as decisões de cada serviço, está em [`docs/architecture`](docs/architecture/README.md).
+## Como rodar
 
-## Tecnologias presentes no código
+Há três jeitos, do mais completo ao mais leve.
 
-- Node.js 26, TypeScript 5, pnpm 12.6.0
-- Fastify, Zod, Prisma (auth, video e notification)
-- RabbitMQ (`amqplib`), SeaweedFS pela API S3 (`@aws-sdk/client-s3`, `@aws-sdk/lib-storage` e `@aws-sdk/s3-request-presigner`) e Redis (`ioredis`, cache da listagem)
-- JWT RS256 (`jose`) e senha com bcrypt
-- Nodemailer no notifier-service (Mailpit no Compose)
-- Vitest. A integração sobe Postgres, broker, storage, Redis e Mailpit com `@zipframes/test-toolkit` e precisa de Docker
-- `GET /metrics` em texto Prometheus (`prom-client`)
+### Kubernetes local (recomendado para avaliação)
 
-Não há OpenTelemetry, Grafana nem Jaeger no código.
+Sobe o sistema inteiro num cluster [kind](https://kind.sigs.k8s.io/) com Postgres e RabbitMQ gerenciados por operators, KEDA, Traefik e Argo CD, a partir das imagens já publicadas no GHCR. Não precisa compilar nada nem ter token.
 
-## Pré-requisitos
-
-- Node.js 26 (`.nvmrc` e `.node-version`). O Node 26.10 não traz o `corepack`.
-- pnpm 12.6.0, o valor de `packageManager` na raiz e nos serviços:
+Precisa de Docker (com uns 6 GB de memória), kind, kubectl e Git Bash no Windows. As portas 80 e 443 precisam estar livres.
 
 ```bash
-npm install -g pnpm@12.6.0 --allow-scripts=pnpm
+infra/kind/bootstrap.sh
 ```
 
-O npm 11 que vem com o Node 26 não executa o script de instalação do pnpm sem `--allow-scripts=pnpm`. As imagens do auth e do video usam o mesmo comando.
+Leva alguns minutos na primeira vez. No fim, o sistema responde em:
 
-- Docker, para a infra e para os testes de integração
-- `ffmpeg` no `PATH`, se o worker rodar na máquina e não na imagem
-- Token do GitHub com `read:packages` para `@zipframes/*`
+| Endereço                            | O que é                            |
+| ----------------------------------- | ---------------------------------- |
+| http://auth.zipframes.localhost     | auth-service (Swagger em `/docs`)  |
+| http://api.zipframes.localhost      | video-service (Swagger em `/docs`) |
+| http://mail.zipframes.localhost     | Caixa de e-mails (Mailpit)         |
+| http://rabbitmq.zipframes.localhost | Painel do RabbitMQ                 |
 
-O pnpm 12 não expande `${NODE_AUTH_TOKEN}` no `.npmrc` versionado. No `~/.npmrc`:
+Os detalhes (o que é instalado, onde ficam os segredos, como acessar o Argo CD) estão em [infra/kind/README.md](infra/kind/README.md). Para apagar tudo: `kind delete cluster --name zipframes`.
+
+### Docker Compose
+
+Sobe a infraestrutura e os quatro serviços em containers. Constrói as imagens na hora, então precisa de `NODE_AUTH_TOKEN` (veja [Pré-requisitos](#pré-requisitos)).
+
+```bash
+pnpm infra:apps
+```
+
+Os serviços respondem em `http://localhost:3000` (auth) e `http://localhost:3001` (video), e o Mailpit em http://localhost:8025. Portas e credenciais estão em [infra/docker-compose/README.md](infra/docker-compose/README.md).
+
+### Na máquina, para desenvolver
+
+Veja [Desenvolvimento](#desenvolvimento).
+
+## Testando o fluxo completo
+
+Com o sistema no ar, este roteiro cadastra um usuário, envia um vídeo, acompanha o processamento e baixa o zip. Use os endereços do kind ou os do Compose:
+
+```bash
+# kind
+AUTH=http://auth.zipframes.localhost
+API=http://api.zipframes.localhost
+# Compose ou na máquina
+# AUTH=http://localhost:3000
+# API=http://localhost:3001
+
+curl -fsS -X POST $AUTH/register -H 'content-type: application/json' \
+  -d '{"name":"Ada Lovelace","email":"ada@example.com","password":"senha1234"}'
+
+TOKEN=$(curl -fsS -X POST $AUTH/login -H 'content-type: application/json' \
+  -d '{"email":"ada@example.com","password":"senha1234"}' | jq -r .accessToken)
+
+VIDEO_ID=$(curl -fsS -X POST $API/videos \
+  -H "authorization: Bearer $TOKEN" -F 'file=@aula.mp4;type=video/mp4' | jq -r .videoId)
+
+curl -fsS $API/videos -H "authorization: Bearer $TOKEN"        # QUEUED → PROCESSING → DONE
+
+curl -fsS "$API/videos/$VIDEO_ID/download" -H "authorization: Bearer $TOKEN" \
+  | jq -r .downloadUrl | xargs curl -fsS -o frames.zip
+```
+
+Qualquer vídeo curto serve como `aula.mp4`. Aceitos: mp4, avi, mov, mkv, wmv, flv e webm, até 500 MB. A senha precisa ter letra e dígito e pelo menos 8 caracteres.
+
+Depois do processamento, o e-mail "Seu zip está pronto" aparece no Mailpit. Para ver o caminho de falha, envie um arquivo com extensão de vídeo que não seja vídeo de verdade: o status vira `FAILED` e chega o e-mail de falha.
+
+## Testes
+
+Cada serviço tem duas suítes:
+
+- **Unidade** (`pnpm test:unit`): domínio, casos de uso, controllers e adaptadores com implementações falsas. Não precisa de Docker.
+- **Integração** (`pnpm test:integration`): sobe o processo de verdade contra Postgres, RabbitMQ, SeaweedFS, Redis e Mailpit em containers (Testcontainers) e percorre o fluxo do serviço. Precisa de Docker.
+
+```bash
+pnpm --dir services/video-service test:unit
+pnpm --dir services/video-service test          # unidade e integração
+```
+
+O CI falha abaixo da cobertura mínima de cada serviço: 100% de linhas e branches no auth-service, 95% e 90% no video-service, 80% no processor-worker e no notifier-service. Na raiz, `pnpm lint`, `pnpm format` e `pnpm check:layers` conferem estilo e as regras de dependência entre camadas.
+
+## CI/CD
+
+```
+PR ou merge no main
+  └─ workflow do serviço: typecheck, lint, regras de camadas, testes, cobertura, build da imagem
+       └─ só no main: publica a imagem testada no GHCR (ghcr.io/knzt/zipframes-<serviço>)
+            └─ grava a tag da imagem em infra/k8s/<serviço> e commita no main
+                 └─ Argo CD aplica a mudança no cluster
+```
+
+Cada serviço tem o próprio workflow em [.github/workflows](.github/workflows), que só roda quando algo daquele serviço muda. A imagem publicada é exatamente a que passou nos testes. O deploy é GitOps: o cluster roda o que está em `infra/` no `main`, e o histórico do Git é o histórico de deploys. O fluxo completo está em [infra/kind/README.md](infra/kind/README.md#entrega-contínua).
+
+## Banco e recursos
+
+| O quê                             | Onde                                                                                         |
+| --------------------------------- | -------------------------------------------------------------------------------------------- |
+| Migrations (SQL) de cada serviço  | `services/<serviço>/src/infrastructure/repositories/prisma/migrations/`                      |
+| Modelo de dados comentado         | [docs/data/modelagem-de-dados.md](docs/data/modelagem-de-dados.md)                           |
+| Manifests do Kubernetes           | [infra/k8s](infra/k8s): um diretório por serviço e `platform/` para bancos, broker e storage |
+| Criação do cluster e dos segredos | [infra/kind/bootstrap.sh](infra/kind/bootstrap.sh)                                           |
+| Infraestrutura local              | [infra/docker-compose](infra/docker-compose/README.md)                                       |
+
+As migrations rodam na subida de cada serviço (`prisma migrate deploy`), então um banco novo fica pronto sem passo manual.
+
+## Documentação
+
+| Documento                                              | Conteúdo                                                    |
+| ------------------------------------------------------ | ----------------------------------------------------------- |
+| [Arquitetura](docs/architecture/README.md)             | Visão geral, comunicação, falhas, organização do código, C4 |
+| [Domínio](docs/domain/dominio.md)                      | Linguagem ubíqua, contextos e regras de negócio             |
+| [Modelagem de dados](docs/data/modelagem-de-dados.md)  | Tabelas, índices e como cada consumidor é idempotente       |
+| [AsyncAPI](docs/asyncapi/events.yaml)                  | Contrato dos eventos                                        |
+| [OpenAPI](docs/openapi/README.md)                      | Onde está o contrato HTTP gerado por cada serviço           |
+| [Análise do projeto base](docs/review-projeto-base.md) | O protótipo original e o que mudou                          |
+| [Kubernetes local](infra/kind/README.md)               | Cluster, operators, segredos, endereços e entrega contínua  |
+
+## Desenvolvimento
+
+### Pré-requisitos
+
+- Node.js 26 (`.nvmrc`) e pnpm 12.6.0: `npm install -g pnpm@12.6.0 --allow-scripts=pnpm`
+- Docker, para a infraestrutura e para os testes de integração
+- `ffmpeg` no `PATH`, se o worker rodar fora de container
+- Um token do GitHub com `read:packages`, para instalar os pacotes `@zipframes/*` do GitHub Packages
+
+O pnpm 12 não expande `${NODE_AUTH_TOKEN}` no `.npmrc` versionado. Coloque no `~/.npmrc`:
 
 ```
 //npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}
 ```
 
-Exporte `NODE_AUTH_TOKEN` no shell antes de `pnpm install` dentro de cada serviço.
+e exporte `NODE_AUTH_TOKEN` antes de instalar.
 
-## Ambiente
+### Rodar os serviços na máquina
 
-Copie o exemplo para `.env` ao lado. O processo não lê o `.example`.
-
-| Arquivo                                  | Quem lê                                                                                               |
-| ---------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `infra/docker-compose/.env.example`      | O Compose, em `infra/docker-compose/.env`. Os defaults do YAML repetem o exemplo; a cópia é opcional. |
-| `services/auth-service/.env.example`     | `pnpm dev` e `pnpm start` do auth, via `--env-file=.env` no diretório do serviço.                     |
-| `services/video-service/.env.example`    | O mesmo, no video-service.                                                                            |
-| `services/processor-worker/.env.example` | O mesmo, no worker.                                                                                   |
-| `services/notifier-service/.env.example` | O mesmo, no notifier-service.                                                                         |
-
-A chave de desenvolvimento está em `infra/docker-compose/auth/jwt-dev.pem`. O `.env` do auth aponta para ela com caminho relativo ao diretório do serviço. Use `pnpm --dir` a partir da raiz.
-
-Para adicionar um pacote em um serviço, da raiz (o pnpm acrescenta o resto da linha):
+Cada serviço tem o próprio `package.json` e lockfile; a raiz só instala lint, formatação e hooks.
 
 ```bash
-pnpm deps:auth pkgname@3.1
-pnpm deps:auth -D pkgname@3.1
-pnpm deps:video pkgname@3.1
-pnpm deps:worker pkgname@3.1
-pnpm deps:notifier pkgname@3.1
-```
-
-Credenciais locais, iguais no exemplo e em `infra/docker-compose/seaweedfs/s3.json`:
-
-- Postgres `zipframes` / `zipframes`: `auth_db` na porta 5432, `video_db` na 5433, `notification_db` na 5434
-- RabbitMQ `zipframes` / `zipframes`, AMQP 5672, painel http://localhost:15672
-- Redis sem senha, porta 6379
-- S3 access key `zipframes`, secret `zipframes-local-secret`, bucket `videos`, `http://localhost:8333`
-
-`s3.json` não interpola variável. Se mudar a chave no `.env` do Compose, mude o JSON também. `JWT_KID` na máquina e no Compose é `auth-dev-1`. O ConfigMap de Kubernetes usa `auth-1`. `JWT_ISSUER` e `JWT_AUDIENCE` do video-service precisam ser iguais aos do auth.
-
-## Subir na máquina
-
-```bash
-cp services/auth-service/.env.example services/auth-service/.env
-cp services/video-service/.env.example services/video-service/.env
-cp services/processor-worker/.env.example services/processor-worker/.env
-cp services/notifier-service/.env.example services/notifier-service/.env
-
+for s in auth-service video-service processor-worker notifier-service; do
+  cp services/$s/.env.example services/$s/.env
+  pnpm --dir services/$s install
+done
 pnpm install
-pnpm --dir services/auth-service install
-pnpm --dir services/video-service install
-pnpm --dir services/processor-worker install
-pnpm --dir services/notifier-service install
-
-pnpm infra:up
-
-pnpm --dir services/auth-service db:generate
-pnpm --dir services/auth-service db:deploy
-pnpm --dir services/auth-service dev
+pnpm infra:up                     # Postgres, RabbitMQ, Redis, SeaweedFS, Mailpit
 ```
 
-Em outros dois terminais:
+Depois, um terminal por serviço:
 
 ```bash
-pnpm --dir services/video-service db:generate
-pnpm --dir services/video-service db:deploy
-pnpm --dir services/video-service dev
-```
-
-```bash
+pnpm --dir services/auth-service db:generate && pnpm --dir services/auth-service db:deploy && pnpm --dir services/auth-service dev
+pnpm --dir services/video-service db:generate && pnpm --dir services/video-service db:deploy && pnpm --dir services/video-service dev
 pnpm --dir services/processor-worker dev
+pnpm --dir services/notifier-service db:generate && pnpm --dir services/notifier-service db:deploy && pnpm --dir services/notifier-service dev
 ```
 
-```bash
-pnpm --dir services/notifier-service db:generate
-pnpm --dir services/notifier-service db:deploy
-pnpm --dir services/notifier-service dev
-```
+`db:generate` gera o client do Prisma, `db:deploy` aplica as migrations existentes e `db:migrate` cria uma nova. A chave JWT de desenvolvimento está em `infra/docker-compose/auth/jwt-dev.pem`, e as credenciais locais (todas `zipframes`) estão em [infra/docker-compose/README.md](infra/docker-compose/README.md).
 
-`pnpm infra:up` sobe só a infra. Não constrói imagem de serviço. `db:deploy` aplica as migrations que já existem. `db:migrate` é `prisma migrate dev`, para mudar o schema, não para a primeira subida.
+Para adicionar uma dependência a um serviço a partir da raiz: `pnpm deps:auth <pacote>`, `pnpm deps:video`, `pnpm deps:worker` ou `pnpm deps:notifier`.
 
-Para subir tudo em container em vez disso, veja [`infra/docker-compose/README.md`](infra/docker-compose/README.md) (`pnpm infra:apps`). Para subir em Kubernetes local, com operators, KEDA, Traefik e Argo CD, veja [`infra/kind/README.md`](infra/kind/README.md).
+## Limitações conhecidas
 
-## O fluxo completo
-
-Com os quatro processos no ar (na máquina ou no Compose):
-
-```bash
-curl -fsS -X POST http://localhost:3000/register -H 'content-type: application/json' \
-  -d '{"name":"Ada Lovelace","email":"ada@example.com","password":"senha1234"}'
-
-TOKEN=$(curl -fsS -X POST http://localhost:3000/login -H 'content-type: application/json' \
-  -d '{"email":"ada@example.com","password":"senha1234"}' | jq -r .accessToken)
-
-# Uma chamada: o arquivo vai no campo `file` e o vídeo já volta QUEUED.
-VIDEO_ID=$(curl -fsS -X POST http://localhost:3001/videos \
-  -H "authorization: Bearer $TOKEN" -F 'file=@aula.mp4;type=video/mp4' | jq -r .videoId)
-
-curl -fsS http://localhost:3001/videos -H "authorization: Bearer $TOKEN"          # QUEUED → PROCESSING → DONE
-
-curl -fsS "http://localhost:3001/videos/$VIDEO_ID/download" -H "authorization: Bearer $TOKEN" \
-  | jq -r .downloadUrl | xargs curl -fsS -o frames.zip
-```
-
-A senha do exemplo tem letra e dígito, entre 8 e 72 caracteres. `GET /health/ready` responde 200 com as dependências alcançáveis e 503 com `reason` se uma falhar; `GET /health/live` só diz que o processo está de pé. Nos dois serviços HTTP, `GET /docs` é o OpenAPI gerado e `GET /metrics` é o texto Prometheus. O worker e o notification não escutam HTTP. O Mailpit captura os e-mails em http://localhost:8025.
-
-Portas, Mailpit e o caminho em que os processos rodam dentro de container estão em [`infra/docker-compose/README.md`](infra/docker-compose/README.md).
-
-## Testes
-
-Na raiz: `pnpm format`, `pnpm lint` e `pnpm check:layers`. Em cada serviço, `pnpm test:unit` não precisa de Docker. `pnpm test` roda a unidade e depois a integração, e a integração precisa de Docker. O teste de integração do worker usa o binário do `ffmpeg-static`, não o `ffmpeg` do sistema.
-
-```bash
-pnpm --dir services/auth-service test:unit
-pnpm --dir services/video-service test:unit
-pnpm --dir services/processor-worker test:unit
-pnpm --dir services/notifier-service test:unit
-```
-
-## Build
-
-Os pacotes `@zipframes/*` não são buildados neste repositório. Cada serviço:
-
-```bash
-pnpm --dir services/auth-service build
-pnpm --dir services/video-service build
-pnpm --dir services/processor-worker build
-pnpm --dir services/notifier-service build
-```
-
-A imagem do worker não baixa dependência. Antes dela, `pnpm --dir services/processor-worker stage-runtime` copia os `node_modules` de produção para `.runtime/`. As imagens do auth, do video e do notification instalam o lockfile do serviço durante o build e exigem `NODE_AUTH_TOKEN`.
-
-## Limitações
-
-- Não há cliente web. O auth não publica `user.updated` nem `user.deleted`; o notifier-service já consome esses eventos nos testes.
-- Os manifests rodam `:main` e a tag não é reescrita a cada publicação. O Argo CD entrega mudança de manifest sozinho; imagem nova entra com `kubectl rollout restart`.
-- Os Secrets do cluster são gerados pelo `infra/kind/bootstrap.sh`, não versionados. Fora do kind, é preciso criá-los no formato dos `secret.example.yaml`.
+- Não há interface web; a API é usada por qualquer cliente HTTP ou pela Swagger UI de cada serviço.
+- O auth-service não tem alteração nem exclusão de conta, então `user.updated` e `user.deleted` ainda não são publicados (o notifier-service já os consome).
+- Se um processo cair exatamente entre gravar no banco e publicar o evento, o evento se perde. Um outbox fecharia essa janela; o motivo de ele ter ficado de fora está na [arquitetura](docs/architecture/README.md#publicação-depois-da-gravação).
+- O cluster expõe métricas em `/metrics`, mas ainda não roda Prometheus nem Grafana.
