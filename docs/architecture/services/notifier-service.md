@@ -45,7 +45,7 @@ Uma falha de SMTP é registrada em `notification_attempts` e a mensagem volta pa
 
 ## Testes
 
-Os testes de unidade cobrem a unicidade por tipo, o `PENDING` à espera do contato, o envio pendente quando o contato chega, o limite de tentativas e o texto de cada e-mail. Os de integração rodam contra RabbitMQ, Postgres, Mailpit e SeaweedFS em containers e conferem, entre outras coisas, que um retry não chega aos outros assinantes do evento.
+Os testes unitários cobrem a unicidade por tipo, o `PENDING` à espera do contato, o envio pendente quando o contato chega, o limite de tentativas e o texto de cada e-mail. Os de integração rodam contra RabbitMQ, Postgres, Mailpit e SeaweedFS em containers e conferem, entre outras coisas, que um retry não chega aos outros assinantes do evento.
 
 ## Limitações
 

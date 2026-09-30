@@ -114,7 +114,7 @@ O Redis nunca é a fonte da verdade. Se ele cair, a leitura vai ao Postgres e a 
 
 ## Testes
 
-Os testes de unidade cobrem a máquina de estados, os casos de uso (com repositório falso que respeita a trava de versão), o servidor HTTP inteiro com multipart e o consumo dos eventos, inclusive `user.deleted`. O teste de integração sobe o processo de verdade contra Postgres, RabbitMQ, SeaweedFS e Redis em containers, com um JWKS servido por HTTP, e passa pelo upload, pelos eventos do worker, pelo download, pela exclusão, pelo 413, pelo 401 e pela expiração. A cobertura mínima é de 95% das linhas e 90% dos branches.
+Os testes unitários cobrem a máquina de estados, os casos de uso (com repositório falso que respeita a trava de versão), o servidor HTTP inteiro com multipart e o consumo dos eventos, inclusive `user.deleted`. O teste de integração sobe o processo de verdade contra Postgres, RabbitMQ, SeaweedFS e Redis em containers, com um JWKS servido por HTTP, e passa pelo upload, pelos eventos do worker, pelo download, pela exclusão, pelo 413, pelo 401 e pela expiração. A cobertura mínima é de 95% das linhas e 90% dos branches.
 
 ## Limitações
 
