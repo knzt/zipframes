@@ -55,7 +55,7 @@ O token em si não é revogado: é uma assinatura sem estado, e os 15 minutos de
 
 ## Testes
 
-Os testes de unidade cobrem domínio, casos de uso, controllers, criptografia e o gateway de eventos, com implementações falsas das interfaces. Os de integração sobem o serviço de verdade contra Postgres e RabbitMQ em containers e conferem o cadastro, o login, a exclusão de conta e as mensagens publicadas no broker.
+Os testes unitários cobrem domínio, casos de uso, controllers, criptografia e o gateway de eventos, com implementações falsas das interfaces. Os de integração sobem o serviço de verdade contra Postgres e RabbitMQ em containers e conferem o cadastro, o login, a exclusão de conta e as mensagens publicadas no broker.
 
 ## Limitações
 

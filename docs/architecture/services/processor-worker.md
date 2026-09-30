@@ -62,4 +62,4 @@ Ao receber SIGTERM, o worker para de pegar mensagens novas, termina o vídeo em 
 
 ## Testes
 
-Os testes de unidade cobrem o caso de uso e a classificação das falhas com implementações falsas de storage, `ffmpeg` e broker. O teste de integração publica um `video.uploaded` real num RabbitMQ em container, com o vídeo num SeaweedFS também em container, e confere o zip gravado e os eventos publicados. Ele usa o binário do `ffmpeg-static`, então não depende do `ffmpeg` da máquina.
+Os testes unitários cobrem o caso de uso e a classificação das falhas com implementações falsas de storage, `ffmpeg` e broker. O teste de integração publica um `video.uploaded` real num RabbitMQ em container, com o vídeo num SeaweedFS também em container, e confere o zip gravado e os eventos publicados. Ele usa o binário do `ffmpeg-static`, então não depende do `ffmpeg` da máquina.

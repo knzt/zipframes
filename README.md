@@ -166,12 +166,12 @@ As regras completas estão em [Retenção e proteção de dados](docs/domain/dom
 
 Cada serviço tem duas suítes:
 
-- **Unidade** (`pnpm test:unit`): domínio, casos de uso, controllers e adaptadores com implementações falsas. Não precisa de Docker.
+- **Unitários** (`pnpm test:unit`): domínio, casos de uso, controllers e adaptadores com implementações falsas. Não precisa de Docker.
 - **Integração** (`pnpm test:integration`): sobe o processo de verdade contra Postgres, RabbitMQ, SeaweedFS, Redis e Mailpit em containers (Testcontainers) e percorre o fluxo do serviço. Precisa de Docker.
 
 ```bash
 pnpm --dir services/video-service test:unit
-pnpm --dir services/video-service test          # unidade e integração
+pnpm --dir services/video-service test          # unitario e integração
 ```
 
 O CI falha abaixo da cobertura mínima de cada serviço: 100% de linhas e branches no auth-service, 95% e 90% no video-service, 80% no processor-worker e no notifier-service. Na raiz, `pnpm lint`, `pnpm format` e `pnpm check:layers` conferem estilo e as regras de dependência entre camadas.
